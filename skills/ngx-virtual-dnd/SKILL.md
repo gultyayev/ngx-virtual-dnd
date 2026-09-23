@@ -256,7 +256,18 @@ export class PageComponent {
 }
 ```
 
-- `vdnd-virtual-content` must be inside a `vdndScrollable` element (for Ionic: the `ion-content` scroll host).
+- `vdnd-virtual-content` must be inside a `vdndScrollable` element, and that element must be the one that actually scrolls.
+- **Ionic:** `<ion-content>` scrolls an element inside its shadow DOM, so don't put `vdndScrollable` on `ion-content` itself. Disable its scrolling and use a light-DOM scroll host:
+
+  ```html
+  <ion-content [scrollY]="false">
+    <div class="ion-content-scroll-host" vdndScrollable>
+      <!-- vdndGroup, vdnd-virtual-content, footer ... -->
+    </div>
+  </ion-content>
+  ```
+
+  Give `.ion-content-scroll-host` `height: 100%; overflow-y: auto;`.
 - `vdndContentHeader` marks a projected header; its height is measured automatically and used as the list's offset. If the header lives outside the component, pass its height via `[contentOffset]` instead.
 - Inside `vdnd-virtual-content` / `vdnd-virtual-viewport`, `*vdndVirtualFor` inherits `itemHeight` and `dynamicItemHeight` from the parent component and `droppableId` from the enclosing `vdndDroppable` — only `trackBy` is required. Used directly inside a `vdndScrollable`, it also needs `itemHeight`.
 
@@ -309,7 +320,7 @@ Measurement relies on rules 3 and 7: the measured element is the one whose `data
 </div>
 ```
 
-- **`dragHandle`** — CSS selector; only pointer-downs inside a matching element start a drag.
+- **`dragHandle`** — CSS selector; only pointer-downs inside a matching element start a drag. Make the handle a non-button element (e.g. a `span`), because pointer-downs inside a `<button>` never start a drag (see next point).
 - **Interactive children** — pointer-downs inside a `button`, `input`, `textarea`, `select`, or `[contenteditable]` element never start a drag, so controls inside items keep working. The same applies to an element with class `no-drag`, but only when it is the exact element pressed (its children are not covered). Only the primary mouse button starts a drag.
 - **`dragThreshold`** (default `5`) — pixels the pointer must move before the drag starts.
 - **`dragDelay`** (default `0`) — ms the pointer must be held first. Moving past the threshold before the delay ends aborts the drag, so touch users can still scroll the list. When the delay has passed the element gets `vdnd-drag-pending` — style it to show the item is ready.
