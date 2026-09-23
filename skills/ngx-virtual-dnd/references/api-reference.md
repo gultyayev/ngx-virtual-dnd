@@ -1,6 +1,18 @@
 # API Reference
 
-All exports are from `'ngx-virtual-dnd'`.
+All exports are from `'ngx-virtual-dnd'`. Setup rules, recipes, CSS classes, and keyboard behavior are in [SKILL.md](../SKILL.md).
+
+## Contents
+
+- [Components](#components): VirtualSortableListComponent, VirtualScrollContainerComponent, VirtualViewportComponent, VirtualContentComponent, DragPreviewComponent, PlaceholderComponent, DragPlaceholderComponent
+- [Directives](#directives): DraggableDirective, DroppableDirective, DroppableGroupDirective, ScrollableDirective, VirtualForDirective, ContentHeaderDirective
+- [Events](#events): DragStartEvent, DropEvent, DragEndEvent
+- [Utilities](#utilities)
+- [Services](#services): DragStateService, AutoScrollService, PositionCalculatorService, ElementCloneService, KeyboardDragService, OverlayContainerService
+- [Configuration Types](#configuration-types)
+- [Strategies](#strategies)
+- [Tokens](#tokens)
+- [Constants](#constants)
 
 ## Components
 
@@ -17,24 +29,24 @@ High-level component combining droppable, virtual scroll, and placeholder. Defau
 | `droppableId` | `string` | - | Yes | Unique ID for this droppable container |
 | `items` | `T[]` | - | Yes | Array of items to render |
 | `itemHeight` | `number` | - | Yes | Item height in pixels (exact for fixed, estimate for dynamic) |
-| `itemIdFn` | `(item: T) => string` | - | Yes | Function returning unique ID for each item |
-| `itemTemplate` | `TemplateRef<VirtualScrollItemContext<T>>` | - | Yes | Template for rendering each item |
-| `group` | `string` | `undefined` | No | Group name for cross-list drag (must match `vdndGroup`) |
+| `itemIdFn` | `(item: T) => string` | - | Yes | Returns each item's ID. Must equal the `vdndDraggable` value rendered for that item |
+| `itemTemplate` | `TemplateRef<VirtualScrollItemContext<T>>` | - | Yes | Template for rendering each item; its root element should carry `[vdndDraggable]` |
+| `group` | `string` | `undefined` | No | Group name. Optional when a `vdndGroup` ancestor provides it |
 | `dynamicItemHeight` | `boolean` | `false` | No | Enable auto-measured variable heights |
-| `trackByFn` | `(index: number, item: T) => string \| number` | `undefined` | No | Track-by function for change detection |
+| `trackByFn` | `(index: number, item: T) => string \| number` | derived from `itemIdFn` | No | Track-by function for rendering |
 | `droppableData` | `unknown` | `undefined` | No | Custom data attached to this droppable (available in `DropDestination.data`) |
 | `disabled` | `boolean` | `false` | No | Disable drag and drop for this list |
-| `containerHeight` | `number` | `undefined` | No | Fixed container height in pixels (otherwise uses CSS height) |
+| `containerHeight` | `number` | `undefined` | No | Container height in pixels. Without it, the inner `vdnd-virtual-scroll` must get a CSS height |
 | `overscan` | `number` | `3` | No | Number of items to render beyond visible viewport |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling during drag |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
-| `constrainToContainer` | `boolean` | `false` | No | Clamp drag preview to container boundaries |
+| `constrainToContainer` | `boolean` | `false` | No | Clamp drag preview and drop position to container boundaries |
 
 **Outputs:**
 
 | Output | Type | Description |
 |--------|------|-------------|
-| `drop` | `DropEvent` | Item dropped into this list |
+| `drop` | `DropEvent` | Item dropped into this list (fires on the destination list only) |
 
 ---
 
@@ -50,22 +62,22 @@ Low-level virtual scroll container. Use with `DroppableDirective` for custom lay
 |-------|------|---------|----------|-------------|
 | `items` | `T[]` | - | Yes | Array of items to render |
 | `itemHeight` | `number` | - | Yes | Item height in pixels |
-| `itemIdFn` | `(item: T) => string` | - | Yes | Function returning unique ID for each item |
+| `itemIdFn` | `(item: T) => string` | - | Yes | Returns each item's ID. Must equal the `vdndDraggable` value rendered for that item |
 | `itemTemplate` | `TemplateRef<VirtualScrollItemContext<T>>` | - | Yes | Template for rendering each item |
-| `droppableId` | `string` | `undefined` | No | Droppable ID (for placeholder positioning during drag) |
+| `droppableId` | `string` | `undefined` | No | ID of the enclosing `vdndDroppable`. Needed for the placeholder to appear in this list |
 | `scrollContainerId` | `string` | `undefined` | No | ID for auto-scroll registration |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
 | `dynamicItemHeight` | `boolean` | `false` | No | Enable auto-measured variable heights |
-| `containerHeight` | `number` | `undefined` | No | Fixed container height in pixels |
+| `containerHeight` | `number` | `undefined` | No | Container height in pixels. Without it, give the element a CSS height (measured via ResizeObserver) |
 | `overscan` | `number` | `3` | No | Items to render beyond visible viewport |
 | `stickyItemIds` | `string[]` | `[]` | No | Item IDs to keep rendered regardless of scroll position |
-| `trackByFn` | `(index: number, item: T) => string \| number` | `undefined` | No | Track-by function |
+| `trackByFn` | `(index: number, item: T) => string \| number` | derived from `itemIdFn` | No | Track-by function |
 | `autoStickyDraggedItem` | `boolean` | `true` | No | Auto-stick dragged item during drag |
 
 **Outputs:** None
 
-**Public Methods:**
+**Public Methods** (access via `viewChild(VirtualScrollContainerComponent)`):
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
@@ -81,7 +93,15 @@ Low-level virtual scroll container. Use with `DroppableDirective` for custom lay
 
 **Selector:** `vdnd-virtual-viewport`
 
-Self-contained virtual scroll viewport with GPU-accelerated positioning. Provides `VDND_VIRTUAL_VIEWPORT` and `VDND_SCROLL_CONTAINER` tokens.
+Self-scrolling viewport for `*vdndVirtualFor` content, positioned with a single GPU-accelerated transform. Needs a height (CSS). Children using `*vdndVirtualFor` inherit its `itemHeight` and `dynamicItemHeight`. Provides `VDND_VIRTUAL_VIEWPORT` and `VDND_SCROLL_CONTAINER` tokens.
+
+```html
+<vdnd-virtual-viewport [itemHeight]="50" style="height: 400px">
+  <ng-container *vdndVirtualFor="let item of items(); trackBy: trackById">
+    <div class="item">{{ item.name }}</div>
+  </ng-container>
+</vdnd-virtual-viewport>
+```
 
 **Inputs:**
 
@@ -89,7 +109,7 @@ Self-contained virtual scroll viewport with GPU-accelerated positioning. Provide
 |-------|------|---------|----------|-------------|
 | `itemHeight` | `number` | - | Yes | Item height in pixels |
 | `dynamicItemHeight` | `boolean` | `false` | No | Enable dynamic heights |
-| `contentOffset` | `number` | `0` | No | Offset for content positioning |
+| `contentOffset` | `number` | `0` | No | Space (px) reserved above the items, e.g. for a header |
 | `scrollContainerId` | `string` | `undefined` | No | ID for auto-scroll registration |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
@@ -102,7 +122,7 @@ Self-contained virtual scroll viewport with GPU-accelerated positioning. Provide
 
 **Selector:** `vdnd-virtual-content`
 
-Virtual content for external scroll containers (page-level scroll). Provides `VDND_VIRTUAL_VIEWPORT` and `VDND_SCROLL_CONTAINER` tokens.
+Virtual content for external scroll containers (page-level scroll). Must be placed inside a `vdndScrollable` element. Projects an optional `[vdndContentHeader]` above the items. Provides `VDND_VIRTUAL_VIEWPORT` and `VDND_SCROLL_CONTAINER` tokens.
 
 **Inputs:**
 
@@ -120,7 +140,7 @@ Virtual content for external scroll containers (page-level scroll). Provides `VD
 
 **Selector:** `vdnd-drag-preview`
 
-Renders the dragged item preview. Teleports to body-level overlay to escape ancestor CSS transforms.
+Renders the dragged item preview. Teleports its host into a body-level `div.vdnd-overlay-container` to escape ancestor CSS transforms (ancestor-dependent selectors stop matching). Without `previewTemplate` it shows a styled clone of the dragged element. The preview box is sized to the dragged element.
 
 **Required** — place once in your template.
 
@@ -128,8 +148,8 @@ Renders the dragged item preview. Teleports to body-level overlay to escape ance
 
 | Input | Type | Default | Required | Description |
 |-------|------|---------|----------|-------------|
-| `previewTemplate` | `TemplateRef<DragPreviewContext<T>>` | `undefined` | No | Custom preview template |
-| `cursorOffset` | `{ x: number; y: number }` | `{ x: 8, y: 8 }` | No | Offset from cursor in pixels |
+| `previewTemplate` | `TemplateRef<DragPreviewContext<T>>` | `undefined` | No | Custom preview template (skips the element clone) |
+| `cursorOffset` | `{ x: number; y: number }` | `{ x: 8, y: 8 }` | No | Fallback offset used only when no grab offset is known. Pointer and keyboard drags always set one, so the preview normally keeps the grab point under the pointer |
 
 **Outputs:** None
 
@@ -139,7 +159,7 @@ Renders the dragged item preview. Teleports to body-level overlay to escape ance
 
 **Selector:** `vdnd-placeholder`
 
-Drop position indicator. Automatically rendered inside `VirtualSortableListComponent` and `VirtualScrollContainerComponent`.
+Standalone drop-position indicator you can render yourself (host class `vdnd-placeholder`). **Not** used by the built-in lists — they render `DragPlaceholderComponent`; style that via `.vdnd-drag-placeholder`.
 
 **Inputs:**
 
@@ -156,7 +176,7 @@ Drop position indicator. Automatically rendered inside `VirtualSortableListCompo
 
 **Selector:** `vdnd-drag-placeholder`
 
-Placeholder shown at the drag source position during drag. Automatically rendered by virtual scroll components.
+Empty placeholder rendered at the drop position in the target list during drag, sized to the dragged item. Rendered automatically by `vdnd-virtual-scroll` (hence `vdnd-sortable-list`); `*vdndVirtualFor` inserts an equivalent `div` with the same classes. Host classes: `vdnd-drag-placeholder vdnd-drag-placeholder-visible`.
 
 **Inputs:**
 
@@ -180,13 +200,13 @@ Makes an element draggable via mouse, touch, or keyboard.
 
 | Input | Type | Default | Required | Description |
 |-------|------|---------|----------|-------------|
-| `vdndDraggable` | `string` | - | Yes | Unique draggable ID (within its droppable) |
-| `vdndDraggableGroup` | `string` | `undefined` | No | Group name for cross-list drag |
-| `vdndDraggableData` | `unknown` | `undefined` | No | Custom data (available in events and preview template) |
+| `vdndDraggable` | `string` | - | Yes | Draggable ID. Unique across all lists; must equal the list's `itemIdFn`/`trackBy` value for the item |
+| `vdndDraggableGroup` | `string` | `undefined` | No* | Group name. *Required unless a `vdndGroup` is in scope where the element's template is declared; without a group, drag is disabled (dev-mode warning) |
+| `vdndDraggableData` | `unknown` | `undefined` | No | Custom data (in `DragStartEvent`/`DragEndEvent`/`DropSource` `data` and as the preview template's `$implicit`) |
 | `disabled` | `boolean` | `false` | No | Disable dragging |
-| `dragHandle` | `string` | `undefined` | No | CSS selector restricting drag initiation area |
+| `dragHandle` | `string` | `undefined` | No | CSS selector restricting drag initiation area. Pointer-downs inside `button`, `input`, `textarea`, `select`, `[contenteditable]`, or directly on a `.no-drag` element never start a drag |
 | `dragThreshold` | `number` | `5` | No | Minimum distance (px) before drag starts |
-| `dragDelay` | `number` | `0` | No | Delay (ms) after pointer down before drag activates |
+| `dragDelay` | `number` | `0` | No | Hold time (ms) before drag can start; moving past `dragThreshold` earlier aborts the attempt |
 | `lockAxis` | `'x' \| 'y' \| null` | `null` | No | Freeze one axis: `'x'` = X frozen (vertical-only), `'y'` = Y frozen (horizontal-only). Opposite of CDK's `cdkDragLockAxis`. |
 
 **Outputs:**
@@ -194,7 +214,7 @@ Makes an element draggable via mouse, touch, or keyboard.
 | Output | Type | Description |
 |--------|------|-------------|
 | `dragStart` | `DragStartEvent` | Drag operation started |
-| `dragEnd` | `DragEndEvent` | Drag operation ended (includes `cancelled` flag) |
+| `dragEnd` | `DragEndEvent` | Drag operation ended, dropped or not (see `destinationIndex`) |
 
 ---
 
@@ -208,19 +228,19 @@ Marks an element as a drop target.
 
 | Input | Type | Default | Required | Description |
 |-------|------|---------|----------|-------------|
-| `vdndDroppable` | `string` | - | Yes | Unique droppable ID |
-| `vdndDroppableGroup` | `string` | `undefined` | No | Group name (or inherit from parent `vdndGroup`) |
+| `vdndDroppable` | `string` | - | Yes | Droppable ID, unique on the page |
+| `vdndDroppableGroup` | `string` | `undefined` | No* | Group name. *Required unless inherited from a `vdndGroup` ancestor |
 | `vdndDroppableData` | `unknown` | `undefined` | No | Custom data (available in `DropDestination.data`) |
 | `disabled` | `boolean` | `false` | No | Disable dropping. Excluded from pointer hit-testing and keyboard cross-list navigation; releasing over it fires no `drop` and yields `dragEnd` with `destinationIndex: null` |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
-| `constrainToContainer` | `boolean` | `false` | No | Clamp drag to container boundaries |
+| `constrainToContainer` | `boolean` | `false` | No | Clamp drag preview and drop position to the nearest `vdndScrollable` ancestor (or this element) |
 
 **Outputs:**
 
 | Output | Type | Description |
 |--------|------|-------------|
-| `drop` | `DropEvent` | Item dropped into this droppable |
+| `drop` | `DropEvent` | Item dropped into this droppable (destination only) |
 
 ---
 
@@ -228,7 +248,7 @@ Marks an element as a drop target.
 
 **Selector:** `[vdndGroup]`
 
-Provides group context to child droppables for cross-list drag.
+Provides the group name (via `VDND_GROUP_TOKEN`) to descendant draggables and droppables. Templates resolve it from where they are declared, so declare item `<ng-template>`s inside this element.
 
 **Inputs:**
 
@@ -244,7 +264,7 @@ Provides group context to child droppables for cross-list drag.
 
 **Selector:** `[vdndScrollable]`
 
-Marks an external scroll container for page-level scroll. Provides `VDND_SCROLL_CONTAINER` token.
+Marks a scrollable element (it must have `overflow: auto`/`scroll` and a height) as the scroll container for `vdnd-virtual-content` or `*vdndVirtualFor`. Adds class `vdnd-scrollable` and `overflow-anchor: none`. Provides `VDND_SCROLL_CONTAINER` token.
 
 **Inputs:**
 
@@ -262,7 +282,7 @@ Marks an external scroll container for page-level scroll. Provides `VDND_SCROLL_
 
 **Selector:** `[vdndVirtualFor][vdndVirtualForOf]` (used as `*vdndVirtualFor`)
 
-Structural directive for rendering virtual list items inside a viewport component.
+Structural directive that renders only the visible items. Must be inside `vdnd-virtual-viewport`, `vdnd-virtual-content`, or a `vdndScrollable` element. Inside a viewport component it inherits `itemHeight`/`dynamicItemHeight`; directly inside `vdndScrollable` it needs `itemHeight` (falls back to 50 with a dev-mode warning). `droppableId` is inherited from an enclosing `vdndDroppable`. The `trackBy` key should equal the item's `vdndDraggable` ID.
 
 **Microsyntax:**
 
@@ -276,7 +296,7 @@ Structural directive for rendering virtual list items inside a viewport componen
 |-------|----------------|------|---------|----------|-------------|
 | `vdndVirtualForOf` | `of` | `T[]` | - | Yes | Array of items |
 | `vdndVirtualForTrackBy` | `trackBy` | `(index: number, item: T) => unknown` | - | Yes | Track-by function |
-| `vdndVirtualForItemHeight` | `itemHeight` | `number` | inherited | No | Item height (inherited from parent viewport) |
+| `vdndVirtualForItemHeight` | `itemHeight` | `number` | inherited | No* | Item height. *Required when not inside a viewport component |
 | `vdndVirtualForOverscan` | `overscan` | `number` | `3` | No | Overscan buffer |
 | `vdndVirtualForDroppableId` | `droppableId` | `string` | inherited | No | Droppable ID (inherited from parent) |
 | `vdndVirtualForDynamicItemHeight` | `dynamicItemHeight` | `boolean` | `false` | No | Enable dynamic heights (inherited from parent viewport) |
@@ -335,9 +355,9 @@ interface DropSource {
 
 interface DropDestination {
   droppableId: string;
-  placeholderId: string;
-  index: number;
-  data?: unknown;
+  placeholderId: string; // ID of the item the placeholder was before, or END_OF_LIST
+  index: number;         // final insertion index, after removal from the source
+  data?: unknown;        // the droppable's vdndDroppableData / droppableData
 }
 ```
 
@@ -354,7 +374,7 @@ interface DragEndEvent {
 }
 ```
 
-`destinationIndex` is `null` when there is no valid drop target — a cancelled drag (Escape) or a release over a disabled droppable / outside every droppable. A non-`null` value pairs with a `drop` event on the destination.
+`droppableId` is the source droppable. `destinationIndex` is `null` when there is no valid drop target — a cancelled drag (Escape, or Tab during a keyboard drag) or a release over a disabled droppable / outside every droppable. A non-`null` value pairs with a `drop` event on the destination. `cancelled` is `true` only for explicit cancels.
 
 ---
 
@@ -383,6 +403,11 @@ function insertAt<T>(list: T[], item: T, index: number): T[];
 function removeAt<T>(list: T[], index: number): T[];
 ```
 
+- `moveItem` does nothing (dev-mode warning) if either droppable ID is missing from `lists`. Same-list drops delegate to `reorderItems`.
+- `reorderItems` handles same-list drops only.
+- `applyMove` returns a shallow copy of `lists` with new arrays for the source/destination entries; unchanged input if the source item doesn't exist.
+- `isNoOpDrop` is `true` when source and destination droppable and index are equal.
+
 ---
 
 ## Services
@@ -409,7 +434,8 @@ function removeAt<T>(list: T[], index: number): T[];
 | `lockAxis` | `Signal<'x' \| 'y' \| null>` |
 | `isKeyboardDrag` | `Signal<boolean>` |
 | `keyboardTargetIndex` | `Signal<number \| null>` |
-| `wasCancelled` | `Signal<boolean>` |
+| `wasCancelled` | `Signal<boolean>` — whether the last drag was cancelled |
+| `endedDragState` | `Signal<DragState \| null>` — snapshot taken just before the last drag's state was reset |
 
 ### AutoScrollService
 
@@ -441,7 +467,7 @@ Internal service for DOM hit-testing and drop position calculation. Exported for
 | `findDroppableAtPoint` | `(x, y, draggedElement, groupName) => HTMLElement \| null` | Find droppable element at cursor position |
 | `findDraggableAtPoint` | `(x, y, draggedElement) => HTMLElement \| null` | Find draggable element at cursor position |
 | `getDroppableId` | `(element) => string \| null` | Get droppable ID from element's data attribute |
-| `calculateDropIndex` | `(droppable, cursorY, draggedItem, sourceDroppableId) => { ... }` | Calculate drop target index |
+| `calculateDropIndex` | `(scrollTop, cursorY, containerTop, itemHeight, totalItems) => number` | Fixed-height index math: `floor((cursorY - containerTop + scrollTop) / itemHeight)`, clamped to `[0, totalItems]` |
 | `refreshCandidates` | `() => void` | Re-query the active drag's candidate droppables (picks up droppables added/removed mid-drag). Called automatically by droppable lifecycle hooks; exposed as a manual escape hatch |
 
 ### ElementCloneService
@@ -454,7 +480,7 @@ Internal service for cloning DOM elements for drag previews. Exported for advanc
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `cloneElement` | `(source: HTMLElement) => HTMLElement` | Deep-clone an element for use as drag preview |
+| `cloneElement` | `(source: HTMLElement) => HTMLElement` | Deep-clone an element with its computed styles inlined, for use as drag preview |
 
 ### KeyboardDragService
 
@@ -679,25 +705,3 @@ const END_OF_LIST = 'END_OF_LIST';
 // Placeholder ID used when dropping at the end of a list
 ```
 
----
-
-## CSS Classes
-
-| Class | Applied To | Condition |
-|-------|-----------|-----------|
-| `vdnd-draggable` | `[vdndDraggable]` elements | Always |
-| `vdnd-draggable-dragging` | `[vdndDraggable]` elements | While being dragged (element has `display: none`) |
-| `vdnd-draggable-disabled` | `[vdndDraggable]` elements | When `disabled` is `true` |
-| `vdnd-drag-pending` | `[vdndDraggable]` elements | After `dragDelay` passes, before drag starts |
-| `vdnd-droppable` | `[vdndDroppable]` elements | Always |
-| `vdnd-droppable-active` | `[vdndDroppable]` elements | When a compatible draggable is hovering |
-| `vdnd-droppable-disabled` | `[vdndDroppable]` elements | When `disabled` is `true` |
-| `vdnd-sortable-list` | `<vdnd-sortable-list>` | Always (host class) |
-| `vdnd-virtual-scroll` | `<vdnd-virtual-scroll>` | Always (host class) |
-| `vdnd-virtual-viewport` | `<vdnd-virtual-viewport>` | Always (host class) |
-| `vdnd-virtual-content` | `<vdnd-virtual-content>` | Always (host class) |
-| `vdnd-scrollable` | `[vdndScrollable]` elements | Always (host class) |
-| `vdnd-placeholder` | `<vdnd-placeholder>` | Always (host class) |
-| `vdnd-drag-placeholder` | Drag placeholder element | Always during drag |
-| `vdnd-drag-placeholder-visible` | Drag placeholder element | While visible |
-| `vdnd-overlay-container` | Body-level `<div>` | Always (created for drag preview teleport) |
