@@ -22,7 +22,7 @@ These rules prevent common mistakes that cause hard-to-debug issues:
 
 8. **Test fails = you broke it:** If a test fails after your changes, fix it before declaring done.
 
-9. **Keep instructions in sync:** Any change to code documented in this file must include a corresponding update in the same commit. This includes: tables (services, directives, components, data attributes, public API, test files), code examples (if a pattern shown changes, update the example), architecture descriptions (if behavior in Architecture or a lazy doc changes, update it), and lazy docs (`.ai/E2E.md`, `.claude/history/*.md`, `.claude/TROUBLESHOOTING.md`, `.claude/demo/DESIGN_SYSTEM.md`, `.claude/DOCS_SITE.md`).
+9. **Keep instructions in sync:** Any change to code documented in this file must include a corresponding update in the same commit. This includes: code examples (if a pattern shown changes, update the example), architecture descriptions (if behavior in Architecture or a lazy doc changes, update it), and lazy docs (`.ai/E2E.md`, `.claude/history/*.md`, `.claude/TROUBLESHOOTING.md`, `.claude/demo/DESIGN_SYSTEM.md`, `.claude/DOCS_SITE.md`).
 
 10. **Never use `expect(true).toBe(true)` or similar no-op assertions:** Every test assertion must verify actual behavior. Tests that always pass regardless of code behavior provide false confidence and zero coverage. If you can't write a meaningful assertion, the test shouldn't exist.
 
@@ -37,143 +37,6 @@ These rules prevent common mistakes that cause hard-to-debug issues:
 Design tokens for the demo and docs live in `src/styles/tokens.css`.
 
 **Prefixes:** `app-` for main app components, `vdnd-` for library components/directives.
-
-### Services
-
-| Service                    | Path                                            | Purpose                                                                                                        |
-| -------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| DragStateService           | `lib/services/drag-state.service.ts`            | Central signals-based drag state                                                                               |
-| PositionCalculatorService  | `lib/services/position-calculator.service.ts`   | DOM hit-testing, drop index calculation                                                                        |
-| DragSchedulerService       | `lib/services/drag-scheduler.service.ts`        | Single RAF loop with read→compute→write phases; coordinates pointer-move coalescing and autoscroll participant |
-| AutoScrollService          | `lib/services/auto-scroll.service.ts`           | Edge-scroll logic registered as a DragSchedulerService participant                                             |
-| ElementCloneService        | `lib/services/element-clone.service.ts`         | Clone elements for drag preview                                                                                |
-| KeyboardDragService        | `lib/services/keyboard-drag.service.ts`         | Keyboard drag state management                                                                                 |
-| DragIndexCalculatorService | `lib/services/drag-index-calculator.service.ts` | Placeholder index with virtual scroll math                                                                     |
-| OverlayContainerService    | `lib/services/overlay-container.service.ts`     | Body-level container for overlay elements                                                                      |
-
-_All paths relative to `/projects/ngx-virtual-dnd/src/`_
-
-### Handlers
-
-| Handler             | Path                                    | Purpose                                    |
-| ------------------- | --------------------------------------- | ------------------------------------------ |
-| KeyboardDragHandler | `lib/handlers/keyboard-drag.handler.ts` | Keyboard drag lifecycle + key dispatch     |
-| PointerDragHandler  | `lib/handlers/pointer-drag.handler.ts`  | Pointer (mouse/touch) drag lifecycle + RAF |
-
-_Plain classes (non-injectable), instantiated by DraggableDirective._
-
-### Strategies
-
-| Strategy              | Path                                        | Purpose                                         |
-| --------------------- | ------------------------------------------- | ----------------------------------------------- |
-| FixedHeightStrategy   | `lib/strategies/fixed-height.strategy.ts`   | Fixed `index * itemHeight` math (zero overhead) |
-| DynamicHeightStrategy | `lib/strategies/dynamic-height.strategy.ts` | HeightCache + prefix sums + binary search       |
-
-_Plain classes implementing `VirtualScrollStrategy` interface (`lib/models/virtual-scroll-strategy.ts`)._
-_`HeightCache` utility: `lib/utils/height-cache.ts`_
-
-### Directives
-
-| Directive               | Selector            | Key Inputs                                                                                      |
-| ----------------------- | ------------------- | ----------------------------------------------------------------------------------------------- |
-| DraggableDirective      | `vdndDraggable`     | ID (required), group, data, disabled, dragHandle, dragThreshold, dragDelay, lockAxis            |
-| DroppableDirective      | `vdndDroppable`     | ID (required), group, data, disabled, autoScrollEnabled, autoScrollConfig, constrainToContainer |
-| DroppableGroupDirective | `vdndGroup`         | group name (required)                                                                           |
-| ScrollableDirective     | `vdndScrollable`    | scrollContainerId, autoScrollEnabled, autoScrollConfig                                          |
-| VirtualForDirective     | `*vdndVirtualFor`   | items (required), trackBy (required), itemHeight\*, dynamicItemHeight\*, droppableId\*          |
-| ContentHeaderDirective  | `vdndContentHeader` | (marker only — auto-measured via ResizeObserver)                                                |
-
-### Components
-
-| Component                       | Purpose                                                   |
-| ------------------------------- | --------------------------------------------------------- |
-| VirtualScrollContainerComponent | High-level virtual scroll + auto-sticky                   |
-| VirtualSortableListComponent    | Combines droppable + virtual scroll + placeholder         |
-| VirtualViewportComponent        | Self-contained viewport with GPU-accelerated positioning  |
-| VirtualContentComponent         | Virtual content within external scroll container          |
-| DragPreviewComponent            | Preview following cursor (auto-teleports to body overlay) |
-| PlaceholderComponent            | Drop position indicator                                   |
-| DragPlaceholderComponent        | Drag placeholder indicator (visible during drag)          |
-
-### Service Dependencies
-
-```
-DraggableDirective
-├── KeyboardDragHandler (plain class)
-│   ├── DragStateService
-│   ├── KeyboardDragService
-│   ├── PositionCalculatorService
-│   ├── DragIndexCalculatorService
-│   └── ElementCloneService
-├── PointerDragHandler (plain class)
-├── DragStateService
-├── PositionCalculatorService
-├── AutoScrollService
-├── ElementCloneService
-└── DragIndexCalculatorService
-
-DragPreviewComponent → DragStateService, OverlayContainerService
-DragIndexCalculatorService → PositionCalculatorService
-AutoScrollService → DragStateService, PositionCalculatorService
-```
-
-### Data Attributes
-
-| Attribute                     | Set By                                                   | Used For                                                      |
-| ----------------------------- | -------------------------------------------------------- | ------------------------------------------------------------- |
-| `data-draggable-id`           | DraggableDirective                                       | Identify draggable elements                                   |
-| `data-droppable-id`           | DroppableDirective                                       | Identify drop targets                                         |
-| `data-droppable-group`        | DroppableDirective                                       | Group membership for cross-list drag                          |
-| `data-droppable-disabled`     | DroppableDirective                                       | Excludes disabled droppable from hit-test/keyboard candidates |
-| `data-constrain-to-container` | DroppableDirective                                       | Clamp drag to container boundaries                            |
-| `data-item-height`            | VirtualScrollContainerComponent, VirtualContentComponent | Virtual scroll item height                                    |
-| `data-total-items`            | VirtualScrollContainerComponent, VirtualContentComponent | Total item count for index calculation                        |
-| `data-content-offset`         | VirtualContentComponent                                  | Content offset for virtual scroll positioning                 |
-
-### Test Files
-
-Unit test filenames mirror source filenames (`foo.service.ts` → `foo.service.spec.ts`). E2E coverage by area:
-
-| Source Area              | E2E Tests                                                       |
-| ------------------------ | --------------------------------------------------------------- |
-| DraggableDirective       | `drag-drop.spec.ts`, `keyboard-drag/*.spec.ts`                  |
-| DroppableDirective       | `drop-accuracy.spec.ts`                                         |
-| AutoScrollService        | `auto-scroll.spec.ts`, `autoscroll-drift.spec.ts`               |
-| DynamicHeightStrategy    | `dynamic-height.spec.ts`                                        |
-| Placeholder logic        | `placeholder-behavior.spec.ts`, `placeholder-integrity.spec.ts` |
-| Container constraint     | `constrain-to-container.spec.ts`                                |
-| Container resize         | `container-resize.spec.ts`                                      |
-| Keyboard drag            | `keyboard-drag/*.spec.ts` (6 files)                             |
-| Keyboard navigation      | `keyboard-navigation.spec.ts`                                   |
-| Axis lock                | `axis-lock.spec.ts`                                             |
-| Disabled elements        | `disabled-elements.spec.ts`                                     |
-| Drag UX features         | `drag-ux-features.spec.ts`                                      |
-| Empty list               | `empty-list.spec.ts`                                            |
-| Page scroll              | `page-scroll.spec.ts`                                           |
-| Mobile touch             | `touch-scroll.mobile.spec.ts`                                   |
-| Mid-drag droppable mount | `mid-drag-mount.spec.ts`                                        |
-| Shift animation / events | `shift-animation.spec.ts`                                       |
-| Docs live examples       | `docs-examples.spec.ts`                                         |
-
-### Skills (for library consumers)
-
-| Skill           | Path                      | Purpose                                  |
-| --------------- | ------------------------- | ---------------------------------------- |
-| ngx-virtual-dnd | `skills/ngx-virtual-dnd/` | Complete integration guide for AI agents |
-
-### Public API (from public-api.ts)
-
-**Events:** `DragStartEvent`, `DropEvent`, `DragEndEvent`, `PlaceholderMoveEvent`
-
-**Utilities:** `moveItem()`, `reorderItems()`, `applyMove()`, `isNoOpDrop()`, `insertAt()`, `removeAt()`
-
-**Tokens:** `VDND_SCROLL_CONTAINER`, `VDND_VIRTUAL_VIEWPORT`, `VDND_GROUP_TOKEN`, `VDND_ANIMATION_CONFIG`
-
-**Constants:** `INITIAL_DRAG_STATE`, `END_OF_LIST`
-
-**Strategies:** `VirtualScrollStrategy` (interface), `FixedHeightStrategy`, `DynamicHeightStrategy`
-
-**Types:** `AutoScrollConfig`, `DraggedItem`, `CursorPosition`, `GrabOffset`, `DragState`, `DropSource`, `DropDestination`, `VdndAnimationConfig`, `VdndGroupContext`, `VdndScrollContainer`, `VdndVirtualViewport`, `VirtualScrollItemContext`, `DragPreviewContext`, `PlaceholderContext`, `VirtualForContext`
 
 ## Code Patterns
 
@@ -317,10 +180,6 @@ Load these ONLY when working on specific areas:
 
 Lazy-load when: specialized (one subsystem), debugging/troubleshooting, or historical context. Inline only when broadly relevant (>20% of conversations), concise (≤3 lines), and actionable. Never duplicate between CLAUDE.md and lazy docs — single source of truth.
 
-## Troubleshooting
-
-See `.claude/TROUBLESHOOTING.md` for common error symptoms, causes, and fixes.
-
 ## Common Tasks
 
 | Task                           | Load First                                            | Key Tests                                                                                                |
@@ -386,9 +245,6 @@ When finished a task always kill servers started during development. Never leave
 
 ## Tooling
 
-- **Prettier:** single quotes, 100 char width
-- **ESLint:** @epam/eslint-config-angular
-- **Stylelint:** stylelint-config-sass-guidelines
 - **Git hooks:** Lefthook (lint on pre-commit, test on pre-push, commitlint on commit-msg)
 - **npm:** version pinned by `packageManager` in `package.json` (npm 12); CI installs exactly that version. npm 12 blocks dependency install scripts unless `allowScripts` in `package.json` allows them. When a new or updated dependency has install scripts, review them with `npm approve-scripts --allow-scripts-pending`, then `npm approve-scripts <pkg> --no-allow-scripts-pin` or `npm deny-scripts <pkg>`. Never approve with `--all`.
 
@@ -411,10 +267,6 @@ type(scope): description
 ### Docs site (`/docs/pages`)
 
 The primary human-facing documentation. See `.claude/DOCS_SITE.md`.
-
-**Update when:** new/removed/changed component, directive, input, output, utility, token, CSS class, keyboard shortcut, event, or configuration option; changed default behavior consumers will observe. Update the API page and every guide page that covers the change.
-
-**Do NOT update for:** bug fixes, internal algorithm changes, performance improvements (unless new config), refactoring, test changes, build/tooling changes.
 
 ### README.md (`/README.md`)
 
