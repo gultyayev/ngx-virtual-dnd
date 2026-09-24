@@ -1,8 +1,11 @@
-import { Component, signal } from '@angular/core';
+import { ApplicationRef, Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { VirtualForDirective } from './virtual-for.directive';
 import { VirtualViewportComponent } from '../components/virtual-viewport.component';
+import { DragStateService } from '../services/drag-state.service';
+import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
+import { END_OF_LIST } from '../models/drag-drop.models';
 
 interface TestItem {
   id: string;
@@ -355,5 +358,135 @@ describe('VirtualForDirective (dynamic height)', () => {
     expect(() => fixture.detectChanges()).not.toThrow();
     const rendered = fixture.debugElement.queryAll(By.css('.item'));
     expect(rendered.length).toBe(3);
+  });
+});
+
+@Component({
+  template: `
+    <vdnd-virtual-viewport [itemHeight]="50" style="height: 200px;">
+      <ng-container *vdndVirtualFor="let item of items(); trackBy: trackByFn; droppableId: 'list'">
+        <div class="item" [attr.data-id]="item.key">{{ item.key }}</div>
+      </ng-container>
+    </vdnd-virtual-viewport>
+  `,
+  imports: [VirtualViewportComponent, VirtualForDirective],
+  providers: [{ provide: VDND_ANIMATION_CONFIG, useValue: { shiftDuration: 200 } }],
+})
+class AnimatedTestHostComponent {
+  readonly items = signal<{ key: string }[]>([]);
+  readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+}
+
+describe('VirtualForDirective (shift animation)', () => {
+  let fixture: ComponentFixture<AnimatedTestHostComponent>;
+  let component: AnimatedTestHostComponent;
+  let dragState: DragStateService;
+  let appRef: ApplicationRef;
+  let animationsByKey: Map<string, { cancel: jest.Mock }[]>;
+  const originalResizeObserver = global.ResizeObserver;
+  const originalAnimate = Element.prototype.animate;
+  const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+
+  const render = (): void => {
+    fixture.detectChanges();
+    appRef.tick();
+  };
+
+  beforeEach(() => {
+    global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    animationsByKey = new Map();
+    // jsdom has no layout: place each element by its position among its siblings
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const index = this.parentElement ? Array.from(this.parentElement.children).indexOf(this) : 0;
+      return { top: index * 50, left: 0, width: 100, height: 50 } as DOMRect;
+    };
+    Element.prototype.animate = function (this: Element) {
+      const animation = {
+        cancel: jest.fn(),
+        effect: { getComputedTiming: () => ({ progress: 0 }) },
+        onfinish: null,
+      };
+      const key = this.getAttribute('data-id') ?? 'placeholder';
+      animationsByKey.set(key, [...(animationsByKey.get(key) ?? []), animation]);
+      return animation as unknown as Animation;
+    } as typeof Element.prototype.animate;
+
+    TestBed.configureTestingModule({ imports: [AnimatedTestHostComponent] });
+    fixture = TestBed.createComponent(AnimatedTestHostComponent);
+    component = fixture.componentInstance;
+    dragState = TestBed.inject(DragStateService);
+    appRef = TestBed.inject(ApplicationRef);
+
+    component.items.set(Array.from({ length: 6 }, (_, i) => ({ key: `k${i}` })));
+    render();
+    // Drag k0 within 'list'; the placeholder starts in its own slot
+    dragState.startDrag(
+      {
+        draggableId: 'k0',
+        droppableId: 'list',
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      null,
+      'list',
+      END_OF_LIST,
+      1,
+      0,
+    );
+    render();
+  });
+
+  afterEach(() => {
+    dragState.endDrag();
+    fixture.destroy();
+    global.ResizeObserver = originalResizeObserver;
+    Element.prototype.animate = originalAnimate;
+    Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+  });
+
+  const movePlaceholder = (placeholderIndex: number): void => {
+    dragState.updateDragPosition({
+      cursorPosition: { x: 0, y: 0 },
+      activeDroppableId: 'list',
+      placeholderId: END_OF_LIST,
+      placeholderIndex,
+    });
+    render();
+  };
+
+  it('does not animate the drag start render', () => {
+    expect(animationsByKey.size).toBe(0);
+  });
+
+  it('animates only the items displaced by a placeholder move', () => {
+    // Placeholder moves from before k1 to before k3: k1 and k2 move up past it
+    movePlaceholder(3);
+
+    expect([...animationsByKey.keys()].sort()).toEqual(['k1', 'k2', 'placeholder']);
+  });
+
+  it('cancels the animation of a view recycled for another item', () => {
+    movePlaceholder(3);
+    const k1Animation = animationsByKey.get('k1')![0];
+    expect(k1Animation.cancel).not.toHaveBeenCalled();
+
+    // k1 leaves the list: its view is pooled and may be reused for another item
+    component.items.set(component.items().filter((item) => item.key !== 'k1'));
+    render();
+
+    expect(k1Animation.cancel).toHaveBeenCalled();
+  });
+
+  it('cancels running animations when the drag ends', () => {
+    movePlaceholder(3);
+    const running = [...animationsByKey.values()].flat();
+
+    dragState.endDrag();
+    render();
+
+    expect(running.every((animation) => animation.cancel.mock.calls.length > 0)).toBe(true);
   });
 });
