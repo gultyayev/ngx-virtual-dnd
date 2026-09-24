@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.2.0-alpha.0](https://github.com/gultyayev/angular-vdnd/compare/v3.1.3...v3.2.0-alpha.0) (2026-09-24)
+
+### Features
+
+- **lib:** add shift animation and placeholderMove event ([#68](https://github.com/gultyayev/angular-vdnd/issues/68)) ([0d697f0](https://github.com/gultyayev/angular-vdnd/commit/0d697f0f55f54e18d9e298eea388c240389c2d03))
+
 ## [3.1.3](https://github.com/gultyayev/angular-vdnd/compare/v3.1.2...v3.1.3) (2026-07-18)
 
 ### Bug Fixes
