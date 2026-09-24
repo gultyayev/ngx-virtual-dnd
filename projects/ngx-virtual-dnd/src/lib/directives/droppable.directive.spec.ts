@@ -112,10 +112,6 @@ describe('DroppableDirective', () => {
   });
 
   describe('initialization', () => {
-    it('should create the directive', () => {
-      expect(directive).toBeTruthy();
-    });
-
     it('should have data-droppable-id attribute', () => {
       expect(droppableNative.getAttribute('data-droppable-id')).toBe('test-list');
     });
@@ -295,7 +291,7 @@ describe('DroppableDirective', () => {
       });
       fixture.detectChanges();
 
-      expect(() => dragStateService.endDrag()).not.toThrow();
+      dragStateService.endDrag();
       fixture.detectChanges();
 
       expect(component.dropEvents.at(-1)?.source.index).toBe(1);
@@ -468,11 +464,11 @@ describe('DroppableDirective', () => {
   });
 
   describe('performance: signal splitting', () => {
-    it('does not re-snapshot drag state on placeholder-only updates while active', () => {
-      // The active droppable caches the terminal drop state at drag end via endedDragState,
+    it('does not re-run the drop effect on placeholder-only updates while active', () => {
+      // The active droppable reads the terminal drop state from endedDragState at drag end,
       // NOT by polling every frame. Its effect must therefore stay keyed on the low-frequency
-      // fields (active/dragging/draggedItem) and NOT re-run — nor re-allocate a full snapshot —
-      // as the placeholder marches across items at 60fps. See issue #28.
+      // fields (active/dragging/draggedItem) and NOT re-run as the placeholder marches across
+      // items at 60fps. See issue #28.
       const item = createMockDraggedItem();
       dragStateService.startDrag(item);
       dragStateService.updateDragPosition({
@@ -484,11 +480,10 @@ describe('DroppableDirective', () => {
       fixture.detectChanges();
       expect(directive.isActive()).toBe(true);
 
-      // Only the directive's active-drop effect reads getStateSnapshot() during a live drag,
-      // so it is a faithful proxy for "the effect re-ran". Count calls triggered purely by
-      // placeholder movement (activeDroppableId held constant).
-      const snapshotSpy = jest.spyOn(dragStateService, 'getStateSnapshot');
-      snapshotSpy.mockClear();
+      // The drop effect reads endedDragState() on every run and nothing else does during a
+      // live drag, so it is a faithful proxy for "the effect re-ran". Count reads triggered
+      // purely by placeholder movement (activeDroppableId held constant).
+      const effectRunSpy = jest.spyOn(dragStateService, 'endedDragState');
 
       for (let i = 1; i <= 5; i++) {
         dragStateService.updateDragPosition({
@@ -500,10 +495,14 @@ describe('DroppableDirective', () => {
         fixture.detectChanges();
       }
 
-      expect(snapshotSpy).not.toHaveBeenCalled();
+      expect(effectRunSpy).not.toHaveBeenCalled();
 
-      snapshotSpy.mockRestore();
+      // Sanity check: the probe does see the effect run on a low-frequency change
       dragStateService.endDrag();
+      fixture.detectChanges();
+      expect(effectRunSpy).toHaveBeenCalled();
+
+      effectRunSpy.mockRestore();
     });
 
     it('still emits the final placeholder index after placeholder-only updates', () => {
@@ -718,15 +717,12 @@ describe('DroppableDirective', () => {
     });
 
     it('getScrollHeight should return scrollHeight', () => {
-      expect(directive.getScrollHeight()).toBe(droppableNative.scrollHeight);
+      makeScrollable(droppableNative);
+      expect(directive.getScrollHeight()).toBe(600);
     });
   });
 
   describe('cleanup on destroy', () => {
-    it('should cleanup without error', () => {
-      expect(() => fixture.destroy()).not.toThrow();
-    });
-
     it('should clear active droppable if destroyed while active', () => {
       const item = createMockDraggedItem();
       dragStateService.startDrag(item);

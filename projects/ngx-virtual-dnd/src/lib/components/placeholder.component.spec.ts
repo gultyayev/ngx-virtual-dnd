@@ -8,8 +8,14 @@ import { PlaceholderComponent, PlaceholderContext } from './placeholder.componen
   imports: [PlaceholderComponent],
 })
 class TestHostComponent {
-  height = signal(50);
+  height = signal(75);
 }
+
+@Component({
+  template: `<vdnd-placeholder />`,
+  imports: [PlaceholderComponent],
+})
+class TestHostWithoutHeightComponent {}
 
 @Component({
   template: `
@@ -43,7 +49,7 @@ describe('PlaceholderComponent', () => {
 
     beforeEach(() => {
       TestBed.configureTestingModule({
-        imports: [TestHostComponent],
+        imports: [TestHostComponent, TestHostWithoutHeightComponent],
       });
 
       fixture = TestBed.createComponent(TestHostComponent);
@@ -56,13 +62,6 @@ describe('PlaceholderComponent', () => {
 
     afterEach(() => {
       fixture.destroy();
-    });
-
-    it('should create the component', () => {
-      const placeholderComponent = fixture.debugElement
-        .query(By.directive(PlaceholderComponent))
-        .componentInstance;
-      expect(placeholderComponent).toBeTruthy();
     });
 
     it('should have vdnd-placeholder class', () => {
@@ -78,24 +77,26 @@ describe('PlaceholderComponent', () => {
       expect(placeholderEl.children.length).toBe(0);
     });
 
-    it('should use default height of 50px', () => {
-      expect(placeholderEl.style.height).toBe('50px');
-    });
-
-    it('should use custom height from input', () => {
-      component.height.set(100);
-      fixture.detectChanges();
-
-      expect(placeholderEl.style.height).toBe('100px');
+    it('should use the height input', () => {
+      expect(placeholderEl.style.height).toBe('75px');
     });
 
     it('should update height when input changes', () => {
-      expect(placeholderEl.style.height).toBe('50px');
-
-      component.height.set(75);
+      component.height.set(120);
       fixture.detectChanges();
 
-      expect(placeholderEl.style.height).toBe('75px');
+      expect(placeholderEl.style.height).toBe('120px');
+    });
+
+    it('should default to 50px when no height is bound', () => {
+      const defaultFixture = TestBed.createComponent(TestHostWithoutHeightComponent);
+      defaultFixture.detectChanges();
+
+      const defaultEl = defaultFixture.debugElement.query(By.directive(PlaceholderComponent))
+        .nativeElement as HTMLElement;
+      expect(defaultEl.style.height).toBe('50px');
+
+      defaultFixture.destroy();
     });
   });
 

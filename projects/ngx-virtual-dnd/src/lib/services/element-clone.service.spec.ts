@@ -3,14 +3,34 @@ import { ElementCloneService } from './element-clone.service';
 
 describe('ElementCloneService', () => {
   let service: ElementCloneService;
+  let styleSheet: HTMLStyleElement;
+  let attached: HTMLElement[];
+
+  /**
+   * Styles come from a stylesheet, not inline `style`: cloneNode() copies inline styles
+   * by itself, so only stylesheet rules prove the computed styles were copied onto the clone.
+   */
+  const addStyles = (css: string): void => {
+    styleSheet.textContent = css;
+  };
+
+  const attach = (el: HTMLElement): HTMLElement => {
+    document.body.appendChild(el);
+    attached.push(el);
+    return el;
+  };
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
     service = TestBed.inject(ElementCloneService);
+    styleSheet = document.createElement('style');
+    document.head.appendChild(styleSheet);
+    attached = [];
   });
 
-  it('should be created', () => {
-    expect(service).toBeTruthy();
+  afterEach(() => {
+    styleSheet.remove();
+    attached.forEach((el) => el.remove());
   });
 
   describe('cloneElement', () => {
@@ -24,57 +44,51 @@ describe('ElementCloneService', () => {
       expect(clone.textContent).toBe('HelloWorld');
     });
 
-    it('should copy computed background color', () => {
-      const source = document.createElement('div');
-      source.style.backgroundColor = 'rgb(255, 0, 0)';
-      document.body.appendChild(source);
+    it('should copy computed background color from stylesheet rules', () => {
+      addStyles('.card { background-color: rgb(255, 0, 0); }');
+      const source = attach(document.createElement('div'));
+      source.className = 'card';
 
       const clone = service.cloneElement(source);
 
       expect(clone.style.backgroundColor).toBe('rgb(255, 0, 0)');
-
-      document.body.removeChild(source);
     });
 
-    it('should copy computed font styles', () => {
-      const source = document.createElement('div');
-      source.style.fontSize = '16px';
-      source.style.fontWeight = 'bold';
-      document.body.appendChild(source);
+    it('should copy computed font styles from stylesheet rules', () => {
+      addStyles('.card { font-size: 16px; font-weight: bold; }');
+      const source = attach(document.createElement('div'));
+      source.className = 'card';
 
       const clone = service.cloneElement(source);
 
       expect(clone.style.fontSize).toBe('16px');
       expect(clone.style.fontWeight).toBe('bold');
-
-      document.body.removeChild(source);
     });
 
     it('should disable animations and transitions on clone', () => {
-      const source = document.createElement('div');
+      const source = attach(document.createElement('div'));
       source.style.transition = 'all 0.3s ease';
       source.style.animation = 'fade 1s';
-      document.body.appendChild(source);
 
       const clone = service.cloneElement(source);
 
       expect(clone.style.animation).toBe('none');
       expect(clone.style.transition).toBe('none');
-
-      document.body.removeChild(source);
     });
 
-    it('should remove draggable attributes', () => {
+    it('should remove draggable attributes from the root and its descendants', () => {
       const source = document.createElement('div');
       source.setAttribute('vdndDraggable', 'item-1');
       source.setAttribute('data-draggable-id', 'item-1');
       source.setAttribute('data-droppable-id', 'list-1');
+      source.innerHTML = '<div data-draggable-id="nested" data-droppable-id="nested-list"></div>';
 
       const clone = service.cloneElement(source);
 
       expect(clone.hasAttribute('vdndDraggable')).toBe(false);
       expect(clone.hasAttribute('data-draggable-id')).toBe(false);
       expect(clone.hasAttribute('data-droppable-id')).toBe(false);
+      expect(clone.querySelector('[data-draggable-id], [data-droppable-id]')).toBeNull();
     });
 
     it('should disable interactive elements', () => {
@@ -94,24 +108,22 @@ describe('ElementCloneService', () => {
       expect(button.style.pointerEvents).toBe('none');
       expect(button.getAttribute('tabindex')).toBe('-1');
       expect(button.getAttribute('aria-hidden')).toBe('true');
+      expect(button.hasAttribute('disabled')).toBe(true);
 
       expect(input.style.pointerEvents).toBe('none');
       expect(link.style.pointerEvents).toBe('none');
     });
 
     it('should recursively copy styles to child elements', () => {
-      const source = document.createElement('div');
-      const child = document.createElement('span');
-      child.style.color = 'rgb(0, 0, 255)';
-      source.appendChild(child);
-      document.body.appendChild(source);
+      addStyles('.card .label { color: rgb(0, 0, 255); }');
+      const source = attach(document.createElement('div'));
+      source.className = 'card';
+      source.innerHTML = '<span class="label">Label</span>';
 
       const clone = service.cloneElement(source);
       const clonedChild = clone.querySelector('span') as HTMLSpanElement;
 
       expect(clonedChild.style.color).toBe('rgb(0, 0, 255)');
-
-      document.body.removeChild(source);
     });
 
     it('should remove Angular-specific attributes', () => {
@@ -137,17 +149,15 @@ describe('ElementCloneService', () => {
     });
 
     it('should handle elements with no children', () => {
-      const source = document.createElement('span');
+      addStyles('.chip { padding: 10px; }');
+      const source = attach(document.createElement('span'));
+      source.className = 'chip';
       source.textContent = 'Simple text';
-      source.style.padding = '10px';
-      document.body.appendChild(source);
 
       const clone = service.cloneElement(source);
 
       expect(clone.textContent).toBe('Simple text');
       expect(clone.style.padding).toBe('10px');
-
-      document.body.removeChild(source);
     });
   });
 
@@ -166,7 +176,7 @@ describe('ElementCloneService', () => {
       expect(img.src).toBe('https://example.com/poster.jpg');
     });
 
-    it('should replace video without poster with placeholder', () => {
+    it('should replace video without poster with an empty placeholder', () => {
       const source = document.createElement('div');
       const video = document.createElement('video');
       source.appendChild(video);
@@ -174,21 +184,25 @@ describe('ElementCloneService', () => {
       const clone = service.cloneElement(source);
 
       expect(clone.querySelector('video')).toBeNull();
+      expect(clone.querySelector('img')).toBeNull();
+      expect(clone.children.length).toBe(1);
+      expect((clone.children[0] as HTMLElement).tagName).toBe('DIV');
     });
 
-    it('should replace iframes with placeholder', () => {
-      const source = document.createElement('div');
+    it('should replace iframes with a placeholder of the same size', () => {
+      const source = attach(document.createElement('div'));
       const iframe = document.createElement('iframe');
       iframe.style.width = '300px';
       iframe.style.height = '200px';
       source.appendChild(iframe);
-      document.body.appendChild(source);
 
       const clone = service.cloneElement(source);
 
       expect(clone.querySelector('iframe')).toBeNull();
-
-      document.body.removeChild(source);
+      const placeholder = clone.children[0] as HTMLElement;
+      expect(placeholder.tagName).toBe('DIV');
+      expect(placeholder.style.width).toBe('300px');
+      expect(placeholder.style.height).toBe('200px');
     });
   });
 });

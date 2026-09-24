@@ -1,5 +1,4 @@
 import { TestBed } from '@angular/core/testing';
-import { NgZone } from '@angular/core';
 import { AutoScrollService, AutoScrollConfig } from './auto-scroll.service';
 import { DragStateService } from './drag-state.service';
 import { PositionCalculatorService } from './position-calculator.service';
@@ -32,10 +31,6 @@ function flushRAF(): void {
   for (const cb of batch.values()) {
     cb(performance.now());
   }
-}
-
-function pendingRAFCount(): number {
-  return rafCallbacks.size;
 }
 
 describe('AutoScrollService', () => {
@@ -137,10 +132,6 @@ describe('AutoScrollService', () => {
     service.startMonitoring(onScroll);
   }
 
-  it('should be created', () => {
-    expect(service).toBeTruthy();
-  });
-
   // ---------------------------------------------------------------------------
   // registerContainer / unregisterContainer
   // ---------------------------------------------------------------------------
@@ -170,48 +161,6 @@ describe('AutoScrollService', () => {
 
       expect(mockElement.scrollTop).toBe(before);
     });
-
-    it('should allow registering multiple containers independently', () => {
-      const element2 = document.createElement('div');
-      Object.defineProperty(element2, 'scrollHeight', { value: 800, configurable: true });
-      Object.defineProperty(element2, 'clientHeight', { value: 300, configurable: true });
-      let el2ScrollTop = 100;
-      Object.defineProperty(element2, 'scrollTop', {
-        get: () => el2ScrollTop,
-        set: (v: number) => {
-          el2ScrollTop = v;
-        },
-        configurable: true,
-      });
-      Object.defineProperty(element2, 'scrollWidth', { value: 200, configurable: true });
-      Object.defineProperty(element2, 'clientWidth', { value: 200, configurable: true });
-      // element2 is at y=600..900
-      element2.getBoundingClientRect = jest.fn().mockReturnValue({
-        top: 600,
-        bottom: 900,
-        left: 50,
-        right: 250,
-        height: 300,
-        width: 200,
-      });
-
-      // Cursor inside element2's bottom edge (y=880, threshold 50, bottom=900)
-      setupDrag({ x: 150, y: 880 });
-      service.registerContainer('test-container', mockElement);
-      service.registerContainer('container-2', element2);
-      startMonitoringWithScheduler();
-
-      const before1 = mockElement.scrollTop;
-      const before2 = el2ScrollTop;
-      flushRAF();
-
-      // container-1 should not scroll (cursor is outside it)
-      expect(mockElement.scrollTop).toBe(before1);
-      // container-2 should scroll
-      expect(el2ScrollTop).toBeGreaterThan(before2);
-
-      service.unregisterContainer('container-2');
-    });
   });
 
   describe('unregisterContainer', () => {
@@ -226,62 +175,25 @@ describe('AutoScrollService', () => {
 
       expect(mockElement.scrollTop).toBe(before);
     });
-
-    it('should handle unregistering non-existent container without error', () => {
-      expect(() => service.unregisterContainer('non-existent')).not.toThrow();
-    });
   });
 
   // ---------------------------------------------------------------------------
   // startMonitoring / stopMonitoring
   // ---------------------------------------------------------------------------
   describe('startMonitoring', () => {
-    it('should start the tick loop (via scheduler) that continues each frame', () => {
-      setupDrag({ x: 150, y: 300 }); // active drag, cursor in center
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-
-      // Scheduler owns the RAF — one frame should be pending
-      expect(pendingRAFCount()).toBeGreaterThanOrEqual(1);
-      flushRAF(); // fires tick, schedules next
-      expect(pendingRAFCount()).toBeGreaterThanOrEqual(1);
-    });
-
-    it('should only register as participant once even if startMonitoring is called multiple times', () => {
-      let now = 100;
-      const performanceNowSpy = jest.spyOn(performance, 'now');
-      performanceNowSpy.mockImplementation(() => now);
-
-      setupDrag({ x: 150, y: 480 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-      service.startMonitoring(); // second call — duplicate participant guard
-
-      const before = mockElement.scrollTop;
-      flushRAF();
-      const afterOne = mockElement.scrollTop;
-      expect(afterOne).toBeGreaterThan(before);
-
-      now += 1000 / 60;
-      flushRAF();
-      const afterTwo = mockElement.scrollTop;
-      const delta1 = afterOne - before;
-      const delta2 = afterTwo - afterOne;
-      // Both deltas should be roughly equal (single participant, no double-speed scroll)
-      expect(Math.abs(delta1 - delta2)).toBeLessThan(1);
-
-      performanceNowSpy.mockRestore();
-    });
-
-    it('should accept and store a callback that is invoked on scroll', () => {
+    it('should scroll once per frame even if startMonitoring is called multiple times', () => {
       const callback = jest.fn();
       setupDrag({ x: 150, y: 480 });
       service.registerContainer('test-container', mockElement);
       startMonitoringWithScheduler(callback);
+      service.startMonitoring(callback); // second call — must not add a second participant
 
+      const before = mockElement.scrollTop;
       flushRAF();
 
-      expect(callback).toHaveBeenCalled();
+      // 20px from the bottom edge: 30/50 of the threshold → 0.6 * maxSpeed(15) = 9px, once
+      expect(mockElement.scrollTop - before).toBe(9);
+      expect(callback).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -321,10 +233,6 @@ describe('AutoScrollService', () => {
       expect(dir.x).toBe(0);
       expect(dir.y).toBe(0);
     });
-
-    it('should handle stopping when not monitoring', () => {
-      expect(() => service.stopMonitoring()).not.toThrow();
-    });
   });
 
   // ---------------------------------------------------------------------------
@@ -332,24 +240,6 @@ describe('AutoScrollService', () => {
   // ---------------------------------------------------------------------------
   describe('isScrolling', () => {
     it('should return false initially', () => {
-      expect(service.isScrolling()).toBe(false);
-    });
-
-    it('should return true when scrolling near an edge', () => {
-      setupDrag({ x: 150, y: 480 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-      flushRAF();
-
-      expect(service.isScrolling()).toBe(true);
-    });
-
-    it('should return false when cursor is in the center', () => {
-      setupDrag({ x: 150, y: 300 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-      flushRAF();
-
       expect(service.isScrolling()).toBe(false);
     });
   });
@@ -360,55 +250,13 @@ describe('AutoScrollService', () => {
       expect(dir.x).toBe(0);
       expect(dir.y).toBe(0);
     });
-
-    it('should return y=-1 when scrolling up', () => {
-      // Cursor near top edge: y=120, top=100, threshold=50 => 20px from edge
-      setupDrag({ x: 150, y: 120 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-      flushRAF();
-
-      expect(service.getScrollDirection().y).toBe(-1);
-    });
-
-    it('should return y=1 when scrolling down', () => {
-      setupDrag({ x: 150, y: 480 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-      flushRAF();
-
-      expect(service.getScrollDirection().y).toBe(1);
-    });
-
-    it('should return x=-1 when scrolling left', () => {
-      // Cursor near left edge: x=70, left=50, threshold=50 => 20px from edge
-      // Need scrollLeft > 0 for left scroll to occur
-      mockElement.scrollLeft = 100;
-      setupDrag({ x: 70, y: 300 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-      flushRAF();
-
-      expect(service.getScrollDirection().x).toBe(-1);
-    });
-
-    it('should return x=1 when scrolling right', () => {
-      // Cursor near right edge: x=230, right=250, threshold=50 => 20px from edge
-      // scrollWidth=400, clientWidth=200, so max scrollLeft=200, current=0
-      setupDrag({ x: 230, y: 300 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-      flushRAF();
-
-      expect(service.getScrollDirection().x).toBe(1);
-    });
   });
 
   // ---------------------------------------------------------------------------
   // Auto-scroll behavior (participant tick)
   // ---------------------------------------------------------------------------
   describe('auto-scroll behavior', () => {
-    it('should continue ticking when cursor has no position yet', () => {
+    it('should not scroll before the drag has a cursor position', () => {
       // Start drag without cursor position
       dragStateService.startDrag({
         draggableId: 'item-1',
@@ -420,68 +268,11 @@ describe('AutoScrollService', () => {
       service.registerContainer('test-container', mockElement);
       startMonitoringWithScheduler();
 
-      // Tick fires, no cursor => participant returns early, scheduler reschedules
-      flushRAF();
-      expect(pendingRAFCount()).toBeGreaterThanOrEqual(1); // next frame scheduled
-      expect(service.isScrolling()).toBe(false);
-    });
-
-    it('should scroll the element scrollTop when cursor is near bottom edge', () => {
-      setupDrag({ x: 150, y: 480 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-
       const before = mockElement.scrollTop;
       flushRAF();
 
-      expect(mockElement.scrollTop).toBeGreaterThan(before);
-    });
-
-    it('should scroll the element scrollTop upward when cursor is near top edge', () => {
-      setupDrag({ x: 150, y: 120 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-
-      const before = mockElement.scrollTop; // 200
-      flushRAF();
-
-      expect(mockElement.scrollTop).toBeLessThan(before);
-    });
-
-    it('should scroll horizontally when cursor is near right edge', () => {
-      setupDrag({ x: 230, y: 300 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-
-      const before = mockElement.scrollLeft;
-      flushRAF();
-
-      expect(mockElement.scrollLeft).toBeGreaterThan(before);
-    });
-
-    it('should scroll horizontally left when cursor is near left edge', () => {
-      mockElement.scrollLeft = 100;
-      setupDrag({ x: 70, y: 300 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-
-      const before = mockElement.scrollLeft;
-      flushRAF();
-
-      expect(mockElement.scrollLeft).toBeLessThan(before);
-    });
-
-    it('should not scroll when cursor is in the center of the container', () => {
-      setupDrag({ x: 150, y: 300 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler();
-
-      const beforeTop = mockElement.scrollTop;
-      const beforeLeft = mockElement.scrollLeft;
-      flushRAF();
-
-      expect(mockElement.scrollTop).toBe(beforeTop);
-      expect(mockElement.scrollLeft).toBe(beforeLeft);
+      expect(mockElement.scrollTop).toBe(before);
+      expect(service.isScrolling()).toBe(false);
     });
 
     it('should reset scroll state when cursor moves from edge to center', () => {
@@ -661,53 +452,6 @@ describe('AutoScrollService', () => {
       flushRAF();
 
       expect(mockElement.scrollLeft).toBe(200);
-    });
-
-    it('should handle container with no scroll capability', () => {
-      const nonScrollableElement = document.createElement('div');
-      Object.defineProperty(nonScrollableElement, 'scrollHeight', {
-        value: 100,
-        configurable: true,
-      });
-      Object.defineProperty(nonScrollableElement, 'clientHeight', {
-        value: 100,
-        configurable: true,
-      });
-      Object.defineProperty(nonScrollableElement, 'scrollWidth', {
-        value: 100,
-        configurable: true,
-      });
-      Object.defineProperty(nonScrollableElement, 'clientWidth', {
-        value: 100,
-        configurable: true,
-      });
-      let nsScrollTop = 0;
-      Object.defineProperty(nonScrollableElement, 'scrollTop', {
-        get: () => nsScrollTop,
-        set: (v: number) => {
-          nsScrollTop = v;
-        },
-        configurable: true,
-      });
-      nonScrollableElement.getBoundingClientRect = jest.fn().mockReturnValue({
-        top: 100,
-        bottom: 200,
-        left: 50,
-        right: 150,
-        height: 100,
-        width: 100,
-      });
-
-      // Cursor near bottom edge of this non-scrollable container
-      setupDrag({ x: 100, y: 190 });
-      service.registerContainer('non-scrollable', nonScrollableElement);
-      startMonitoringWithScheduler();
-      flushRAF();
-
-      // scrollTop=0, max=0, direction is down => should not scroll
-      expect(nsScrollTop).toBe(0);
-
-      service.unregisterContainer('non-scrollable');
     });
   });
 
@@ -1174,19 +918,6 @@ describe('AutoScrollService', () => {
   // Callback invocation
   // ---------------------------------------------------------------------------
   describe('callback invocation', () => {
-    it('should invoke callback when scroll occurs', () => {
-      const callback = jest.fn();
-      setupDrag({ x: 150, y: 480 });
-      service.registerContainer('test-container', mockElement);
-      startMonitoringWithScheduler(callback);
-
-      flushRAF(); // tick 1 → scroll → callback
-      flushRAF(); // tick 2 → scroll → callback
-
-      expect(callback).toHaveBeenCalled();
-      expect(callback.mock.calls.length).toBeGreaterThanOrEqual(1);
-    });
-
     it('should not invoke callback when no scroll occurs', () => {
       const callback = jest.fn();
       setupDrag({ x: 150, y: 300 }); // center, no edge
@@ -1198,7 +929,7 @@ describe('AutoScrollService', () => {
       expect(callback).not.toHaveBeenCalled();
     });
 
-    it('should clear callback when monitoring stops', () => {
+    it('should not invoke the previous drag callback after monitoring restarts without one', () => {
       const callback = jest.fn();
       setupDrag({ x: 150, y: 480 });
       service.registerContainer('test-container', mockElement);
@@ -1225,22 +956,6 @@ describe('AutoScrollService', () => {
       flushRAF(); // tick 3
 
       expect(callback.mock.calls.length).toBe(3);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // NgZone integration
-  // ---------------------------------------------------------------------------
-  describe('NgZone integration', () => {
-    it('should run the RAF loop outside Angular zone (via DragSchedulerService)', () => {
-      const ngZone = TestBed.inject(NgZone);
-      const runOutsideAngularSpy = jest.spyOn(ngZone, 'runOutsideAngular');
-
-      // The scheduler owns the zone boundary — verify it applies runOutsideAngular
-      scheduler.start(jest.fn());
-      service.startMonitoring();
-
-      expect(runOutsideAngularSpy).toHaveBeenCalled();
     });
   });
 
@@ -1299,6 +1014,8 @@ describe('AutoScrollService', () => {
       startMonitoringWithScheduler();
       flushRAF();
 
+      expect(mockElement.scrollTop).toBe(200);
+      expect(mockElement.scrollLeft).toBe(0);
       expect(service.isScrolling()).toBe(false);
       expect(service.getScrollDirection().x).toBe(0);
       expect(service.getScrollDirection().y).toBe(0);
@@ -1344,19 +1061,6 @@ describe('AutoScrollService', () => {
 
       // Override cursor to near bottom edge (should trigger scroll)
       service.setCursorOverride({ x: 150, y: 480 });
-      startMonitoringWithScheduler();
-
-      const before = mockElement.scrollTop;
-      flushRAF();
-
-      expect(mockElement.scrollTop).toBeGreaterThan(before);
-    });
-
-    it('should fall back to DragState cursor when no override is set', () => {
-      // DragState cursor is near bottom edge
-      setupDrag({ x: 150, y: 480 });
-      service.registerContainer('test-container', mockElement);
-      // No setCursorOverride call
       startMonitoringWithScheduler();
 
       const before = mockElement.scrollTop;

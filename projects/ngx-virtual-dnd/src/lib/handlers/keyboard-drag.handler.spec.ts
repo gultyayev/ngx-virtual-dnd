@@ -181,14 +181,6 @@ describe('KeyboardDragHandler', () => {
       templateHandler.destroy();
     });
 
-    it('should add document keydown listener', () => {
-      const addSpy = jest.spyOn(document, 'addEventListener');
-      handler.activate();
-
-      expect(addSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      addSpy.mockRestore();
-    });
-
     it('should emit drag start event', () => {
       handler.activate();
 
@@ -244,10 +236,13 @@ describe('KeyboardDragHandler', () => {
 
     it('should handle Space key (complete)', () => {
       const event = createKeyEvent(' ');
+      jest.spyOn(event, 'stopPropagation');
       const result = handler.handleKey(event);
 
       expect(result).toBe(true);
       expect(event.preventDefault).toHaveBeenCalled();
+      // Stops the same keydown from also reaching the element's host binding (double move)
+      expect(event.stopPropagation).toHaveBeenCalled();
       expect(mockKeyboardDrag.completeKeyboardDrag).toHaveBeenCalled();
     });
 
@@ -331,6 +326,7 @@ describe('KeyboardDragHandler', () => {
         'right',
         'test-group',
       );
+      expect(mockKeyboardDrag.moveToDroppable).toHaveBeenCalledWith('list-2', 0, 3);
     });
 
     it('should return false for unhandled keys', () => {
@@ -339,6 +335,8 @@ describe('KeyboardDragHandler', () => {
 
       expect(result).toBe(false);
       expect(event.preventDefault).not.toHaveBeenCalled();
+      expect(mockKeyboardDrag.completeKeyboardDrag).not.toHaveBeenCalled();
+      expect(mockKeyboardDrag.cancelKeyboardDrag).not.toHaveBeenCalled();
     });
 
     it('should clamp target index to new list size on cross-list move', () => {
@@ -450,14 +448,6 @@ describe('KeyboardDragHandler', () => {
       );
     });
 
-    it('should remove document listener', () => {
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
-      handler.complete();
-
-      expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      removeSpy.mockRestore();
-    });
-
     it('restores focus when the draggable ID has selector-sensitive characters', () => {
       mockContext.draggableId = 'item-"quoted"\\[one]';
       const element = document.createElement('button');
@@ -497,25 +487,35 @@ describe('KeyboardDragHandler', () => {
     });
 
     it('focuses the first destination draggable when the dropped item is not rendered', () => {
-      // The drop clears the active droppable before the focus callback runs
-      mockKeyboardDrag.completeKeyboardDrag.mockImplementation(() =>
-        mockDragState.activeDroppableId.mockReturnValue(null),
-      );
+      // Dropped into list-2; the drop clears the drag state before the focus callback runs
+      mockDragState.activeDroppableId.mockReturnValue('list-2');
+      mockKeyboardDrag.completeKeyboardDrag.mockImplementation(() => {
+        mockDragState.activeDroppableId.mockReturnValue(null);
+        mockDragState.sourceDroppableId.mockReturnValue(null);
+      });
       mockContext.draggableId = 'not-rendered';
-      const destination = document.createElement('div');
-      destination.setAttribute('data-droppable-id', 'list-1');
-      const firstDraggable = document.createElement('button');
-      firstDraggable.setAttribute('data-draggable-id', 'first');
-      const focusSpy = jest.spyOn(firstDraggable, 'focus');
-      destination.appendChild(firstDraggable);
-      document.body.appendChild(destination);
+      const createList = (id: string): HTMLButtonElement => {
+        const list = document.createElement('div');
+        list.setAttribute('data-droppable-id', id);
+        const firstDraggable = document.createElement('button');
+        firstDraggable.setAttribute('data-draggable-id', `${id}-first`);
+        list.appendChild(firstDraggable);
+        document.body.appendChild(list);
+        return firstDraggable;
+      };
+      const sourceFirst = createList('list-1');
+      const destinationFirst = createList('list-2');
+      const sourceFocus = jest.spyOn(sourceFirst, 'focus');
+      const destinationFocus = jest.spyOn(destinationFirst, 'focus');
 
       handler.complete();
       const callback = afterNextRenderMock.mock.calls.at(-1)?.[0] as () => void;
       callback();
 
-      expect(focusSpy).toHaveBeenCalled();
-      destination.remove();
+      expect(destinationFocus).toHaveBeenCalled();
+      expect(sourceFocus).not.toHaveBeenCalled();
+      sourceFirst.parentElement?.remove();
+      destinationFirst.parentElement?.remove();
     });
   });
 
@@ -534,14 +534,6 @@ describe('KeyboardDragHandler', () => {
       );
       expect(mockKeyboardDrag.cancelKeyboardDrag).toHaveBeenCalled();
     });
-
-    it('should remove document listener', () => {
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
-      handler.cancel();
-
-      expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      removeSpy.mockRestore();
-    });
   });
 
   describe('cancel focus fallback', () => {
@@ -553,31 +545,29 @@ describe('KeyboardDragHandler', () => {
         mockDragState.sourceDroppableId.mockReturnValue(null);
       });
       mockContext.draggableId = 'not-rendered';
-      const source = document.createElement('div');
-      source.setAttribute('data-droppable-id', 'list-1');
-      const firstDraggable = document.createElement('button');
-      firstDraggable.setAttribute('data-draggable-id', 'first');
-      const focusSpy = jest.spyOn(firstDraggable, 'focus');
-      source.appendChild(firstDraggable);
-      document.body.appendChild(source);
+      const createList = (id: string): HTMLButtonElement => {
+        const list = document.createElement('div');
+        list.setAttribute('data-droppable-id', id);
+        const firstDraggable = document.createElement('button');
+        firstDraggable.setAttribute('data-draggable-id', `${id}-first`);
+        list.appendChild(firstDraggable);
+        document.body.appendChild(list);
+        return firstDraggable;
+      };
+      const sourceFirst = createList('list-1');
+      const hoveredFirst = createList('list-2');
+      const sourceFocus = jest.spyOn(sourceFirst, 'focus');
+      const hoveredFocus = jest.spyOn(hoveredFirst, 'focus');
 
       handler.cancel();
       const callback = afterNextRenderMock.mock.calls.at(-1)?.[0] as () => void;
       callback();
 
       // A cancelled item goes back to its source list, not the list it was hovering
-      expect(focusSpy).toHaveBeenCalled();
-      source.remove();
-    });
-  });
-
-  describe('destroy', () => {
-    it('should remove document listener', () => {
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
-      handler.destroy();
-
-      expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
-      removeSpy.mockRestore();
+      expect(sourceFocus).toHaveBeenCalled();
+      expect(hoveredFocus).not.toHaveBeenCalled();
+      sourceFirst.parentElement?.remove();
+      hoveredFirst.parentElement?.remove();
     });
   });
 
@@ -612,45 +602,55 @@ describe('KeyboardDragHandler', () => {
   });
 
   describe('document listener lifecycle', () => {
-    it('should add listener on activate and remove on complete', () => {
-      const addSpy = jest.spyOn(document, 'addEventListener');
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
+    // The dragged element is hidden (display: none) during a keyboard drag, so keys must
+    // reach the handler through the document listener that activate() installs.
+    const pressOnDocument = (key: string): void => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    };
 
+    beforeEach(() => {
+      mockKeyboardDrag.isActive.mockReturnValue(true);
+    });
+
+    it('should not handle document keys before activation', () => {
+      pressOnDocument('ArrowDown');
+
+      expect(mockKeyboardDrag.moveDown).not.toHaveBeenCalled();
+    });
+
+    it('should handle document keys after activation', () => {
       handler.activate();
-      expect(addSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
 
+      pressOnDocument('ArrowDown');
+
+      expect(mockKeyboardDrag.moveDown).toHaveBeenCalledTimes(1);
+    });
+
+    it('should stop handling document keys after complete', () => {
+      handler.activate();
       handler.complete();
-      expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
 
-      addSpy.mockRestore();
-      removeSpy.mockRestore();
+      pressOnDocument('ArrowDown');
+
+      expect(mockKeyboardDrag.moveDown).not.toHaveBeenCalled();
     });
 
-    it('should add listener on activate and remove on cancel', () => {
-      const addSpy = jest.spyOn(document, 'addEventListener');
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
-
+    it('should stop handling document keys after cancel', () => {
       handler.activate();
-      expect(addSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
-
       handler.cancel();
-      expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
 
-      addSpy.mockRestore();
-      removeSpy.mockRestore();
+      pressOnDocument('ArrowDown');
+
+      expect(mockKeyboardDrag.moveDown).not.toHaveBeenCalled();
     });
 
-    it('should add listener on activate and remove on destroy', () => {
-      const addSpy = jest.spyOn(document, 'addEventListener');
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
-
+    it('should stop handling document keys after destroy', () => {
       handler.activate();
       handler.destroy();
 
-      expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      pressOnDocument('ArrowDown');
 
-      addSpy.mockRestore();
-      removeSpy.mockRestore();
+      expect(mockKeyboardDrag.moveDown).not.toHaveBeenCalled();
     });
   });
 

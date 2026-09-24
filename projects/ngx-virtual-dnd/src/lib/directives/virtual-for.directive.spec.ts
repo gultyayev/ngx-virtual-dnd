@@ -66,6 +66,19 @@ describe('VirtualForDirective', () => {
   let component: TestHostComponent;
   let originalResizeObserver: typeof ResizeObserver;
 
+  const makeItems = (count: number): TestItem[] =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `item-${i}`,
+      key: `key-${i}`,
+      label: `Item ${i}`,
+      parts: [],
+    }));
+
+  const renderedIds = (): string[] =>
+    fixture.debugElement
+      .queryAll(By.css('.item'))
+      .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id') ?? '');
+
   beforeAll(() => {
     originalResizeObserver = global.ResizeObserver;
     global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
@@ -76,6 +89,9 @@ describe('VirtualForDirective', () => {
   });
 
   beforeEach(() => {
+    // jsdom has no layout: give the viewport its 200px height (4 rows of 50px)
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(200);
+
     TestBed.configureTestingModule({
       imports: [TestHostComponent],
     });
@@ -86,6 +102,7 @@ describe('VirtualForDirective', () => {
 
   afterEach(() => {
     fixture.destroy();
+    jest.restoreAllMocks();
   });
 
   it('should render item views for unique trackBy keys', () => {
@@ -101,7 +118,8 @@ describe('VirtualForDirective', () => {
     expect(renderedItems.length).toBe(3);
   });
 
-  it('should not throw when trackBy keys collide', () => {
+  it('should skip and warn about items whose trackBy key collides', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     component.items.set([
       { id: 'item-1', key: 'a', label: 'A1', parts: ['a'] },
       { id: 'item-2', key: 'b', label: 'B', parts: ['b'] },
@@ -110,9 +128,11 @@ describe('VirtualForDirective', () => {
     ]);
 
     expect(() => fixture.detectChanges()).not.toThrow();
+    expect(renderedIds()).toHaveLength(3);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Duplicate trackBy key'));
   });
 
-  it('should not throw when replacing the full item list repeatedly', () => {
+  it('should render the new items when replacing the full item list', () => {
     component.items.set([
       { id: 'item-1', key: '1', label: 'One', parts: ['1a'] },
       { id: 'item-2', key: '2', label: 'Two', parts: ['2a', '2b'] },
@@ -128,8 +148,9 @@ describe('VirtualForDirective', () => {
       { id: 'item-13', key: '13', label: 'Thirteen', parts: ['13a'] },
       { id: 'item-14', key: '14', label: 'Fourteen', parts: ['14a', '14b'] },
     ]);
+    fixture.detectChanges();
 
-    expect(() => fixture.detectChanges()).not.toThrow();
+    expect(renderedIds()).toEqual(['item-10', 'item-11', 'item-12', 'item-13', 'item-14']);
   });
 
   it('should reconcile nested @for content when list shape changes', () => {
@@ -147,100 +168,51 @@ describe('VirtualForDirective', () => {
       { id: 'item-w', key: 'w', label: 'Whiskey', parts: ['w1', 'w2'] },
     ]);
 
-    expect(() => fixture.detectChanges()).not.toThrow();
-    expect(fixture.debugElement.queryAll(By.css('.item')).length).toBeGreaterThan(0);
-    expect(fixture.debugElement.queryAll(By.css('.part')).length).toBeGreaterThan(0);
+    fixture.detectChanges();
+
+    expect(renderedIds()).toEqual(['item-x', 'item-y', 'item-z', 'item-w']);
+    const parts = fixture.debugElement
+      .queryAll(By.css('.part'))
+      .map((el) => (el.nativeElement as HTMLElement).textContent);
+    expect(parts).toEqual(['x1', 'y1', 'y2', 'y3', 'y4', 'w1', 'w2']);
   });
 
   describe('virtual rendering', () => {
     it('should only render visible items plus overscan', () => {
-      // 200px viewport / 50px item height = 4 visible items
-      // Default overscan = 3, so max rendered = 4 + 3 (below) = 7 for items starting at 0
-      const items = Array.from({ length: 20 }, (_, i) => ({
-        id: `item-${i}`,
-        key: `key-${i}`,
-        label: `Item ${i}`,
-        parts: [],
-      }));
-      component.items.set(items);
+      // 200px viewport / 50px rows = 4 visible, + 3 overscan below (none above at the top)
+      component.items.set(makeItems(20));
       fixture.detectChanges();
 
-      const rendered = fixture.debugElement.queryAll(By.css('.item'));
-      expect(rendered.length).toBeLessThan(20);
-      expect(rendered.length).toBeGreaterThan(0);
-    });
-
-    it('should not render all 50 items when only a few fit in the viewport', () => {
-      const items = Array.from({ length: 50 }, (_, i) => ({
-        id: `item-${i}`,
-        key: `key-${i}`,
-        label: `Item ${i}`,
-        parts: [],
-      }));
-      component.items.set(items);
-      fixture.detectChanges();
-
-      const rendered = fixture.debugElement.queryAll(By.css('.item'));
-      // With 200px / 50px = 4 visible + 3 overscan = 7 max
-      expect(rendered.length).toBeLessThanOrEqual(10);
-      expect(rendered.length).toBeGreaterThanOrEqual(4);
+      expect(renderedIds()).toEqual(makeItems(8).map((item) => item.id));
     });
 
     it('should render all items when list fits entirely in viewport', () => {
-      const items = Array.from({ length: 3 }, (_, i) => ({
-        id: `item-${i}`,
-        key: `key-${i}`,
-        label: `Item ${i}`,
-        parts: [],
-      }));
-      component.items.set(items);
+      component.items.set(makeItems(3));
       fixture.detectChanges();
 
-      const rendered = fixture.debugElement.queryAll(By.css('.item'));
-      expect(rendered.length).toBe(3);
+      expect(renderedIds()).toEqual(['item-0', 'item-1', 'item-2']);
     });
 
     it('should render zero items for an empty list', () => {
       component.items.set([]);
       fixture.detectChanges();
 
-      const rendered = fixture.debugElement.queryAll(By.css('.item'));
-      expect(rendered.length).toBe(0);
+      expect(renderedIds()).toEqual([]);
     });
   });
 
   describe('item positioning via viewport wrapper', () => {
-    it('should use viewport wrapper transform instead of individual absolute positioning', () => {
-      const items = Array.from({ length: 5 }, (_, i) => ({
-        id: `item-${i}`,
-        key: `key-${i}`,
-        label: `Item ${i}`,
-        parts: [],
-      }));
-      component.items.set(items);
-      fixture.detectChanges();
-
-      // When inside a VirtualViewportComponent, items are NOT individually positioned.
-      // Instead, the viewport's content wrapper uses a single translateY transform.
-      const wrapper = fixture.debugElement.query(By.css('.vdnd-viewport-content'));
-      expect(wrapper).toBeTruthy();
-      const transform = (wrapper.nativeElement as HTMLElement).style.transform;
-      expect(transform).toContain('translateY');
-    });
-
-    it('should position wrapper at 0 offset when scrolled to top', () => {
-      const items = Array.from({ length: 3 }, (_, i) => ({
-        id: `item-${i}`,
-        key: `key-${i}`,
-        label: `Item ${i}`,
-        parts: [],
-      }));
-      component.items.set(items);
+    it('should position the viewport wrapper instead of each item', () => {
+      component.items.set(makeItems(5));
       fixture.detectChanges();
 
       const wrapper = fixture.debugElement.query(By.css('.vdnd-viewport-content'));
-      const transform = (wrapper.nativeElement as HTMLElement).style.transform;
-      expect(transform).toBe('translateY(0px)');
+      expect((wrapper.nativeElement as HTMLElement).style.transform).toBe('translateY(0px)');
+      // Items stay in normal flow inside the wrapper
+      const items = fixture.debugElement.queryAll(By.css('.item'));
+      expect(items.every((item) => (item.nativeElement as HTMLElement).style.position === '')).toBe(
+        true,
+      );
     });
   });
 
@@ -253,7 +225,9 @@ describe('VirtualForDirective', () => {
       ]);
       fixture.detectChanges();
 
-      const beforeCount = fixture.debugElement.queryAll(By.css('.item')).length;
+      const beforeElements = fixture.debugElement
+        .queryAll(By.css('.item'))
+        .map((el) => el.nativeElement as HTMLElement);
 
       // Reorder: swap first and last
       component.items.set([
@@ -263,13 +237,17 @@ describe('VirtualForDirective', () => {
       ]);
       fixture.detectChanges();
 
-      const afterItems = fixture.debugElement.queryAll(By.css('.item'));
-      expect(afterItems.length).toBe(beforeCount);
+      const afterElements = fixture.debugElement
+        .queryAll(By.css('.item'))
+        .map((el) => el.nativeElement as HTMLElement);
 
-      // Verify reordered content
-      expect(afterItems[0].nativeElement.getAttribute('data-id')).toBe('item-3');
-      expect(afterItems[1].nativeElement.getAttribute('data-id')).toBe('item-2');
-      expect(afterItems[2].nativeElement.getAttribute('data-id')).toBe('item-1');
+      // Same DOM nodes, moved — not destroyed and re-created
+      expect(afterElements).toEqual([beforeElements[2], beforeElements[1], beforeElements[0]]);
+      expect(afterElements.map((el) => el.getAttribute('data-id'))).toEqual([
+        'item-3',
+        'item-2',
+        'item-1',
+      ]);
     });
 
     it('should update context when item data changes but key remains the same', () => {
@@ -283,6 +261,7 @@ describe('VirtualForDirective', () => {
       fixture.detectChanges();
 
       const updatedLabel = fixture.debugElement.query(By.css('.label'));
+      expect(updatedLabel.nativeElement).toBe(label.nativeElement);
       expect(updatedLabel.nativeElement.textContent.trim()).toBe('Updated');
     });
 
@@ -297,7 +276,7 @@ describe('VirtualForDirective', () => {
 
       component.items.set([{ id: 'item-1', key: 'a', label: 'A', parts: [] }]);
       fixture.detectChanges();
-      expect(fixture.debugElement.queryAll(By.css('.item')).length).toBe(1);
+      expect(renderedIds()).toEqual(['item-1']);
     });
   });
 });
@@ -329,17 +308,18 @@ describe('VirtualForDirective (dynamic height)', () => {
     fixture.destroy();
   });
 
-  it('should render items in dynamic height mode without errors', () => {
+  it('should render items in dynamic height mode', () => {
     component.items.set([
       { id: 'item-1', key: 'a', label: 'Short', height: 30 },
       { id: 'item-2', key: 'b', label: 'Tall', height: 100 },
       { id: 'item-3', key: 'c', label: 'Medium', height: 60 },
     ]);
-
-    expect(() => fixture.detectChanges()).not.toThrow();
+    fixture.detectChanges();
 
     const rendered = fixture.debugElement.queryAll(By.css('.item'));
-    expect(rendered.length).toBeGreaterThan(0);
+    expect(rendered.map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id'))).toEqual(
+      ['item-1', 'item-2', 'item-3'],
+    );
   });
 
   it('should handle list replacement in dynamic height mode', () => {
@@ -355,9 +335,11 @@ describe('VirtualForDirective (dynamic height)', () => {
       { id: 'item-5', key: 'e', label: 'E', height: 30 },
     ]);
 
-    expect(() => fixture.detectChanges()).not.toThrow();
+    fixture.detectChanges();
     const rendered = fixture.debugElement.queryAll(By.css('.item'));
-    expect(rendered.length).toBe(3);
+    expect(rendered.map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id'))).toEqual(
+      ['item-3', 'item-4', 'item-5'],
+    );
   });
 });
 
@@ -483,6 +465,7 @@ describe('VirtualForDirective (shift animation)', () => {
   it('cancels running animations when the drag ends', () => {
     movePlaceholder(3);
     const running = [...animationsByKey.values()].flat();
+    expect(running.length).toBeGreaterThan(0);
 
     dragState.endDrag();
     render();

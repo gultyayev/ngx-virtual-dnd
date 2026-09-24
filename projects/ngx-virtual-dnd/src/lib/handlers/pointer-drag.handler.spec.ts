@@ -231,25 +231,30 @@ describe('PointerDragHandler', () => {
       expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
     });
 
-    it('should check drag handle', () => {
+    it('should ignore pointer down outside the drag handle', () => {
       const addSpy = jest.spyOn(document, 'addEventListener');
       mockContext.dragHandle = '.handle';
       const contentEl = document.createElement('span');
       contentEl.className = 'content';
       mockContext.element.appendChild(contentEl);
 
-      const event = new MouseEvent('mousedown', {
-        clientX: 150,
-        clientY: 220,
-        button: 0,
-        bubbles: true,
-        cancelable: true,
-      });
-      Object.defineProperty(event, 'target', { value: contentEl });
-
-      handler.onPointerDown(event, false);
+      handler.onPointerDown(createMouseEvent('mousedown', 150, 220, 0, contentEl), false);
 
       expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
+    });
+
+    it('should start tracking on pointer down inside the drag handle', () => {
+      mockContext.dragHandle = '.handle';
+      const handleEl = document.createElement('span');
+      handleEl.className = 'handle';
+      const handleIcon = document.createElement('i');
+      handleEl.appendChild(handleIcon);
+      mockContext.element.appendChild(handleEl);
+
+      handler.onPointerDown(createMouseEvent('mousedown', 150, 220, 0, handleIcon), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      expect(mockCallbacks.onDragStart).toHaveBeenCalledWith({ x: 160, y: 220 });
     });
   });
 
@@ -289,7 +294,12 @@ describe('PointerDragHandler', () => {
       // Move past threshold before delay fires
       document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
 
+      // The attempt is abandoned: neither the delay nor later moves revive it
+      jest.advanceTimersByTime(200);
+      document.dispatchEvent(createMouseEvent('mousemove', 170, 220));
+
       expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+      expect(mockCallbacks.onPendingChange).not.toHaveBeenCalledWith(true);
     });
 
     it('should emit pending change when delay fires', () => {
@@ -341,6 +351,15 @@ describe('PointerDragHandler', () => {
   });
 
   describe('pointer up', () => {
+    it('should stop tracking moves after pointer up', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mouseup', 150, 220));
+
+      document.dispatchEvent(createMouseEvent('mousemove', 200, 220));
+
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+    });
+
     it('should end drag on pointer up while dragging', () => {
       handler.onPointerDown(createMouseDown(150, 220), false);
 
@@ -365,10 +384,6 @@ describe('PointerDragHandler', () => {
 
   describe('escape key cancellation', () => {
     it('should cancel drag on Escape key', () => {
-      jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
-        cb(0);
-        return 1;
-      });
       handler.onPointerDown(createMouseDown(150, 220), false);
 
       // Start drag
@@ -434,11 +449,6 @@ describe('PointerDragHandler', () => {
   describe('getStartPosition', () => {
     it('should return null before any pointer down', () => {
       expect(handler.getStartPosition()).toBeNull();
-    });
-
-    it('should return the position after pointer down', () => {
-      handler.onPointerDown(createMouseDown(150, 220), false);
-      expect(handler.getStartPosition()).toEqual({ x: 150, y: 220 });
     });
 
     it('should return correct position for touch events', () => {

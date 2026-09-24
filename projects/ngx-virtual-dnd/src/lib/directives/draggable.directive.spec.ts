@@ -101,11 +101,31 @@ describe('DraggableDirective', () => {
     fixture.destroy();
   });
 
-  describe('initialization', () => {
-    it('should create the directive', () => {
-      expect(directive).toBeTruthy();
-    });
+  /**
+   * Press on `target` and move the pointer past the 5px threshold — the full gesture that
+   * starts a pointer drag. A mousedown alone never starts one, so negative tests must use this.
+   */
+  function attemptPointerDrag(target: Element, button = 0): void {
+    target.dispatchEvent(
+      new MouseEvent('mousedown', {
+        clientX: 100,
+        clientY: 100,
+        button,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 120 }));
+  }
 
+  it('should start a drag when pressing and moving past the threshold', () => {
+    attemptPointerDrag(draggableNative);
+
+    expect(dragStateService.isDragging()).toBe(true);
+    expect(component.dragStartEvents.length).toBe(1);
+  });
+
+  describe('initialization', () => {
     it('should have data-draggable-id attribute', () => {
       expect(draggableNative.getAttribute('data-draggable-id')).toBe('test-item');
     });
@@ -146,13 +166,7 @@ describe('DraggableDirective', () => {
       component.disabled.set(true);
       fixture.detectChanges();
 
-      const mousedown = new MouseEvent('mousedown', {
-        clientX: 100,
-        clientY: 100,
-        button: 0,
-        bubbles: true,
-      });
-      draggableNative.dispatchEvent(mousedown);
+      attemptPointerDrag(draggableNative);
 
       expect(dragStateService.isDragging()).toBe(false);
     });
@@ -160,39 +174,19 @@ describe('DraggableDirective', () => {
 
   describe('mousedown handling', () => {
     it('should not start drag on right click', () => {
-      const mousedown = new MouseEvent('mousedown', {
-        clientX: 100,
-        clientY: 100,
-        button: 2, // Right click
-        bubbles: true,
-      });
-      draggableNative.dispatchEvent(mousedown);
+      attemptPointerDrag(draggableNative, 2);
 
       expect(dragStateService.isDragging()).toBe(false);
     });
 
-    it('should not start drag when clicking on button', () => {
-      const button = draggableNative.querySelector('button')!;
-      const mousedown = new MouseEvent('mousedown', {
-        clientX: 100,
-        clientY: 100,
-        button: 0,
-        bubbles: true,
-      });
-      button.dispatchEvent(mousedown);
+    it('should not start drag when pressing on a button', () => {
+      attemptPointerDrag(draggableNative.querySelector('button')!);
 
       expect(dragStateService.isDragging()).toBe(false);
     });
 
-    it('should not start drag when clicking on input', () => {
-      const input = draggableNative.querySelector('input')!;
-      const mousedown = new MouseEvent('mousedown', {
-        clientX: 100,
-        clientY: 100,
-        button: 0,
-        bubbles: true,
-      });
-      input.dispatchEvent(mousedown);
+    it('should not start drag when pressing on an input', () => {
+      attemptPointerDrag(draggableNative.querySelector('input')!);
 
       expect(dragStateService.isDragging()).toBe(false);
     });
@@ -217,17 +211,16 @@ describe('DraggableDirective', () => {
       fixture.detectChanges();
     });
 
-    it('should not start drag when clicking outside handle', () => {
-      const content = draggableNative.querySelector('.content')!;
-      const mousedown = new MouseEvent('mousedown', {
-        clientX: 100,
-        clientY: 100,
-        button: 0,
-        bubbles: true,
-      });
-      content.dispatchEvent(mousedown);
+    it('should not start drag when pressing outside the handle', () => {
+      attemptPointerDrag(draggableNative.querySelector('.content')!);
 
       expect(dragStateService.isDragging()).toBe(false);
+    });
+
+    it('should start drag when pressing on the handle', () => {
+      attemptPointerDrag(draggableNative.querySelector('.handle')!);
+
+      expect(dragStateService.isDragging()).toBe(true);
     });
   });
 
@@ -334,55 +327,33 @@ describe('DraggableDirective', () => {
   });
 
   describe('axis locking input', () => {
-    /** Simulate a full pointer drag start: mousedown → mousemove past threshold */
-    function startDragViaPointer(): void {
-      // Mock elementFromPoint since JSDOM doesn't support it
-      const posCalc = TestBed.inject(PositionCalculatorService);
-      jest.spyOn(posCalc, 'findDroppableAtPoint').mockReturnValue(null);
-
-      const mousedown = new MouseEvent('mousedown', {
-        clientX: 100,
-        clientY: 100,
-        button: 0,
-        bubbles: true,
-        cancelable: true,
-      });
-      draggableNative.dispatchEvent(mousedown);
-
-      // Move past the 5px threshold to trigger drag start
-      const mousemove = new MouseEvent('mousemove', {
-        clientX: 100,
-        clientY: 110,
-        bubbles: true,
-      });
-      document.dispatchEvent(mousemove);
-    }
-
     it('should store null lockAxis in drag state when no axis is locked', () => {
       component.lockAxis.set(null);
       fixture.detectChanges();
 
-      startDragViaPointer();
+      attemptPointerDrag(draggableNative);
 
       expect(dragStateService.isDragging()).toBe(true);
       expect(dragStateService.lockAxis()).toBeNull();
     });
 
-    it('should pass x lockAxis to drag state when starting a drag', () => {
+    it('should pass x lockAxis to drag state and lock to the press position', () => {
       component.lockAxis.set('x');
       fixture.detectChanges();
 
-      startDragViaPointer();
+      attemptPointerDrag(draggableNative);
 
       expect(dragStateService.isDragging()).toBe(true);
       expect(dragStateService.lockAxis()).toBe('x');
+      // The axis locks where the pointer was pressed, not where the threshold was crossed
+      expect(dragStateService.initialPosition()).toEqual({ x: 100, y: 100 });
     });
 
     it('should pass y lockAxis to drag state when starting a drag', () => {
       component.lockAxis.set('y');
       fixture.detectChanges();
 
-      startDragViaPointer();
+      attemptPointerDrag(draggableNative);
 
       expect(dragStateService.isDragging()).toBe(true);
       expect(dragStateService.lockAxis()).toBe('y');
@@ -485,14 +456,16 @@ describe('DraggableDirective', () => {
       expect(space.defaultPrevented).toBe(false);
     });
 
-    it('should handle escape when not dragging', () => {
+    it('should leave escape alone when not dragging', () => {
       const escape = new KeyboardEvent('keydown', {
         key: 'Escape',
         bubbles: true,
         cancelable: true,
       });
-      // Should not throw
-      expect(() => draggableNative.dispatchEvent(escape)).not.toThrow();
+      draggableNative.dispatchEvent(escape);
+
+      expect(escape.defaultPrevented).toBe(false);
+      expect(component.dragEndEvents).toEqual([]);
     });
 
     it('should move exactly one position per arrow press when the source element is still focused', () => {
@@ -535,12 +508,27 @@ describe('DraggableDirective', () => {
       fixture.detectChanges();
 
       expect(dragStateService.isDragging()).toBe(false);
+      expect(dragStateService.wasCancelled()).toBe(true);
+      expect(component.dragEndEvents).toEqual([
+        expect.objectContaining({
+          draggableId: 'test-item',
+          cancelled: true,
+          destinationIndex: null,
+        }),
+      ]);
     });
   });
 
   describe('cleanup', () => {
-    it('should cleanup on destroy without error', () => {
-      expect(() => fixture.destroy()).not.toThrow();
+    it('should cancel an active drag when destroyed mid-drag', () => {
+      attemptPointerDrag(draggableNative);
+      expect(dragStateService.isDragging()).toBe(true);
+
+      fixture.destroy();
+
+      expect(dragStateService.isDragging()).toBe(false);
+      expect(dragStateService.wasCancelled()).toBe(true);
+      expect(component.dragEndEvents.at(-1)?.cancelled).toBe(true);
     });
   });
 });

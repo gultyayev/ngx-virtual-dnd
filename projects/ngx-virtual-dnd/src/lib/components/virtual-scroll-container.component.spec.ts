@@ -134,11 +134,25 @@ describe('VirtualScrollContainerComponent', () => {
     fixture.destroy();
   });
 
-  describe('initialization', () => {
-    it('should create the component', () => {
-      expect(virtualScrollComponent).toBeTruthy();
-    });
+  const renderedIndices = (): number[] =>
+    fixture.debugElement
+      .queryAll(By.css('.item'))
+      .map((item) => parseInt(item.nativeElement.getAttribute('data-index'), 10));
 
+  /** indices from..to inclusive */
+  const range = (from: number, to: number): number[] =>
+    Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+  /** Scroll the container and let the RAF-throttled scroll binding commit. */
+  const scrollContainerTo = async (scrollTop: number): Promise<void> => {
+    virtualScrollEl.scrollTop = scrollTop;
+    virtualScrollEl.dispatchEvent(new Event('scroll'));
+    await nextAnimationFrame();
+    fixture.detectChanges();
+    fixture.detectChanges();
+  };
+
+  describe('initialization', () => {
     it('should have vdnd-virtual-scroll class (provides overflow and position via CSS)', () => {
       expect(virtualScrollEl.classList.contains('vdnd-virtual-scroll')).toBe(true);
     });
@@ -154,34 +168,15 @@ describe('VirtualScrollContainerComponent', () => {
 
   describe('virtual rendering', () => {
     it('should render only visible items plus overscan', () => {
-      // Container is 300px, items are 50px each = 6 visible + 3 overscan each side = max 12 items
-      const renderedItems = fixture.debugElement.queryAll(By.css('.item'));
-
-      // With overscan=3, start=0, and visible=6, we should render items 0-9 (10 items)
-      expect(renderedItems.length).toBeLessThan(20);
-      expect(renderedItems.length).toBeGreaterThan(5);
+      // 300px / 50px = 6 visible, + 3 overscan below (none above at the top) → items 0-9
+      expect(renderedIndices()).toEqual(range(0, 9));
     });
 
-    it('should render items from the beginning initially', () => {
-      const firstItem = fixture.debugElement.query(By.css('.item'));
-      expect(firstItem.nativeElement.getAttribute('data-index')).toBe('0');
-    });
+    it('should render the window around the scroll position', async () => {
+      await scrollContainerTo(2000);
 
-    it('should update rendered items on scroll', async () => {
-      // Scroll to middle of list
-      virtualScrollEl.scrollTop = 2000; // Position for item 40
-      virtualScrollEl.dispatchEvent(new Event('scroll'));
-      await nextAnimationFrame(); // raf-throttled scroll binding
-      fixture.detectChanges();
-      fixture.detectChanges();
-
-      const items = fixture.debugElement.queryAll(By.css('.item'));
-      const indices = items.map((item) =>
-        parseInt(item.nativeElement.getAttribute('data-index'), 10),
-      );
-
-      // Should include items around index 40
-      expect(indices).toContain(40);
+      // First visible = 40 → 37 (overscan) through 40 + 6 + 3 = 49
+      expect(renderedIndices()).toEqual(range(37, 49));
     });
   });
 
@@ -191,9 +186,7 @@ describe('VirtualScrollContainerComponent', () => {
       fixture.detectChanges();
       fixture.detectChanges();
 
-      const items = fixture.debugElement.queryAll(By.css('.item'));
-      // With overscan=5, we should have more items
-      expect(items.length).toBeGreaterThan(6); // At least visible count
+      expect(renderedIndices()).toEqual(range(0, 11));
     });
 
     it('should respect overscan=0', () => {
@@ -201,51 +194,49 @@ describe('VirtualScrollContainerComponent', () => {
       fixture.detectChanges();
       fixture.detectChanges();
 
-      const items = fixture.debugElement.queryAll(By.css('.item'));
-      // Should only render visible items (6 for 300px container with 50px items)
-      expect(items.length).toBeLessThanOrEqual(7);
+      // 6 visible + 1 for the partially visible next row
+      expect(renderedIndices()).toEqual(range(0, 6));
     });
   });
 
   describe('sticky items', () => {
-    it('should always render sticky items even if not in viewport', () => {
-      // Make item-0 sticky
+    it('should keep rendering a sticky item scrolled out of the window', async () => {
       component.stickyItemIds.set(['item-0']);
       fixture.detectChanges();
-      fixture.detectChanges();
 
-      // Scroll to bottom
-      virtualScrollEl.scrollTop = 4000;
-      virtualScrollEl.dispatchEvent(new Event('scroll'));
-      fixture.detectChanges();
-      fixture.detectChanges();
+      await scrollContainerTo(4000);
 
-      // Item 0 should still be rendered
-      const items = fixture.debugElement.queryAll(By.css('.item'));
-      const indices = items.map((item) =>
-        parseInt(item.nativeElement.getAttribute('data-index'), 10),
-      );
-
-      expect(indices).toContain(0);
+      // First visible = 80 → window 77-89; item 0 is appended only because it is sticky
+      expect(renderedIndices()).toEqual([...range(77, 89), 0]);
     });
 
-    it('should mark sticky items with isSticky context', () => {
+    it('should drop a non-sticky item once it leaves the window', async () => {
+      await scrollContainerTo(4000);
+
+      expect(renderedIndices()).not.toContain(0);
+    });
+
+    it('should mark only sticky items with isSticky context', () => {
       component.stickyItemIds.set(['item-0']);
       fixture.detectChanges();
       fixture.detectChanges();
 
-      const firstItem = fixture.debugElement.query(By.css('.item[data-index="0"]'));
-      expect(firstItem.nativeElement.getAttribute('data-sticky')).toBe('true');
+      const stickyItem = fixture.debugElement.query(By.css('.item[data-index="0"]'));
+      const regularItem = fixture.debugElement.query(By.css('.item[data-index="1"]'));
+      expect(stickyItem.nativeElement.getAttribute('data-sticky')).toBe('true');
+      expect(regularItem.nativeElement.getAttribute('data-sticky')).toBe('false');
     });
   });
 
   describe('total height calculation', () => {
-    it('should calculate correct total height', () => {
-      // 100 items * 50px = 5000px
+    it('should size the single spacer to the total height', () => {
+      const spacer = fixture.debugElement.query(By.css('.vdnd-virtual-scroll-spacer'));
+      // 100 items * 50px
       expect(virtualScrollComponent.getScrollHeight()).toBe(5000);
+      expect(spacer.nativeElement.style.height).toBe('5000px');
     });
 
-    it('should NOT reduce total height when dragging (spacer stays constant)', () => {
+    it('should keep the total height while an item is dragged (hidden item still counted)', () => {
       const item: DraggedItem = {
         draggableId: 'item-5',
         droppableId: 'list',
@@ -258,11 +249,15 @@ describe('VirtualScrollContainerComponent', () => {
       fixture.detectChanges();
       fixture.detectChanges();
 
-      // Height stays at 100 items * 50px = 5000px during drag
-      // (getTotalHeight no longer excludes dragged item)
+      const spacer = fixture.debugElement.query(By.css('.vdnd-virtual-scroll-spacer'));
       expect(virtualScrollComponent.getScrollHeight()).toBe(5000);
+      expect(spacer.nativeElement.style.height).toBe('5000px');
 
       dragStateService.endDrag();
+      fixture.detectChanges();
+      fixture.detectChanges();
+
+      expect(virtualScrollComponent.getScrollHeight()).toBe(5000);
     });
   });
 
@@ -272,44 +267,12 @@ describe('VirtualScrollContainerComponent', () => {
       expect(wrapper.nativeElement.style.transform).toBe('translateY(0px)');
     });
 
-    it('should update transform when scrolled', async () => {
-      virtualScrollEl.scrollTop = 1000;
-      virtualScrollEl.dispatchEvent(new Event('scroll'));
-      await nextAnimationFrame(); // raf-throttled scroll binding
-      fixture.detectChanges();
-      fixture.detectChanges();
+    it('should offset the wrapper to the first rendered item when scrolled', async () => {
+      await scrollContainerTo(1000);
 
+      // First visible = 20, first rendered = 17 (overscan 3) → 17 * 50px
       const wrapper = fixture.debugElement.query(By.css('.vdnd-virtual-scroll-content-wrapper'));
-      const transform = wrapper.nativeElement.style.transform;
-      const match = transform.match(/translateY\((\d+)px\)/);
-      expect(match).toBeTruthy();
-      const offset = parseInt(match![1], 10);
-      expect(offset).toBeGreaterThan(0);
-    });
-
-    it('should have single spacer with total height', () => {
-      const spacer = fixture.debugElement.query(By.css('.vdnd-virtual-scroll-spacer'));
-      expect(spacer.nativeElement.style.height).toBe('5000px'); // 100 items * 50px
-    });
-
-    it('should NOT reduce spacer height when dragging (stays constant)', () => {
-      const item: DraggedItem = {
-        draggableId: 'item-5',
-        droppableId: 'list',
-        element: document.createElement('div'),
-        height: 50,
-        width: 200,
-      };
-
-      dragStateService.startDrag(item);
-      fixture.detectChanges();
-      fixture.detectChanges();
-
-      const spacer = fixture.debugElement.query(By.css('.vdnd-virtual-scroll-spacer'));
-      // Height stays at 100 items * 50px = 5000px during drag
-      expect(spacer.nativeElement.style.height).toBe('5000px');
-
-      dragStateService.endDrag();
+      expect(wrapper.nativeElement.style.transform).toBe('translateY(850px)');
     });
   });
 
@@ -368,20 +331,6 @@ describe('VirtualScrollContainerComponent', () => {
         fixture.detectChanges();
 
         expect(virtualScrollComponent.getScrollTop()).toBe(maxScroll);
-      });
-    });
-
-    describe('getScrollTop', () => {
-      it('should return current scroll position', () => {
-        virtualScrollComponent.scrollTo(250);
-
-        expect(virtualScrollComponent.getScrollTop()).toBe(250);
-      });
-    });
-
-    describe('getScrollHeight', () => {
-      it('should return total scrollable height', () => {
-        expect(virtualScrollComponent.getScrollHeight()).toBe(5000);
       });
     });
   });
@@ -484,28 +433,25 @@ describe('VirtualScrollContainerComponent', () => {
   });
 
   describe('container height changes', () => {
-    it('should update rendering when container height changes', () => {
-      const initialItems = fixture.debugElement.queryAll(By.css('.item')).length;
-
+    it('should render more rows when the container grows', () => {
       component.containerHeight.set(600);
       fixture.detectChanges();
       fixture.detectChanges();
 
-      const newItems = fixture.debugElement.queryAll(By.css('.item')).length;
-      // Should render more items with larger container
-      expect(newItems).toBeGreaterThanOrEqual(initialItems);
+      // 600px / 50px = 12 visible + 3 overscan → items 0-15 (was 0-9 at 300px)
+      expect(renderedIndices()).toEqual(range(0, 15));
+      expect(virtualScrollEl.style.height).toBe('600px');
     });
   });
 
   describe('item template context', () => {
-    it('should provide correct context to item template', () => {
-      const items = fixture.debugElement.queryAll(By.css('.item'));
+    it('should provide the item, its index and sticky flag to the item template', () => {
+      const second = fixture.debugElement.queryAll(By.css('.item'))[1].nativeElement as HTMLElement;
 
-      // Check first item
-      expect(items[0].nativeElement.getAttribute('data-index')).toBe('0');
-
-      // Check second item
-      expect(items[1].nativeElement.getAttribute('data-index')).toBe('1');
+      expect(second.textContent?.trim()).toBe('Item 1');
+      expect(second.getAttribute('data-draggable-id')).toBe('item-1');
+      expect(second.getAttribute('data-index')).toBe('1');
+      expect(second.getAttribute('data-sticky')).toBe('false');
     });
   });
 
@@ -529,36 +475,6 @@ describe('VirtualScrollContainerComponent', () => {
       expect(itemObserver.observe).toHaveBeenCalledWith(itemElement);
 
       dynamicFixture.destroy();
-    });
-  });
-
-  describe('drag state integration', () => {
-    it('should exclude dragged item from height calculation', () => {
-      const item: DraggedItem = {
-        draggableId: 'item-50',
-        droppableId: 'list',
-        element: document.createElement('div'),
-        height: 50,
-        width: 200,
-      };
-
-      const heightBefore = virtualScrollComponent.getScrollHeight();
-
-      dragStateService.startDrag(item);
-      fixture.detectChanges();
-      fixture.detectChanges();
-
-      const heightDuring = virtualScrollComponent.getScrollHeight();
-
-      // Height should stay the same (getTotalHeight no longer excludes dragged item)
-      expect(heightDuring).toBe(heightBefore);
-
-      dragStateService.endDrag();
-      fixture.detectChanges();
-      fixture.detectChanges();
-
-      // Height stays the same after drag end
-      expect(virtualScrollComponent.getScrollHeight()).toBe(heightBefore);
     });
   });
 
