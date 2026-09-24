@@ -8,6 +8,7 @@ import {
 import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
+import { KeyboardDragService } from '../services/keyboard-drag.service';
 import { DraggedItem } from '../models/drag-drop.models';
 
 // Mock ResizeObserver for JSDOM
@@ -609,6 +610,85 @@ describe('VirtualScrollContainerComponent', () => {
       fixture.detectChanges();
 
       expect(virtualScrollComponent.getScrollTop()).toBe(500);
+    });
+
+    it('should scroll on the arrow key itself, before change detection runs', () => {
+      component.droppableId.set('list');
+      fixture.detectChanges();
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      keyboardDrag.startKeyboardDrag(
+        {
+          draggableId: 'item-0',
+          droppableId: 'list',
+          element: document.createElement('div'),
+          height: 50,
+          width: 200,
+        },
+        0,
+        100,
+        'list',
+      );
+      fixture.detectChanges();
+
+      // A drop can arrive before the next render, so each move must scroll right away.
+      // Target 10 → placeholder at [500, 550) → the 300px viewport ends at 550.
+      for (let i = 0; i < 10; i++) {
+        keyboardDrag.moveDown();
+      }
+
+      expect(virtualScrollEl.scrollTop).toBe(250);
+      expect(virtualScrollComponent.getScrollTop()).toBe(250);
+    });
+
+    it('should scroll the list a keyboard drag moves into, before change detection runs', () => {
+      component.droppableId.set('list');
+      fixture.detectChanges();
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      keyboardDrag.startKeyboardDrag(
+        {
+          draggableId: 'other-0',
+          droppableId: 'other',
+          element: document.createElement('div'),
+          height: 50,
+          width: 200,
+        },
+        0,
+        100,
+        'other',
+      );
+      dragStateService.setKeyboardTargetIndex(20);
+      fixture.detectChanges();
+
+      // Target 20 in another list → placeholder at [1000, 1050)
+      keyboardDrag.moveToDroppable('list', 20, 100);
+
+      expect(virtualScrollEl.scrollTop).toBe(1050 - 300);
+    });
+
+    it('should not scroll to the placeholder during a pointer drag', () => {
+      component.droppableId.set('list');
+      fixture.detectChanges();
+      dragStateService.startDrag(
+        {
+          draggableId: 'item-0',
+          droppableId: 'list',
+          element: document.createElement('div'),
+          height: 50,
+          width: 200,
+        },
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'list',
+        null,
+        30,
+        0,
+        false,
+      );
+      fixture.detectChanges();
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.scrollTop).toBe(0);
     });
   });
 

@@ -242,10 +242,15 @@ export class KeyboardDragHandler {
       destinationIndex,
     });
 
+    // The item stays in its source list when there is no valid target
+    const fallbackDroppableId = hasValidTarget
+      ? activeDroppableId
+      : this.#deps.dragState.sourceDroppableId();
+
     this.#deps.keyboardDrag.completeKeyboardDrag();
 
     // Restore focus to the moved element after state updates
-    this.#restoreFocus(ctx.draggableId);
+    this.#restoreFocus(ctx.draggableId, fallbackDroppableId);
   }
 
   /**
@@ -254,6 +259,8 @@ export class KeyboardDragHandler {
   cancel(): void {
     const ctx = this.#deps.getContext();
     const sourceIndex = this.#deps.dragState.sourceIndex() ?? 0;
+    // A cancelled item goes back to its source list
+    const sourceDroppableId = this.#deps.dragState.sourceDroppableId();
 
     // Remove document listener
     this.#cleanupDocumentListener();
@@ -274,7 +281,7 @@ export class KeyboardDragHandler {
     this.#deps.keyboardDrag.cancelKeyboardDrag();
 
     // Restore focus to the original element after state updates
-    this.#restoreFocus(ctx.draggableId);
+    this.#restoreFocus(ctx.draggableId, sourceDroppableId);
   }
 
   /**
@@ -291,26 +298,26 @@ export class KeyboardDragHandler {
    *
    * Uses EnvironmentInjector to ensure callback runs even if the directive
    * is destroyed during cross-list moves.
+   *
+   * `fallbackDroppableId` is the list whose first draggable gets focus when the element is not
+   * rendered (for example scrolled out of a virtual list). Callers read it before ending the
+   * drag, which clears the drag state.
    */
-  #restoreFocus(draggableId: string): void {
-    // Capture the destination droppable BEFORE scheduling afterNextRender
-    // (the directive may be destroyed during cross-list moves)
-    const destinationDroppableId = this.#deps.dragState.activeDroppableId();
-
+  #restoreFocus(draggableId: string, fallbackDroppableId: string | null): void {
     afterNextRender(
       () => {
         const element = queryByAttribute<HTMLElement>(document, 'data-draggable-id', draggableId);
 
         if (element) {
           element.focus();
-        } else if (destinationDroppableId) {
-          // Fallback: focus the first draggable in the destination container
-          const destination = queryByAttribute<HTMLElement>(
+        } else if (fallbackDroppableId) {
+          // Fallback: focus the first draggable in the list the item ended up in
+          const container = queryByAttribute<HTMLElement>(
             document,
             'data-droppable-id',
-            destinationDroppableId,
+            fallbackDroppableId,
           );
-          const firstDraggable = destination?.querySelector<HTMLElement>('[data-draggable-id]');
+          const firstDraggable = container?.querySelector<HTMLElement>('[data-draggable-id]');
           firstDraggable?.focus();
         }
       },

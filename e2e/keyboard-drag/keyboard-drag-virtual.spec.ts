@@ -58,6 +58,8 @@ test.describe('Keyboard Drag - Virtual Scroll Integration', () => {
 
     await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '15');
     await poll(() => demoPage.getRenderedIndexOf('list1', draggedId!)).toBe(15);
+    // Arrow keys scroll synchronously, so an immediate drop still lands in view with focus
+    await expect(page.locator(':focus')).toHaveAttribute('data-draggable-id', draggedId!);
   });
 
   test('should scroll smoothly without jumps during continuous navigation', async ({ page }) => {

@@ -15,6 +15,9 @@ export class KeyboardDragService {
   /** Total item count for the current droppable (set by droppable on keyboard drag start) */
   readonly #totalItemCount = signal<number>(0);
 
+  /** Per-droppable callbacks that scroll the placeholder into view (see `registerRevealer`) */
+  readonly #revealers = new Map<string, () => void>();
+
   /** Whether a keyboard drag is currently active */
   readonly isActive = computed(
     () => this.#dragState.isKeyboardDrag() && this.#dragState.isDragging(),
@@ -80,6 +83,7 @@ export class KeyboardDragService {
     const clampedIndex = Math.max(0, Math.min(targetIndex, maxIndex));
 
     this.#dragState.setKeyboardTargetIndex(clampedIndex);
+    this.#revealActivePlaceholder();
 
     return clampedIndex;
   }
@@ -114,6 +118,26 @@ export class KeyboardDragService {
     this.#totalItemCount.set(totalItemCount);
     const clampedIndex = Math.max(0, Math.min(targetIndex, this.#maxTargetIndex(droppableId)));
     this.#dragState.setKeyboardActiveDroppable(droppableId, clampedIndex);
+    this.#revealActivePlaceholder();
+  }
+
+  /**
+   * Register the callback that scrolls a droppable's placeholder into view. It runs
+   * synchronously on every keyboard move into or within that droppable, so a drop that
+   * follows before the next render still lands inside the rendered range.
+   */
+  registerRevealer(droppableId: string, reveal: () => void): void {
+    this.#revealers.set(droppableId, reveal);
+  }
+
+  /**
+   * Unregister a droppable's reveal callback. Ignored if another callback has since been
+   * registered under the same ID.
+   */
+  unregisterRevealer(droppableId: string, reveal: () => void): void {
+    if (this.#revealers.get(droppableId) === reveal) {
+      this.#revealers.delete(droppableId);
+    }
   }
 
   /**
@@ -143,6 +167,13 @@ export class KeyboardDragService {
    */
   setTotalItemCount(count: number): void {
     this.#totalItemCount.set(count);
+  }
+
+  #revealActivePlaceholder(): void {
+    const droppableId = this.activeDroppableId();
+    if (droppableId !== null) {
+      this.#revealers.get(droppableId)?.();
+    }
   }
 
   /**

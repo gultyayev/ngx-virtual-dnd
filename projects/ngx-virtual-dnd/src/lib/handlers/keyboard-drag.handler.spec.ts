@@ -495,6 +495,28 @@ describe('KeyboardDragHandler', () => {
 
       destination.remove();
     });
+
+    it('focuses the first destination draggable when the dropped item is not rendered', () => {
+      // The drop clears the active droppable before the focus callback runs
+      mockKeyboardDrag.completeKeyboardDrag.mockImplementation(() =>
+        mockDragState.activeDroppableId.mockReturnValue(null),
+      );
+      mockContext.draggableId = 'not-rendered';
+      const destination = document.createElement('div');
+      destination.setAttribute('data-droppable-id', 'list-1');
+      const firstDraggable = document.createElement('button');
+      firstDraggable.setAttribute('data-draggable-id', 'first');
+      const focusSpy = jest.spyOn(firstDraggable, 'focus');
+      destination.appendChild(firstDraggable);
+      document.body.appendChild(destination);
+
+      handler.complete();
+      const callback = afterNextRenderMock.mock.calls.at(-1)?.[0] as () => void;
+      callback();
+
+      expect(focusSpy).toHaveBeenCalled();
+      destination.remove();
+    });
   });
 
   describe('cancel', () => {
@@ -519,6 +541,33 @@ describe('KeyboardDragHandler', () => {
 
       expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
       removeSpy.mockRestore();
+    });
+  });
+
+  describe('cancel focus fallback', () => {
+    it('focuses the first source draggable when the cancelled item is not rendered', () => {
+      mockKeyboardDrag.isActive.mockReturnValue(true);
+      mockDragState.activeDroppableId.mockReturnValue('list-2');
+      mockKeyboardDrag.cancelKeyboardDrag.mockImplementation(() => {
+        mockDragState.activeDroppableId.mockReturnValue(null);
+        mockDragState.sourceDroppableId.mockReturnValue(null);
+      });
+      mockContext.draggableId = 'not-rendered';
+      const source = document.createElement('div');
+      source.setAttribute('data-droppable-id', 'list-1');
+      const firstDraggable = document.createElement('button');
+      firstDraggable.setAttribute('data-draggable-id', 'first');
+      const focusSpy = jest.spyOn(firstDraggable, 'focus');
+      source.appendChild(firstDraggable);
+      document.body.appendChild(source);
+
+      handler.cancel();
+      const callback = afterNextRenderMock.mock.calls.at(-1)?.[0] as () => void;
+      callback();
+
+      // A cancelled item goes back to its source list, not the list it was hovering
+      expect(focusSpy).toHaveBeenCalled();
+      source.remove();
     });
   });
 
