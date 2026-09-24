@@ -1,67 +1,52 @@
 import { expect, test } from '@playwright/test';
 import { DemoPage } from '../fixtures/demo.page';
+import { afterInputHandled } from '../fixtures/drag-sync';
 
 test.describe('Keyboard Drag - Basic Operations', () => {
   let demoPage: DemoPage;
 
   test.beforeEach(async ({ page }) => {
     demoPage = new DemoPage(page);
-    await demoPage.goto();
   });
 
   test('should start keyboard drag with Space key', async ({ page }) => {
-    // Focus first draggable item and capture its ID
-    const firstItem = demoPage.list1Items.first();
-    const itemId = await firstItem.getAttribute('data-draggable-id');
-    await firstItem.focus();
-    await page.waitForTimeout(50); // Let focus settle
+    await demoPage.goto();
+    // Find the item by its ID afterwards: display:none shifts DOM order during the drag
+    const itemId = await demoPage.getItemId('list1', 0);
+    await demoPage.startKeyboardDrag('list1', 0);
 
-    // Press Space to start drag
-    await page.keyboard.press('Space');
-
-    // Verify drag state - find item by its ID since display:none shifts DOM order
     const sourceItem = page.locator(`[data-draggable-id="${itemId}"]`);
     await expect(sourceItem).toHaveAttribute('aria-grabbed', 'true');
     await expect(demoPage.dragPreview).toBeVisible();
+    await expect(demoPage.placeholder).toBeVisible();
   });
 
-  test('should drop item with Space key during keyboard drag', async ({ page }) => {
-    const initialCount = await demoPage.getItemCount('list1');
+  for (const dropKey of ['Space', 'Enter'] as const) {
+    test(`should drop item with ${dropKey} key during keyboard drag`, async ({ page }) => {
+      await demoPage.goto();
+      const firstId = await demoPage.getItemId('list1', 0);
+      const secondId = await demoPage.getItemId('list1', 1);
 
-    // Start keyboard drag
-    await demoPage.list1Items.first().focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
-    await expect(demoPage.dragPreview).toBeVisible();
+      await demoPage.startKeyboardDrag('list1', 0);
+      await expect(demoPage.dragPreview).toBeVisible();
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press(dropKey);
+      await expect(demoPage.dragPreview).not.toBeVisible();
 
-    // Move down one position
-    await page.keyboard.press('ArrowDown');
-
-    // Drop with Space
-    await page.keyboard.press('Space');
-
-    // Verify item dropped (count unchanged for same-list)
-    expect(await demoPage.getItemCount('list1')).toBe(initialCount);
-    await expect(demoPage.dragPreview).not.toBeVisible();
-  });
-
-  test('should drop item with Enter key during keyboard drag', async ({ page }) => {
-    await demoPage.list1Items.first().focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
-    await expect(demoPage.dragPreview).toBeVisible();
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('Enter');
-
-    await expect(demoPage.dragPreview).not.toBeVisible();
-  });
+      // A drop (not a cancel) one slot down
+      await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'false');
+      await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '1');
+      expect(await demoPage.getItemId('list1', 0)).toBe(secondId);
+      expect(await demoPage.getItemId('list1', 1)).toBe(firstId);
+      await expect(demoPage.countBadge('list1')).toHaveText('50');
+    });
+  }
 
   test('should cancel keyboard drag with Escape key', async ({ page }) => {
-    const originalText = await demoPage.getItemText('list1', 0);
+    await demoPage.goto();
+    const originalId = await demoPage.getItemId('list1', 0);
 
-    await demoPage.list1Items.first().focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 0);
     await expect(demoPage.dragPreview).toBeVisible();
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
@@ -69,23 +54,22 @@ test.describe('Keyboard Drag - Basic Operations', () => {
 
     // Wait for drag to be fully cancelled (preview hidden, item restored)
     await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'true');
 
     // Item should be back at original position
-    expect(await demoPage.getItemText('list1', 0)).toBe(originalText);
+    expect(await demoPage.getItemId('list1', 0)).toBe(originalId);
   });
 
   test('should not start drag on disabled item', async ({ page }) => {
-    // Disable dragging
-    await page.locator('[data-testid="drag-enabled-checkbox"]').uncheck();
-    // Wait for Angular to apply disabled state to items
-    await page.waitForTimeout(100);
+    await demoPage.goto({ dragEnabled: false });
+    const firstItem = demoPage.list1Items.first();
+    await expect(firstItem).toHaveClass(/vdnd-draggable-disabled/);
 
-    await demoPage.list1Items.first().focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
+    await firstItem.focus();
+    await afterInputHandled(page, 'keyup', () => page.keyboard.press('Space'));
 
-    // Should NOT start drag
     await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(firstItem).not.toHaveAttribute('aria-grabbed', 'true');
   });
 
   // Note: Focus cannot be maintained on the dragged element during keyboard drag
@@ -93,13 +77,11 @@ test.describe('Keyboard Drag - Basic Operations', () => {
   // via a document-level listener instead. See CLAUDE.md "Keyboard Drag Accessibility"
 
   test('should toggle drag state with repeated Space presses', async ({ page }) => {
-    const firstItem = demoPage.list1Items.first();
-    const itemId = await firstItem.getAttribute('data-draggable-id');
-    await firstItem.focus();
-    await page.waitForTimeout(50); // Let focus settle
+    await demoPage.goto();
+    const itemId = await demoPage.getItemId('list1', 0);
 
     // First Space starts drag
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 0);
     const sourceItem = page.locator(`[data-draggable-id="${itemId}"]`);
     await expect(sourceItem).toHaveAttribute('aria-grabbed', 'true');
     await expect(demoPage.dragPreview).toBeVisible();
@@ -108,16 +90,6 @@ test.describe('Keyboard Drag - Basic Operations', () => {
     await page.keyboard.press('Space');
     await expect(sourceItem).toHaveAttribute('aria-grabbed', 'false');
     await expect(demoPage.dragPreview).not.toBeVisible();
-  });
-
-  test('should show placeholder during keyboard drag', async ({ page }) => {
-    await demoPage.list1Items.first().focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
-    await expect(demoPage.dragPreview).toBeVisible();
-
-    // Placeholder should be visible
-    await expect(demoPage.placeholder).toBeVisible();
   });
 });
 
@@ -132,47 +104,28 @@ test.describe('Keyboard Drag - Event Consistency', () => {
   test('should emit matching dragEnd and drop destination indexes for same-list no-op drops', async ({
     page,
   }) => {
-    const sourceItem = demoPage.list1Items.nth(3);
-
-    await sourceItem.focus();
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 3);
     await expect(demoPage.dragPreview).toBeVisible();
     await page.keyboard.press('Space');
 
-    await expect(page.locator('[data-last-drag-end-destination-index]')).toHaveAttribute(
-      'data-last-drag-end-destination-index',
-      '3',
-    );
-    await expect(page.locator('[data-last-drop-destination-index]')).toHaveAttribute(
-      'data-last-drop-destination-index',
-      '3',
-    );
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-destination-index', '3');
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '3');
   });
 
   test('should emit matching dragEnd and drop destination indexes for same-list move-down drops', async ({
     page,
   }) => {
-    const sourceItemText = await demoPage.getItemText('list1', 1);
-    const targetItemText = await demoPage.getItemText('list1', 2);
-    const sourceItem = demoPage.list1Items.nth(1);
+    const sourceId = await demoPage.getItemId('list1', 1);
+    const targetId = await demoPage.getItemId('list1', 2);
 
-    await sourceItem.focus();
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 1);
     await expect(demoPage.dragPreview).toBeVisible();
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Space');
 
-    await expect(page.locator('[data-last-drag-end-destination-index]')).toHaveAttribute(
-      'data-last-drag-end-destination-index',
-      '2',
-    );
-    await expect(page.locator('[data-last-drop-destination-index]')).toHaveAttribute(
-      'data-last-drop-destination-index',
-      '2',
-    );
-    await expect(async () => {
-      await expect.poll(() => demoPage.getItemText('list1', 1)).toBe(targetItemText);
-      await expect.poll(() => demoPage.getItemText('list1', 2)).toBe(sourceItemText);
-    }).toPass({ timeout: 2000 });
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-destination-index', '2');
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '2');
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    expect((await demoPage.getItemIds('list1')).slice(1, 3)).toEqual([targetId, sourceId]);
   });
 });

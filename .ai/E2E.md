@@ -18,18 +18,33 @@ The goal is **high-signal, low-flake** tests that run reliably across browsers.
 
 Avoid `page.waitForTimeout()` as a synchronization mechanism. Prefer:
 
-- `await expect(locator).toBeVisible()` / `toBeHidden()` for UI state
-- `await expect.poll(() => demoPage.getScrollTop('list1')).toBeGreaterThan(...)`
+- `await expect(locator).toBeVisible()` / `toBeHidden()` / `toHaveText()` for UI state
+- `await poll(() => demoPage.getScrollTop('list1')).toBeGreaterThan(...)` (`e2e/fixtures/polling.ts`)
 - `await expect(async () => { ... }).toPass()` for multi-assert waits
 
-Use fixed waits only as a last resort and keep them short (≤ 50ms).
+Polling is frame-paced: `playwright.config.ts` gives every `toPass()` `POLL_INTERVALS`
+(16/32/50 ms, then every 100 ms) instead of Playwright's 100/250/500/1000 ms back-off, which
+overshoots frame-driven waits by up to a second. `expect.poll()` has no config default, so use
+the `poll()` wrapper instead of calling it directly.
+
+To prove that something does **not** happen, wait a number of frames rather than a duration:
+`waitForFrames(page, 10)` (`e2e/fixtures/drag-sync.ts`). Autoscroll and rendering run once per
+frame, so this gives them a fixed number of chances whatever the machine load. A fixed wait is
+acceptable only when the behavior is itself time-based (for example "hold longer than the drag
+delay").
 
 ### 2) Virtual scroll: DOM counts lie
 
 Only visible items are rendered. For logical list sizes:
 
-- Use the list badge (`DemoPage.getItemCount`) rather than `locator.count()`.
-- When verifying insertion at a specific logical index, **scroll to it** and then assert the visible item text/id.
+- Use the list badge rather than `locator.count()`: `await expect(demoPage.countBadge('list1')).toHaveText('49')` waits for the render after a drop; `getItemCount()` reads it once.
+- When verifying insertion at a specific logical index, **scroll to it** and then assert the visible item id (`getRenderedIndexOf(list, id)`), or assert the drop event's `data-last-drop-destination-index` on the demo host.
+
+### 2a) Identify items by id, not text
+
+Both main-demo lists name their items "Item 1…Item 50", so a text check cannot tell an item
+that moved from list 1 from list 2's own item at that index (an off-by-one drop still passes).
+Compare `data-draggable-id` values: `getItemId(list, index)` / `getItemIds(list)`.
 
 ### 3) Always scroll targets into viewport before hit-testing
 
@@ -39,6 +54,10 @@ Best practice:
 
 - `await locator.scrollIntoViewIfNeeded()` before `boundingBox()`
 - Keep drop coordinates within the viewport bounds
+- Keep **every** pointer target inside the viewport, even when testing "far outside the
+  container": Firefox drops a `mouse.move()` whose target is outside the viewport (its steps
+  included), and a `mouse.up()` there never ends the drag. Chromium and WebKit deliver them, so
+  such a test silently checks nothing on Firefox.
 
 ### 4) Prefer stable identifiers
 
@@ -56,7 +75,28 @@ Always synchronize on a **drag-start signal**:
 - `await expect(demoPage.dragPreview).toBeVisible()` (mouse/touch/keyboard)
 - (Optional) `await expect(demoPage.placeholder).toBeVisible()` when placeholder is expected
 
-If a helper cannot start the drag (no preview), it should **fail** (don’t swallow errors).
+`DemoPage.startDrag(locator | box)` presses, crosses the threshold and waits for the preview in
+**one attempt**. Don't wrap drag starts in `toPass()` retries: they hide the failure the test
+exists to catch and cost a second per failed attempt.
+
+### 5a) Negative assertions need a sync point
+
+`await expect(preview).not.toBeVisible()` right after an input passes before the input has
+even reached the page, whatever the library does. Send the input through `afterInputHandled`
+(`e2e/fixtures/drag-sync.ts`), which resolves once the page has received the event and rendered
+two frames since:
+
+```typescript
+await page.mouse.down();
+await afterInputHandled(page, 'mousemove', () => page.mouse.move(x + 100, y));
+await expect(demoPage.dragPreview).not.toBeVisible();
+```
+
+Better still, follow the ignored input with one that has a visible effect (for example an
+ArrowDown after a rejected ArrowRight) and assert the combined outcome.
+
+For timers (drag delay), use `page.clock.install()` and `page.clock.runFor(ms)` to step past the
+delay instead of sleeping through it.
 
 ### 6) Autoscroll assertions must be retrying
 
@@ -67,12 +107,28 @@ Autoscroll is time-based; assertions must tolerate variability:
 - **Prefer `toPass()` with descriptive errors**: Wrap autoscroll assertions in `toPass()` with a generous timeout (e.g., 10-15s for long scrolls) and include a custom error message for better CI debugging.
 - Prefer “scroll changed” and “preview + placeholder stayed aligned” over pixel-perfect checks.
 
-### 7) Long-running “stress” tests should be isolated
+### 7) Long autoscroll tests stay in the PR suite
 
-If a test needs multi-second waits or >60s timeouts, tag/segment it so you can run:
+The drift and long-autoscroll tests run on every PR so regressions surface in the PR that
+introduces them. Keep them lean instead: frame-paced polling (rule 1), atomic snapshots (see
+"Atomic Measurements"), and `test.slow()` rather than a custom multi-minute `test.setTimeout()`.
+They measure real autoscroll throughput, so they need spare CPU: CI runs 2 workers on 4 vCPUs.
 
-- Fast PR suite (high-signal, short)
-- Nightly stress suite (drift, long autoscroll cycles)
+### 8) Set up demo state through the URL
+
+`DemoPage.goto({ ... })` opens the main demo pre-configured (`itemCount`, `lockAxis`,
+`dragEnabled`, `dragDelay`, `dragHandle`, `api: 'simplified'`, `constrainToContainer`,
+`list2Disabled`, `shiftAnimation`). Click through the settings panel only when the test is about
+changing a setting at runtime, and then wait for a render that proves the change applied (for
+example the `vdnd-draggable-disabled` class) before interacting.
+
+### 9) Scrub animations instead of waiting for them
+
+Shift animations are WAAPI animations: start them with a long duration
+(`goto({ shiftAnimation: 60_000 })`), then `animation.pause()` and set `currentTime` (or call
+`finish()`) to check the start, middle and end positions instantly. To check whether an
+animation was started at all, count `Element.animate()` calls rather than polling for a short
+running animation.
 
 ---
 
@@ -104,9 +160,10 @@ Helpers should:
 Validate both:
 
 1. **Counts** changed correctly (authoritative, not DOM count)
-2. The dragged item’s **identity** moved (text or `data-draggable-id`)
+2. The dragged item’s **identity** moved (`data-draggable-id`; texts repeat across lists)
 
-Use `expect.poll` for counts because Angular updates are async.
+Assert counts with `await expect(demoPage.countBadge(list)).toHaveText(...)`, which waits for
+the render after the drop.
 
 ### Same-list reorder
 
@@ -148,7 +205,7 @@ until the next animation frame. For LOOSE assertions ("item moved somewhere",
 ```typescript
 await page.mouse.move(targetX, targetY, { steps: 10 });
 // Position update is rAF-throttled — wait one frame
-await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+await waitForFrames(page, 1);
 await page.mouse.up();
 ```
 
@@ -200,13 +257,14 @@ point lies inside the constraint bounds.
 ### Initial Position Capture
 
 When capturing a baseline `boundingBox()` for position comparison, the
-rAF-throttled transform may not have been applied yet. Wait one frame between
-`toBeVisible()` and the capture:
+rAF-throttled transform may not have been applied yet. Send the move that starts
+the drag through `afterInputHandled` so the capture happens after it was handled
+and rendered:
 
 ```typescript
-await expect(demoPage.dragPreview).toBeVisible({ timeout: 2000 });
-// Wait for rAF to apply the initial transform
-await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+await page.mouse.down();
+await afterInputHandled(page, 'mousemove', () => page.mouse.move(x + 10, y + 10));
+await expect(demoPage.dragPreview).toBeVisible();
 const initialBox = await demoPage.dragPreview.boundingBox();
 ```
 
@@ -356,8 +414,10 @@ locate the visible placeholder. Never mix selectors between these components.
 ### Angular `@if` Component Tree Swaps
 
 When `@if` destroys and recreates entire component trees (e.g., toggling
-simplified API mode), items can be **visible** before the virtual scroll
+simplified API mode at runtime), items can be **visible** before the virtual scroll
 container computes its content height. `toBeVisible()` alone is insufficient.
+(`DemoPage.enableSimplifiedApi()` handles this; tests that merely need the simplified
+API start in it with `goto({ api: 'simplified' })`.)
 
 Verify functional readiness by checking `scrollHeight`:
 
@@ -396,6 +456,8 @@ await expect(async () => {
 
 ## Debugging & Diagnostics
 
+- Task-demo specs fail on any console or uncaught page error: `collectPageErrors(page)`
+  (`e2e/fixtures/page-errors.ts`), registered before navigation so load errors count.
 - Prefer `testInfo.attach()` for structured debug output over `console.log`.
 - When drift/hit-testing fails, capture:
   - viewport size (`window.innerHeight`)

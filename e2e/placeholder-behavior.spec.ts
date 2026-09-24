@@ -1,37 +1,5 @@
-import { expect, Locator, Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { DemoPage } from './fixtures/demo.page';
-
-interface DragStartBox {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-async function startPointerDragFromLocator(
-  page: Page,
-  dragPreview: Locator,
-  locator: Locator,
-): Promise<DragStartBox> {
-  let box: DragStartBox | null = null;
-
-  await expect(async () => {
-    await page.mouse.up().catch(() => undefined);
-    box = await locator.boundingBox();
-    expect(box).not.toBeNull();
-    const startX = box!.x + box!.width / 2;
-    const startY = box!.y + box!.height / 2;
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    await page.mouse.move(startX + 20, startY + 20, { steps: 5 });
-    await expect(dragPreview).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 8000 });
-
-  if (!box) {
-    throw new Error('Could not start pointer drag');
-  }
-  return box;
-}
 
 test.describe('Placeholder Behavior During Drag', () => {
   let demoPage: DemoPage;
@@ -41,105 +9,42 @@ test.describe('Placeholder Behavior During Drag', () => {
     await demoPage.goto();
   });
 
-  test('should show only one placeholder when dragging within same list', async ({ page }) => {
-    const sourceItem = demoPage.list2Items.first();
-    const sourceBox = await startPointerDragFromLocator(page, demoPage.dragPreview, sourceItem);
+  test('dragged item is hidden and its slot collapses instead of leaving a gap', async ({
+    page,
+  }) => {
+    const [firstId, secondId] = await demoPage.getItemIds('list2');
+    const firstItem = page.locator(`[data-draggable-id="${firstId}"]`);
+    const firstBox = await firstItem.boundingBox();
+    if (!firstBox) throw new Error('Could not get the first item bounding box');
 
-    // Move down ~75px to update the placeholder within the list.
-    await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + 75, { steps: 5 });
-    await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + 75);
+    // Drag the first item over the second slot
+    await demoPage.startDrag(firstItem);
+    const x = firstBox.x + firstBox.width / 2;
+    const y = firstBox.y + 75;
+    await page.mouse.move(x, y, { steps: 5 });
+    await demoPage.settleDragPosition(x, y);
 
-    // Placeholder appears after a rAF-throttled position update; use retrying assertion
+    await expect(firstItem).toHaveCSS('display', 'none');
+
+    // The second item moved up into the first slot and the single placeholder sits right below
+    // it: the hidden item takes no space (no double gap).
     await expect(async () => {
-      const placeholders = await demoPage.list2Container
-        .locator('.vdnd-drag-placeholder-visible')
-        .count();
-      expect(placeholders).toBe(1);
+      const layout = await page.evaluate((id) => {
+        const list = document.querySelector('[data-droppable-id="list-2"]')!;
+        const placeholders = list.querySelectorAll('.vdnd-drag-placeholder-visible');
+        const second = list.querySelector(`[data-draggable-id="${id}"]`);
+        return {
+          placeholderCount: placeholders.length,
+          placeholderTop: placeholders[0]?.getBoundingClientRect().top ?? Number.NaN,
+          secondTop: second?.getBoundingClientRect().top ?? Number.NaN,
+        };
+      }, secondId);
+      expect(layout.placeholderCount).toBe(1);
+      expect(Math.abs(layout.secondTop - firstBox.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(layout.placeholderTop - (firstBox.y + firstBox.height))).toBeLessThanOrEqual(
+        1,
+      );
     }).toPass({ timeout: 2000 });
-
-    // Verify no ghost elements exist (empty .item divs without text)
-    const ghostCount = await demoPage.countGhostElements('list2');
-    expect(ghostCount, 'Ghost elements should not exist during drag').toBe(0);
-
-    // Also verify the dragged item has display: none (no double space)
-    const draggedItemId = await sourceItem.getAttribute('data-draggable-id');
-    const originalElement = page.locator(`[data-draggable-id="${draggedItemId}"]`);
-    await expect(originalElement).toHaveCSS('display', 'none');
-
-    await page.mouse.up();
-  });
-
-  test('should show only one placeholder when dragging to different list', async ({ page }) => {
-    const sourceItem = demoPage.list1Items.first();
-    const targetBox = await demoPage.list2VirtualScroll.boundingBox();
-    if (!targetBox) throw new Error('Could not get target container bounding box');
-
-    await startPointerDragFromLocator(page, demoPage.dragPreview, sourceItem);
-
-    // Move to list2.
-    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 75, { steps: 10 });
-    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 75);
-
-    // Placeholder appears after a rAF-throttled position update; use retrying assertion
-    await expect(async () => {
-      const list2Placeholders = await demoPage.list2Container
-        .locator('.vdnd-drag-placeholder-visible')
-        .count();
-      expect(list2Placeholders).toBe(1);
-    }).toPass({ timeout: 2000 });
-
-    // List1 should have no visible placeholders
-    const list1Placeholders = await demoPage.list1Container
-      .locator('.vdnd-drag-placeholder-visible')
-      .count();
-    expect(list1Placeholders).toBe(0);
-
-    // Verify no ghost elements exist in either list
-    const ghostCountList1 = await demoPage.countGhostElements('list1');
-    const ghostCountList2 = await demoPage.countGhostElements('list2');
-    expect(ghostCountList1, 'List 1 should have no ghost elements').toBe(0);
-    expect(ghostCountList2, 'List 2 should have no ghost elements').toBe(0);
-
-    // Original element should be hidden
-    const draggedItemId = await sourceItem.getAttribute('data-draggable-id');
-    const originalElement = page.locator(`[data-draggable-id="${draggedItemId}"]`);
-    await expect(originalElement).toHaveCSS('display', 'none');
-
-    await page.mouse.up();
-  });
-
-  test('dragged item should not take up space in the list', async ({ page }) => {
-    // Get the initial positions
-    const firstItem = demoPage.list2Items.first();
-    const secondItem = demoPage.list2Items.nth(1);
-    const firstItemBoxBefore = await firstItem.boundingBox();
-    const secondItemBoxBefore = await secondItem.boundingBox();
-    if (!firstItemBoxBefore || !secondItemBoxBefore) {
-      throw new Error('Could not get item bounding boxes');
-    }
-    const secondItemId = await secondItem.getAttribute('data-draggable-id');
-
-    await startPointerDragFromLocator(page, demoPage.dragPreview, firstItem);
-    await page.mouse.move(
-      firstItemBoxBefore.x + firstItemBoxBefore.width / 2,
-      firstItemBoxBefore.y + 75,
-      { steps: 5 },
-    );
-    await page.mouse.move(
-      firstItemBoxBefore.x + firstItemBoxBefore.width / 2,
-      firstItemBoxBefore.y + 75,
-    );
-
-    // The second item should now be at or near the position of the first item
-    // because the dragged item's space is collapsed (display: none)
-    const secondItemNow = page.locator(`[data-draggable-id="${secondItemId}"]`);
-    const secondItemBoxAfter = await secondItemNow.boundingBox();
-    if (!secondItemBoxAfter) throw new Error('Could not get second item bounding box after drag');
-
-    // The second item should have moved up to approximately the first item's position
-    // Allow some tolerance for the placeholder
-    const itemHeight = secondItemBoxBefore.height;
-    expect(secondItemBoxAfter.y).toBeLessThan(secondItemBoxBefore.y + itemHeight / 2);
 
     await page.mouse.up();
   });

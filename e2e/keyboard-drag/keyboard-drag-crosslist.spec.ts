@@ -10,12 +10,9 @@ test.describe('Keyboard Drag - Cross-List Movement', () => {
   });
 
   test('should move item to adjacent list with ArrowRight', async ({ page }) => {
-    const initialList1Count = await demoPage.getItemCount('list1');
-    const initialList2Count = await demoPage.getItemCount('list2');
-    const itemText = await demoPage.getItemText('list1', 0);
+    const movedId = await demoPage.getItemId('list1', 0);
 
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 0);
     await expect(demoPage.dragPreview).toBeVisible();
     await page.keyboard.press('ArrowRight'); // Move to list2
     await expect(demoPage.list2Container.locator('.vdnd-drag-placeholder-visible')).toBeVisible({
@@ -24,23 +21,15 @@ test.describe('Keyboard Drag - Cross-List Movement', () => {
     await page.keyboard.press('Space'); // Drop
     await expect(demoPage.dragPreview).not.toBeVisible();
 
-    // Verify item moved
-    await expect.poll(() => demoPage.getItemCount('list1')).toBe(initialList1Count - 1);
-    await expect.poll(() => demoPage.getItemCount('list2')).toBe(initialList2Count + 1);
-
-    // Verify the item is now in list2
-    const list2FirstItem = await demoPage.getItemText('list2', 0);
-    expect(list2FirstItem).toBe(itemText);
+    await expect(demoPage.countBadge('list1')).toHaveText('49');
+    await expect(demoPage.countBadge('list2')).toHaveText('51');
+    expect(await demoPage.getItemId('list2', 0)).toBe(movedId);
   });
 
   test('should move item back with ArrowLeft', async ({ page }) => {
-    const initialList1Count = await demoPage.getItemCount('list1');
-    const initialList2Count = await demoPage.getItemCount('list2');
-    const itemText = await demoPage.getItemText('list2', 0);
+    const movedId = await demoPage.getItemId('list2', 0);
 
-    // Start in list2
-    await demoPage.list2Items.first().focus();
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list2', 0);
     await expect(demoPage.dragPreview).toBeVisible();
     await page.keyboard.press('ArrowLeft'); // Move to list1
     await expect(demoPage.list1Container.locator('.vdnd-drag-placeholder-visible')).toBeVisible({
@@ -49,30 +38,18 @@ test.describe('Keyboard Drag - Cross-List Movement', () => {
     await page.keyboard.press('Space');
     await expect(demoPage.dragPreview).not.toBeVisible();
 
-    // Verify moved to list1
-    await expect.poll(() => demoPage.getItemCount('list1')).toBe(initialList1Count + 1);
-    await expect.poll(() => demoPage.getItemCount('list2')).toBe(initialList2Count - 1);
-
-    // Verify the item is now in list1
-    const list1FirstItem = await demoPage.getItemText('list1', 0);
-    expect(list1FirstItem).toBe(itemText);
+    await expect(demoPage.countBadge('list1')).toHaveText('51');
+    await expect(demoPage.countBadge('list2')).toHaveText('49');
+    expect(await demoPage.getItemId('list1', 0)).toBe(movedId);
   });
 
   test('should maintain approximate vertical position when changing lists', async ({ page }) => {
-    const initialList1Count = await demoPage.getItemCount('list1');
-    const initialList2Count = await demoPage.getItemCount('list2');
+    const movedId = await demoPage.getItemId('list1', 2);
+    const list2Before = (await demoPage.getItemIds('list2')).slice(0, 3);
 
-    const movedItemText = await demoPage.getItemText('list1', 2);
-    const list2Item0 = await demoPage.getItemText('list2', 0);
-    const list2Item1 = await demoPage.getItemText('list2', 1);
-    const list2Item2 = await demoPage.getItemText('list2', 2);
-
-    // Start from 3rd item in list1.
-    await demoPage.list1Items.nth(2).focus();
-    await page.keyboard.press('Space');
+    // Start from 3rd item in list1, move to list2 and drop.
+    await demoPage.startKeyboardDrag('list1', 2);
     await expect(demoPage.dragPreview).toBeVisible();
-
-    // Move to list2 and drop.
     await page.keyboard.press('ArrowRight');
     await expect(demoPage.list2Container.locator('.vdnd-drag-placeholder-visible')).toBeVisible({
       timeout: 2000,
@@ -80,53 +57,44 @@ test.describe('Keyboard Drag - Cross-List Movement', () => {
     await page.keyboard.press('Space');
     await expect(demoPage.dragPreview).not.toBeVisible();
 
-    await expect.poll(() => demoPage.getItemCount('list1')).toBe(initialList1Count - 1);
-    await expect.poll(() => demoPage.getItemCount('list2')).toBe(initialList2Count + 1);
-
-    // The moved item should land at the same visual slot (index 2) in list2.
-    expect(await demoPage.getItemText('list2', 0)).toBe(list2Item0);
-    expect(await demoPage.getItemText('list2', 1)).toBe(list2Item1);
-    expect(await demoPage.getItemText('list2', 2)).toBe(movedItemText);
-    expect(await demoPage.getItemText('list2', 3)).toBe(list2Item2);
+    await expect(demoPage.countBadge('list1')).toHaveText('49');
+    await expect(demoPage.countBadge('list2')).toHaveText('51');
+    // The moved item lands at the same visual slot (index 2) in list2.
+    expect((await demoPage.getItemIds('list2')).slice(0, 4)).toEqual([
+      list2Before[0],
+      list2Before[1],
+      movedId,
+      list2Before[2],
+    ]);
   });
 
-  test('should stay in list when ArrowLeft at leftmost list', async ({ page }) => {
-    const initialList1Count = await demoPage.getItemCount('list1');
+  for (const { list, key, side } of [
+    { list: 'list1', key: 'ArrowLeft', side: 'leftmost' },
+    { list: 'list2', key: 'ArrowRight', side: 'rightmost' },
+  ] as const) {
+    test(`should stay in list when ${key} at ${side} list`, async ({ page }) => {
+      const draggedId = await demoPage.getItemId(list, 0);
 
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
+      await demoPage.startKeyboardDrag(list, 0);
+      await expect(demoPage.dragPreview).toBeVisible();
+      await page.keyboard.press(key);
+      await page.keyboard.press(key);
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('Space');
+      await expect(demoPage.dragPreview).not.toBeVisible();
 
-    // Try to move left (list1 is already leftmost)
-    await page.keyboard.press('ArrowLeft');
-    await page.keyboard.press('ArrowLeft');
-    await page.keyboard.press('ArrowLeft');
-
-    await page.keyboard.press('Space');
-
-    // Count should be unchanged (item stayed in list1)
-    expect(await demoPage.getItemCount('list1')).toBe(initialList1Count);
-  });
-
-  test('should stay in list when ArrowRight at rightmost list', async ({ page }) => {
-    const initialList2Count = await demoPage.getItemCount('list2');
-
-    await demoPage.list2Items.first().focus();
-    await page.keyboard.press('Space');
-
-    // Try to move right (list2 is already rightmost)
-    await page.keyboard.press('ArrowRight');
-    await page.keyboard.press('ArrowRight');
-    await page.keyboard.press('ArrowRight');
-
-    await page.keyboard.press('Space');
-
-    // Count should be unchanged (item stayed in list2)
-    expect(await demoPage.getItemCount('list2')).toBe(initialList2Count);
-  });
+      // Dropped one slot down in the same list: the sideways presses were ignored
+      await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '1');
+      await expect(demoPage.countBadge('list1')).toHaveText('50');
+      await expect(demoPage.countBadge('list2')).toHaveText('50');
+      expect(await demoPage.getItemId(list, 1)).toBe(draggedId);
+    });
+  }
 
   test('should allow vertical and horizontal movement combination', async ({ page }) => {
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
+    const movedId = await demoPage.getItemId('list1', 0);
+
+    await demoPage.startKeyboardDrag('list1', 0);
     await expect(demoPage.dragPreview).toBeVisible();
 
     // Move down 2 positions, then right to list2
@@ -139,22 +107,25 @@ test.describe('Keyboard Drag - Cross-List Movement', () => {
     await page.keyboard.press('Space');
     await expect(demoPage.dragPreview).not.toBeVisible();
 
-    // Item should be in list2 (at some position based on vertical move)
-    await expect.poll(() => demoPage.getItemCount('list1')).toBe(49);
-    await expect.poll(() => demoPage.getItemCount('list2')).toBe(51);
+    // The item keeps its index (2) in list2
+    await expect(demoPage.countBadge('list1')).toHaveText('49');
+    await expect(demoPage.countBadge('list2')).toHaveText('51');
+    expect(await demoPage.getItemId('list2', 2)).toBe(movedId);
   });
 
   test('should cancel cross-list move and return to original list', async ({ page }) => {
-    const initialList1Count = await demoPage.getItemCount('list1');
-    const initialList2Count = await demoPage.getItemCount('list2');
+    const draggedId = await demoPage.getItemId('list1', 0);
 
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
     await page.keyboard.press('ArrowRight'); // Move to list2
+    await expect(demoPage.list2Container.locator('.vdnd-drag-placeholder-visible')).toBeVisible();
     await page.keyboard.press('Escape'); // Cancel
+    await expect(demoPage.dragPreview).not.toBeVisible();
 
-    // Counts should be unchanged (item returned to list1)
-    expect(await demoPage.getItemCount('list1')).toBe(initialList1Count);
-    expect(await demoPage.getItemCount('list2')).toBe(initialList2Count);
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'true');
+    await expect(demoPage.countBadge('list1')).toHaveText('50');
+    await expect(demoPage.countBadge('list2')).toHaveText('50');
+    expect(await demoPage.getItemId('list1', 0)).toBe(draggedId);
   });
 });

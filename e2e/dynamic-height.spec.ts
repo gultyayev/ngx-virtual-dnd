@@ -1,35 +1,21 @@
 import { expect, test } from '@playwright/test';
+import { waitForFrames } from './fixtures/drag-sync';
+import { collectPageErrors } from './fixtures/page-errors';
+import { poll } from './fixtures/polling';
 import { TaskDemoPage, taskDemoSelectors } from './fixtures/task-demo.page';
 
 test.describe('Dynamic Height Demo', () => {
   let taskDemo: TaskDemoPage;
-  let consoleErrors: { text: string; url: string }[] = [];
+  let pageErrors: ReturnType<typeof collectPageErrors>;
 
   test.beforeEach(async ({ page }) => {
     taskDemo = new TaskDemoPage(page);
-    consoleErrors = [];
-
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        consoleErrors.push({ text: msg.text(), url: msg.location().url });
-      }
-    });
-
+    pageErrors = collectPageErrors(page);
     await taskDemo.goto('/dynamic-height');
   });
 
-  test.afterEach(async () => {
-    const realErrors = consoleErrors.filter(
-      ({ text, url }) =>
-        !text.includes('favicon') &&
-        !text.includes('net::ERR_') &&
-        !text.includes('404') &&
-        !(
-          url.startsWith('https://fonts.gstatic.com/') &&
-          text.includes('Failed to load resource: the server responded with a status of 403')
-        ),
-    );
-    expect(realErrors, 'Unexpected console errors detected').toHaveLength(0);
+  test.afterEach(() => {
+    expect(pageErrors.unexpected(), 'Unexpected console or page errors').toEqual([]);
   });
 
   test('should display items with varying heights', async ({ page }) => {
@@ -47,7 +33,7 @@ test.describe('Dynamic Height Demo', () => {
     expect(uniqueHeights.size).toBeGreaterThan(1);
   });
 
-  test('should filter tasks by category', async () => {
+  test('should re-render the list when its items are filtered', async () => {
     await taskDemo.categoryFilter('work').click();
 
     // Wait for filter to apply by checking that only work badges are shown
@@ -159,7 +145,7 @@ test.describe('Dynamic Height Demo', () => {
     await page.mouse.move(sourceBox.x + sourceBox.width / 2, targetY, { steps: 10 });
 
     // Wait one rAF for position update, then check placeholder
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    await waitForFrames(page, 1);
 
     const placeholder = taskDemo.visiblePlaceholder;
     await expect(placeholder).toBeVisible({ timeout: 2000 });
@@ -325,7 +311,7 @@ test.describe('Dynamic Height Demo', () => {
     }).toPass({ timeout: 10000 });
 
     // Wait one rAF before drop
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    await waitForFrames(page, 1);
     await page.mouse.up();
 
     // Scroll back to top to verify reorder happened — include item check in toPass
@@ -387,7 +373,7 @@ test.describe('Dynamic Height Demo', () => {
     await expect(dragPreview).toBeVisible({ timeout: 2000 });
 
     // Wait one rAF for position update
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    await waitForFrames(page, 1);
     const allowedShrinkPx = 8;
     await expect(async () => {
       // Measure during drag — atomic measurement
@@ -448,25 +434,25 @@ test.describe('Dynamic Height Demo', () => {
     const dragPreview = taskDemo.dragPreview;
     await expect(dragPreview).toBeVisible({ timeout: 2000 });
 
-    // Move cursor far above the scroll container (into the header area)
-    const aboveContainerY = scrollContainerBox.y - 100;
+    // Move cursor far above the scroll container (into the header area). Stay inside the
+    // viewport: Firefox drops a mouse.move to a point outside it, steps included.
+    const aboveContainerY = Math.max(scrollContainerBox.y - 100, 2);
     const targetX = sourceBox.x + sourceBox.width / 2;
     await page.mouse.move(targetX, aboveContainerY, { steps: 10 });
     await page.mouse.move(targetX, aboveContainerY);
 
-    // Wait one rAF for position update
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
-
-    // Verify preview is clamped within the scroll container bounds
-    const previewBox = await dragPreview.boundingBox();
-    if (!previewBox) throw new Error('Could not get preview bounding box');
-    expect(previewBox.y).toBeGreaterThanOrEqual(scrollContainerBox.y);
+    // The preview is pinned 1px inside the scroll container's top edge (it started lower down,
+    // so "still inside" alone would pass even if it never moved)
+    await poll(async () => {
+      const previewBox = await dragPreview.boundingBox();
+      return (previewBox?.y ?? Number.NaN) - scrollContainerBox.y;
+    }).toBeCloseTo(1, 0);
 
     // Move back inside and drop — should succeed (droppable remained active because cursor was clamped)
     await page.mouse.move(targetX, scrollContainerBox.y + scrollContainerBox.height / 2, {
       steps: 5,
     });
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    await waitForFrames(page, 1);
     await page.mouse.up();
     await expect(dragPreview).not.toBeVisible({ timeout: 2000 });
 
@@ -528,30 +514,13 @@ test.describe('Dynamic Height Demo', () => {
   });
 
   test('should not emit ResizeObserver errors', async ({ page }) => {
-    let resizeObserverErrors = 0;
-
-    page.on('pageerror', (error) => {
-      if (error.message.includes('ResizeObserver')) {
-        resizeObserverErrors++;
-      }
-    });
-
-    page.on('console', (msg) => {
-      if (msg.text().includes('ResizeObserver')) {
-        resizeObserverErrors++;
-      }
-    });
-
-    // Wait for initial render to settle
-    await expect(taskDemo.items.first()).toBeVisible();
-
+    // Errors are collected from before navigation (beforeEach), so the initial render counts
     // Scroll multiple times to trigger potential ResizeObserver issues
     for (let i = 0; i < 5; i++) {
       await taskDemo.scrollTo(i * 500);
-      // Wait one rAF between scrolls for rendering to process
-      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+      await waitForFrames(page, 1);
     }
 
-    expect(resizeObserverErrors).toBe(0);
+    expect(pageErrors.unexpected().filter((text) => text.includes('ResizeObserver'))).toEqual([]);
   });
 });

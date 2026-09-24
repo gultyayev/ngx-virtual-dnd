@@ -1,45 +1,23 @@
 import { expect, test } from '@playwright/test';
+import { waitForFrames } from './fixtures/drag-sync';
+import { collectPageErrors } from './fixtures/page-errors';
 import { TaskDemoPage, taskDemoSelectors } from './fixtures/task-demo.page';
 
 test.describe('Page Scroll Demo', () => {
   let taskDemo: TaskDemoPage;
-  let consoleErrors: { text: string; url: string }[] = [];
+  let pageErrors: ReturnType<typeof collectPageErrors>;
 
   test.beforeEach(async ({ page }) => {
     taskDemo = new TaskDemoPage(page);
-    consoleErrors = [];
-
-    // Collect console errors
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        consoleErrors.push({ text: msg.text(), url: msg.location().url });
-      }
-    });
-
+    pageErrors = collectPageErrors(page);
     await taskDemo.goto('/page-scroll');
   });
 
-  test.afterEach(async () => {
-    // Filter out known benign errors (like favicon not found)
-    const realErrors = consoleErrors.filter(
-      ({ text, url }) =>
-        !text.includes('favicon') &&
-        !text.includes('net::ERR_') &&
-        !text.includes('404') &&
-        !(
-          url.startsWith('https://fonts.gstatic.com/') &&
-          text.includes('Failed to load resource: the server responded with a status of 403')
-        ),
-    );
-    expect(realErrors, 'Unexpected console errors detected').toHaveLength(0);
+  test.afterEach(() => {
+    expect(pageErrors.unexpected(), 'Unexpected console or page errors').toEqual([]);
   });
 
-  test('should display tasks', async () => {
-    const count = await taskDemo.items.count();
-    expect(count).toBeGreaterThan(0);
-  });
-
-  test('should filter tasks by category', async () => {
+  test('should re-render the list when its items are filtered', async () => {
     // Click on "Work" chip
     await taskDemo.categoryFilter('work').click();
 
@@ -111,17 +89,18 @@ test.describe('Page Scroll Demo', () => {
   });
 
   test('should handle rapid filter changes without errors', async ({ page }) => {
-    // Rapidly change filters
+    // Rapidly change filters (afterEach fails the test on any console or page error)
     const filters = ['work', 'personal', 'urgent', 'all'] as const;
     for (const filter of filters) {
       await taskDemo.categoryFilter(filter).click();
-      // Wait one rAF between filter changes for rendering to process
-      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+      await waitForFrames(page, 1);
     }
 
-    // Check no error overlay appeared
-    const errorOverlay = page.locator('vite-error-overlay');
-    await expect(errorOverlay).not.toBeVisible();
+    // Back on "all": every category renders again
+    await expect(async () => {
+      const categories = await taskDemo.getTaskCategoryTexts();
+      expect(new Set(categories).size).toBeGreaterThan(1);
+    }).toPass({ timeout: 2000 });
   });
 
   test('should scroll and drag without errors', async ({ page }) => {
@@ -132,22 +111,25 @@ test.describe('Page Scroll Demo', () => {
       expect(scrollTop).toBeGreaterThan(0);
     }).toPass({ timeout: 2000 });
 
-    // Get a visible item
-    const visibleItem = taskDemo.items.first();
-    const box = await visibleItem.boundingBox();
-    if (!box) throw new Error('Could not get bounding box');
+    // Pick an item by viewport position: items.first() would be an overscan item above the
+    // viewport, and pointer events outside the viewport are dropped by Firefox
+    let box = await taskDemo.getVisibleItemBoxAt(0.4);
+    await expect(async () => {
+      box = await taskDemo.getVisibleItemBoxAt(0.4);
+      expect(box).not.toBeNull();
+    }).toPass({ timeout: 3000 });
+    if (!box) throw new Error('Could not find a visible task item');
 
-    // Drag the item
-    await visibleItem.hover();
+    // Drag the item (afterEach fails the test on any console or page error)
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
     await page.mouse.down();
-    await page.mouse.move(box.x + 50, box.y + 100, { steps: 5 });
-    // Wait for drag to start or not — just verify no errors
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    await page.mouse.move(x + 10, y + 60, { steps: 5 });
+    await expect(taskDemo.dragPreview).toBeVisible();
+    await waitForFrames(page, 1);
     await page.mouse.up();
-
-    // Check no error overlay appeared
-    const errorOverlay = page.locator('vite-error-overlay');
-    await expect(errorOverlay).not.toBeVisible();
+    await expect(taskDemo.dragPreview).not.toBeVisible();
   });
 
   test('should maintain scroll consistency after scrolling', async () => {
@@ -240,10 +222,7 @@ test.describe('Page Scroll Demo', () => {
     const targetX = sourceX;
 
     await page.mouse.move(targetX, targetY, { steps: 10 });
-    // Firefox: follow up stepped move with direct move (E2E.md Rule #6)
-    await page.mouse.move(targetX, targetY);
-    // rAF wait for position update (E2E.md: "rAF Wait After Mouse Moves")
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    await taskDemo.settleDragPosition(targetX, targetY);
 
     // Verify placeholder exists and is reasonably aligned with the target slot.
     const placeholder = taskDemo.visiblePlaceholder;
@@ -495,32 +474,13 @@ test.describe('Page Scroll Demo', () => {
   });
 
   test('should not emit ResizeObserver errors', async ({ page }) => {
-    let resizeObserverErrors = 0;
-
-    // Listen for page errors (ResizeObserver error is a page error in Safari)
-    page.on('pageerror', (error) => {
-      if (error.message.includes('ResizeObserver')) {
-        resizeObserverErrors++;
-      }
-    });
-
-    // Also check console for ResizeObserver warnings
-    page.on('console', (msg) => {
-      if (msg.text().includes('ResizeObserver')) {
-        resizeObserverErrors++;
-      }
-    });
-
-    // Wait for initial render to settle
-    await expect(taskDemo.items.first()).toBeVisible();
-
+    // Errors are collected from before navigation (beforeEach), so the initial render counts
     // Scroll multiple times to trigger potential ResizeObserver issues
     for (let i = 0; i < 5; i++) {
       await taskDemo.scrollTo(i * 500);
-      // Wait one rAF between scrolls for rendering to process
-      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+      await waitForFrames(page, 1);
     }
 
-    expect(resizeObserverErrors).toBe(0);
+    expect(pageErrors.unexpected().filter((text) => text.includes('ResizeObserver'))).toEqual([]);
   });
 });
