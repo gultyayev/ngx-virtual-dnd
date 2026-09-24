@@ -1,18 +1,6 @@
 {
   "version": 1,
   "skills": {
-    "angular-testing": {
-      "source": "analogjs/angular-skills",
-      "sourceType": "github",
-      "skillPath": "skills/angular-testing/SKILL.md",
-      "computedHash": "66adf01ccb30305e179ce41ff76ded6b60dbb5909bd889cc350cdd13b6933130"
-    },
-    "angular-tooling": {
-      "source": "analogjs/angular-skills",
-      "sourceType": "github",
-      "skillPath": "skills/angular-tooling/SKILL.md",
-      "computedHash": "2a67063279e8ac1b5cf3d9c4e9ed4652508564640c1fc59642857d4f6d20db11"
-    },
     "rspress-best-practices": {
       "source": "rstackjs/agent-skills",
       "sourceType": "github",
