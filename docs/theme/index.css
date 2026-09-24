@@ -127,12 +127,20 @@ html .rp-nav__title__logo-image {
   height: 32px;
 }
 
-/* Nav tabs: compact 13px pills like the demo's, instead of full-height items. */
+/* Nav tabs: compact 13px pills like the demo's, instead of full-height items.
+   Rspress drops the first item's left padding and the last item's right padding
+   (`:first-child` / `:last-child`) and bumps the font size on `:hover`, all with more
+   specific selectors. `:is(…)` lifts these rules above them, so every pill keeps the same
+   padding and size in every state. */
+html .rp-nav-menu {
+  gap: 2px;
+}
+
 html .rp-nav-menu__item {
   height: auto;
 }
 
-html .rp-nav-menu__item__container {
+html .rp-nav-menu__item:is(*, :first-child, :last-child, :hover) > .rp-nav-menu__item__container {
   height: 34px;
   padding: 0 13px;
   border-radius: 9px;
@@ -141,15 +149,16 @@ html .rp-nav-menu__item__container {
   color: var(--ink-2);
 }
 
-html .rp-nav-menu__item__container:hover {
+html .rp-nav-menu__item:is(:hover, :focus-within) > .rp-nav-menu__item__container {
   background: var(--surface-2);
   color: var(--ink);
 }
 
-html .rp-nav-menu__item--active .rp-nav-menu__item__container {
+html
+  .rp-nav-menu__item--active:is(*, :first-child, :last-child, :hover)
+  > .rp-nav-menu__item__container {
   background: var(--accent-soft);
   color: var(--accent-text);
-  font-size: 13px;
   font-weight: 600;
 }
 
