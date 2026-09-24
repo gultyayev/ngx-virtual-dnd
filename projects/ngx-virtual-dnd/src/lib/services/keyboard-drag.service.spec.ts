@@ -163,23 +163,31 @@ describe('KeyboardDragService', () => {
       expect(service.targetIndex()).toBe(0);
     });
 
-    it('should clamp to totalItemCount when target exceeds it', () => {
+    it('should clamp to the last slot of the source list when target exceeds it', () => {
       const item = createMockItem();
       service.startKeyboardDrag(item, 0, 5, 'list-1');
 
       const result = service.moveToIndex(10);
 
-      expect(result).toBe(5);
-      expect(service.targetIndex()).toBe(5);
+      expect(result).toBe(4);
+      expect(service.targetIndex()).toBe(4);
     });
 
-    it('should allow moving to totalItemCount (end of list)', () => {
+    it('should end the source list at totalItemCount - 1 (the dragged item leaves its slot)', () => {
       const item = createMockItem();
       service.startKeyboardDrag(item, 0, 5, 'list-1');
 
-      const result = service.moveToIndex(5);
+      // Target indexes use the drop convention: the final index after removal from the source
+      expect(service.moveToIndex(5)).toBe(4);
+      expect(service.moveToIndex(4)).toBe(4);
+    });
 
-      expect(result).toBe(5);
+    it('should allow moving to totalItemCount (append) in another list', () => {
+      const item = createMockItem({ droppableId: 'list-1' });
+      service.startKeyboardDrag(item, 0, 5, 'list-1');
+      service.moveToDroppable('list-2', 0, 3);
+
+      expect(service.moveToIndex(10)).toBe(3);
     });
 
     it('should return clamped index', () => {
@@ -188,7 +196,7 @@ describe('KeyboardDragService', () => {
 
       expect(service.moveToIndex(3)).toBe(3);
       expect(service.moveToIndex(-1)).toBe(0);
-      expect(service.moveToIndex(100)).toBe(5);
+      expect(service.moveToIndex(100)).toBe(4);
     });
 
     it('should apply same-list +1 adjustment to placeholderIndex when target >= sourceIndex', () => {
@@ -266,17 +274,16 @@ describe('KeyboardDragService', () => {
       expect(service.targetIndex()).toBe(1);
     });
 
-    it('should clamp at totalItemCount', () => {
+    it('should clamp at the last slot of the source list', () => {
       const item = createMockItem();
       service.startKeyboardDrag(item, 3, 5, 'list-1');
 
       // Move to end
       service.moveDown(); // 4
-      service.moveDown(); // 5
-      const result = service.moveDown(); // clamped at 5
+      const result = service.moveDown(); // clamped at 4 (5 items, one of them dragged)
 
-      expect(result).toBe(5);
-      expect(service.targetIndex()).toBe(5);
+      expect(result).toBe(4);
+      expect(service.targetIndex()).toBe(4);
     });
 
     it('should return the new target index', () => {
@@ -369,6 +376,16 @@ describe('KeyboardDragService', () => {
       expect(dragState.placeholderIndex()).toBe(2);
     });
 
+    it('should clamp to the last slot when moving back to the source list', () => {
+      const item = createMockItem({ droppableId: 'list-1' });
+      service.startKeyboardDrag(item, 2, 10, 'list-1');
+
+      service.moveToDroppable('list-2', 1, 8);
+      service.moveToDroppable('list-1', 20, 10);
+
+      expect(service.targetIndex()).toBe(9);
+    });
+
     it('should apply same-list adjustment when moving back to source list', () => {
       const item = createMockItem({ droppableId: 'list-1' });
       service.startKeyboardDrag(item, 2, 10, 'list-1');
@@ -446,9 +463,9 @@ describe('KeyboardDragService', () => {
       // Reduce total item count
       service.setTotalItemCount(3);
 
-      // moveToIndex should now clamp to 3
+      // moveToIndex should now clamp to the source list's last slot (3 - 1)
       const result = service.moveToIndex(10);
-      expect(result).toBe(3);
+      expect(result).toBe(2);
     });
 
     it('should allow increasing the upper bound', () => {
