@@ -99,4 +99,6 @@ Draggables also emit `(dragStart)` and `(dragEnd)`:
 
 `(dragEnd)` fires after every drag, dropped or not. `DragEndEvent.destinationIndex` is `null` when nothing was dropped: the drag was cancelled (<kbd>Escape</kbd>, or <kbd>Tab</kbd> during a keyboard drag), it was released outside every droppable, or it was released over a disabled droppable. Check `destinationIndex === null` to detect "no drop". `cancelled` is `true` only for an explicit cancel, so it misses the other two cases.
 
+During a drag, droppables and `<vdnd-sortable-list>` emit `(placeholderMove)` each time the placeholder moves within them. Use it for per-step feedback such as haptics. See [Animations and haptics](/guide/features/animations#placeholder-move-events).
+
 To react to drags anywhere in the app, for example to show a hint, inject `DragStateService` and read its signals, such as `isDragging()` and `activeDroppableId()`. See the [API reference](/api/services).

@@ -31,9 +31,10 @@ Droppable, virtual scroller and placeholder in one element. The default choice. 
 | `autoScrollConfig`     | `Partial<AutoScrollConfig>`                    | `{}`                    | Auto-scroll tuning, see [Auto-scroll](/guide/features/auto-scroll)                                                                  |
 | `constrainToContainer` | `boolean`                                      | `false`                 | Keep the preview and drop position inside the list                                                                                  |
 
-| Output | Type        | Description                        |
-| ------ | ----------- | ---------------------------------- |
-| `drop` | `DropEvent` | An item was dropped into this list |
+| Output            | Type                   | Description                                                     |
+| ----------------- | ---------------------- | --------------------------------------------------------------- |
+| `drop`            | `DropEvent`            | An item was dropped into this list                              |
+| `placeholderMove` | `PlaceholderMoveEvent` | The placeholder moved within this list (every row displacement) |
 
 The item template context (`VirtualScrollItemContext<T>`) exposes `$implicit` (the item), `index` (position in the full list) and `isSticky`.
 

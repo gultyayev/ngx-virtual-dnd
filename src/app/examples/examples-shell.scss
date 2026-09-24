@@ -75,6 +75,18 @@ app-examples-shell {
     color: var(--ink);
   }
 
+  // One-line status above a list (event counters).
+  .status {
+    margin: 0 0 8px;
+    color: var(--ink-2);
+    font-size: 13px;
+  }
+
+  .status strong {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
   // Multiple lists: two columns side by side.
   .board {
     display: grid;

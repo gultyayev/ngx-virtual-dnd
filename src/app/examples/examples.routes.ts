@@ -27,4 +27,9 @@ export const EXAMPLE_ROUTES: Routes = [
     loadComponent: () =>
       import('./dynamic-height/dynamic-height').then((m) => m.DynamicHeightExampleComponent),
   },
+  {
+    path: 'shift-animation',
+    loadComponent: () =>
+      import('./shift-animation/shift-animation').then((m) => m.ShiftAnimationExampleComponent),
+  },
 ];

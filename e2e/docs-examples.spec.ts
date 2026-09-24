@@ -92,6 +92,43 @@ test.describe('Docs live examples', () => {
     }).toPass({ timeout: 2000 });
   });
 
+  test('shift animation slides displaced rows and counts placeholder moves', async ({ page }) => {
+    await examples.goto('shift-animation');
+    const moves = page.locator('[data-placeholder-moves]');
+    await expect(moves).toHaveText('0');
+
+    await examples.draggable('task-1').focus();
+    await page.keyboard.press('Space');
+    await expect(examples.dragPreview).toBeVisible();
+    // Picking up does not move the placeholder.
+    await expect(moves).toHaveText('0');
+
+    // Record which rows start an animation (the 200 ms slide is too short to poll reliably).
+    await page.evaluate(() => {
+      const animated: string[] = [];
+      (window as unknown as { animatedRows: string[] }).animatedRows = animated;
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (this: HTMLElement, ...args) {
+        animated.push(this.dataset['draggableId'] ?? '');
+        return animate.apply(this, args);
+      };
+    });
+
+    await page.keyboard.press('ArrowDown');
+    await expect(moves).toHaveText('1');
+    await expect(page.locator('.status')).toContainText('0 → 1');
+    // task-2 was displaced by the placeholder and slides into its new slot.
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as { animatedRows: string[] }).animatedRows),
+      )
+      .toContain('task-2');
+
+    await page.keyboard.press('Escape');
+    await expect(examples.dragPreview).toBeHidden();
+    expect((await examples.renderedIds('tasks')).slice(0, 2)).toEqual(['task-1', 'task-2']);
+  });
+
   test('?theme=dark applies the dark theme without persisting it', async ({ page }) => {
     // Same URL shape as the docs' <LiveDemo> iframe (trailing slash + query).
     await page.goto('/examples/quick-start/?theme=dark', { waitUntil: 'domcontentloaded' });

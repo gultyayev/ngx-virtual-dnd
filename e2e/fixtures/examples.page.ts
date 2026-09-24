@@ -1,7 +1,12 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { settleDragPosition, waitForActiveDroppable } from './drag-sync';
 
-export type ExampleSlug = 'quick-start' | 'multiple-lists' | 'drag-handle' | 'dynamic-height';
+export type ExampleSlug =
+  | 'quick-start'
+  | 'multiple-lists'
+  | 'drag-handle'
+  | 'dynamic-height'
+  | 'shift-animation';
 
 /**
  * Page object for the docs live examples (`/examples/<slug>`), which the docs site embeds

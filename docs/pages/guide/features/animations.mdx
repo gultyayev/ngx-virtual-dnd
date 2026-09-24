@@ -1,0 +1,96 @@
+---
+title: Animations and haptics
+description: Slide displaced rows into place while dragging, and react to every placeholder move.
+---
+
+# Animations and haptics
+
+By default, rows displaced by the placeholder jump to their new position. Provide `VDND_ANIMATION_CONFIG` to make them slide instead. For feedback on every step, such as a haptic tick, listen to `(placeholderMove)`.
+
+<LiveDemo
+  example="shift-animation"
+  title="Sliding rows and a placeholder move counter"
+  height={400}
+/>
+
+```ts file="<root>/src/app/examples/shift-animation/shift-animation.ts"
+
+```
+
+## Shift animation
+
+The animation is opt-in. Provide the config app-wide, or in a component's `providers` to animate only the lists in that subtree:
+
+```ts
+// app.config.ts
+import { ApplicationConfig } from '@angular/core';
+import { VDND_ANIMATION_CONFIG } from 'ngx-virtual-dnd';
+
+export const appConfig: ApplicationConfig = {
+  providers: [{ provide: VDND_ANIMATION_CONFIG, useValue: { shiftDuration: 200 } }],
+};
+```
+
+| Option          | Default                      | Meaning                                |
+| --------------- | ---------------------------- | -------------------------------------- |
+| `shiftDuration` | `200`                        | Slide duration in ms. `0` turns it off |
+| `shiftEasing`   | `cubic-bezier(0.2, 0, 0, 1)` | Any CSS easing function                |
+
+- The slide is a `transform` animation, so it stays on the compositor. It works with virtual scrolling and with [dynamic heights](/guide/features/dynamic-heights).
+- It is skipped when the user has turned on reduced motion (`prefers-reduced-motion: reduce`).
+- If the placeholder moves again mid-slide, rows continue from where they currently are.
+- Drop positions are calculated from geometry, so a row that is still sliding never changes where an item lands.
+- Rows jump into their final order on drop or cancel.
+
+The config is read each time an animation starts, so a getter can switch it at runtime, for example from a user setting:
+
+```ts
+{
+  provide: VDND_ANIMATION_CONFIG,
+  useFactory: () => {
+    const settings = inject(SettingsService);
+    return {
+      get shiftDuration() {
+        return settings.reduceAnimations() ? 0 : 200;
+      },
+    };
+  },
+}
+```
+
+### Where it applies
+
+Rows animate in `<vdnd-sortable-list>`, `<vdnd-virtual-scroll>` and every `*vdndVirtualFor` list, including those inside `<vdnd-virtual-viewport>` and `<vdnd-virtual-content>`.
+
+:::warning
+Do not add your own CSS `transition` on the rows' `transform` or `top` to get this effect. Rows move through layout, so such a transition has nothing to animate, and one on `transform` can conflict with the built-in slide.
+:::
+
+## Placeholder move events
+
+`vdndDroppable` and `<vdnd-sortable-list>` emit `placeholderMove` each time the placeholder moves within that list, which is every time rows are displaced:
+
+```angular-html
+<vdnd-sortable-list ... (placeholderMove)="onPlaceholderMove($event)" />
+```
+
+```ts
+onPlaceholderMove(event: PlaceholderMoveEvent): void {
+  navigator.vibrate?.(10); // or Haptics.selectionChanged() from @capacitor/haptics
+}
+```
+
+The event fires when the placeholder enters the list and on every move inside it. It does not fire for the initial pick-up, when the placeholder still sits in the item's own slot, or when the placeholder leaves the list.
+
+| Field               | Meaning                                                                             |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `draggableId`       | The dragged item                                                                    |
+| `sourceDroppableId` | The list the drag started in                                                        |
+| `droppableId`       | The list the placeholder moved within                                               |
+| `previousIndex`     | The previous insertion index, or `null` when the placeholder just entered this list |
+| `currentIndex`      | The new insertion index                                                             |
+| `data`              | The dragged item's `vdndDraggableData`                                              |
+
+Both indexes follow the same convention as [`DropEvent.destination.index`](/api/events#dropevent): the index the item would get if it were dropped now. For the first move in the source list, `previousIndex` is the item's original index.
+
+Each event reports one placeholder update. During a fast pointer drag the placeholder can skip rows between updates, so `currentIndex` may differ from `previousIndex` by more than one. Keep the handler cheap: it runs during the drag.

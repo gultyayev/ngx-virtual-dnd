@@ -43,9 +43,10 @@ Marks an element as a drop target.
 | `autoScrollConfig`     | `Partial<AutoScrollConfig>` | `{}`         | Auto-scroll tuning                                                                               |
 | `constrainToContainer` | `boolean`                   | `false`      | Keep the preview and drop position inside the nearest `vdndScrollable` ancestor, or this element |
 
-| Output | Type        | Description                                              |
-| ------ | ----------- | -------------------------------------------------------- |
-| `drop` | `DropEvent` | An item was dropped here (fires on the destination only) |
+| Output            | Type                   | Description                                                          |
+| ----------------- | ---------------------- | -------------------------------------------------------------------- |
+| `drop`            | `DropEvent`            | An item was dropped here (fires on the destination only)             |
+| `placeholderMove` | `PlaceholderMoveEvent` | The placeholder moved within this droppable (every row displacement) |
 
 ## DroppableGroupDirective
 

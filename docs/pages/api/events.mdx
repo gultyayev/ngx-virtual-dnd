@@ -1,15 +1,16 @@
 ---
 title: Events
-description: DragStartEvent, DropEvent and DragEndEvent.
+description: DragStartEvent, DropEvent, DragEndEvent and PlaceholderMoveEvent.
 ---
 
 # Events
 
-| Output        | Event            | Emitted by                                                          |
-| ------------- | ---------------- | ------------------------------------------------------------------- |
-| `(dragStart)` | `DragStartEvent` | `vdndDraggable`                                                     |
-| `(dragEnd)`   | `DragEndEvent`   | `vdndDraggable`, after every drag, dropped or not                   |
-| `(drop)`      | `DropEvent`      | `vdndDroppable` and `<vdnd-sortable-list>`, on the destination only |
+| Output              | Event                  | Emitted by                                                                        |
+| ------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| `(dragStart)`       | `DragStartEvent`       | `vdndDraggable`                                                                   |
+| `(dragEnd)`         | `DragEndEvent`         | `vdndDraggable`, after every drag, dropped or not                                 |
+| `(drop)`            | `DropEvent`            | `vdndDroppable` and `<vdnd-sortable-list>`, on the destination only               |
+| `(placeholderMove)` | `PlaceholderMoveEvent` | `vdndDroppable` and `<vdnd-sortable-list>`, each time the placeholder moves in it |
 
 ## DragStartEvent
 
@@ -68,3 +69,20 @@ interface DragEndEvent {
 - it was released over a disabled droppable
 
 A non-null value means a `drop` event fired on the destination. `cancelled` is `true` only for an explicit cancel.
+
+## PlaceholderMoveEvent
+
+```ts
+interface PlaceholderMoveEvent {
+  draggableId: string;
+  sourceDroppableId: string; // the list the drag started in
+  droppableId: string; // the list the placeholder moved within
+  previousIndex: number | null; // null when the placeholder just entered this list
+  currentIndex: number;
+  data?: unknown; // vdndDraggableData
+}
+```
+
+Emitted each time the placeholder moves within a list, including when it enters the list. It is not emitted for the initial pick-up or when the placeholder leaves. Indexes follow the `DropEvent.destination.index` convention: where the item would land if dropped now. For the first move in the source list, `previousIndex` is the item's original index.
+
+Typical use is haptic feedback. See [Animations and haptics](/guide/features/animations#placeholder-move-events).

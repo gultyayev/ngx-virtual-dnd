@@ -13,7 +13,14 @@ interface AutoScrollConfig {
   maxSpeed: number; // max speed in px per 60 fps frame. Default 15
   accelerate: boolean; // faster closer to the edge. Default true
 }
+
+interface VdndAnimationConfig {
+  shiftDuration?: number; // slide duration in ms. Default 200; 0 turns it off
+  shiftEasing?: string; // CSS easing. Default 'cubic-bezier(0.2, 0, 0, 1)'
+}
 ```
+
+`VdndAnimationConfig` is provided through `VDND_ANIMATION_CONFIG`. See [Animations and haptics](/guide/features/animations).
 
 ## Template contexts
 
@@ -120,6 +127,7 @@ interface VirtualScrollStrategy {
 | `VDND_SCROLL_CONTAINER` | `VdndScrollContainer` | `VirtualViewportComponent`, `VirtualContentComponent`, `ScrollableDirective` |
 | `VDND_VIRTUAL_VIEWPORT` | `VdndVirtualViewport` | `VirtualViewportComponent`, `VirtualContentComponent`                        |
 | `VDND_GROUP_TOKEN`      | `VdndGroupContext`    | `DroppableGroupDirective`                                                    |
+| `VDND_ANIMATION_CONFIG` | `VdndAnimationConfig` | You (opt-in), app-wide or in a component's `providers`                       |
 
 ```ts
 interface VdndScrollContainer {
