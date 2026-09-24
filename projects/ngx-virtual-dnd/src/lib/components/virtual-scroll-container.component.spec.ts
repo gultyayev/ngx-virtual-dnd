@@ -99,13 +99,13 @@ describe('VirtualScrollContainerComponent', () => {
 
   beforeAll(() => {
     // Store original and set mock
-    originalResizeObserver = global.ResizeObserver;
-    global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
   });
 
   afterAll(() => {
     // Restore original
-    global.ResizeObserver = originalResizeObserver;
+    globalThis.ResizeObserver = originalResizeObserver;
   });
 
   beforeEach(() => {

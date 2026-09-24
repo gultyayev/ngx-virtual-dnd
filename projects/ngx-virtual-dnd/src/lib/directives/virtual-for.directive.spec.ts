@@ -80,12 +80,12 @@ describe('VirtualForDirective', () => {
       .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id') ?? '');
 
   beforeAll(() => {
-    originalResizeObserver = global.ResizeObserver;
-    global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
   });
 
   afterAll(() => {
-    global.ResizeObserver = originalResizeObserver;
+    globalThis.ResizeObserver = originalResizeObserver;
   });
 
   beforeEach(() => {
@@ -287,12 +287,12 @@ describe('VirtualForDirective (dynamic height)', () => {
   let originalResizeObserver: typeof ResizeObserver;
 
   beforeAll(() => {
-    originalResizeObserver = global.ResizeObserver;
-    global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
   });
 
   afterAll(() => {
-    global.ResizeObserver = originalResizeObserver;
+    globalThis.ResizeObserver = originalResizeObserver;
   });
 
   beforeEach(() => {
@@ -365,7 +365,7 @@ describe('VirtualForDirective (shift animation)', () => {
   let dragState: DragStateService;
   let appRef: ApplicationRef;
   let animationsByKey: Map<string, { cancel: jest.Mock }[]>;
-  const originalResizeObserver = global.ResizeObserver;
+  const originalResizeObserver = globalThis.ResizeObserver;
   const originalAnimate = Element.prototype.animate;
   const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
@@ -375,7 +375,7 @@ describe('VirtualForDirective (shift animation)', () => {
   };
 
   beforeEach(() => {
-    global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
     animationsByKey = new Map();
     // jsdom has no layout: place each element by its position among its siblings
     Element.prototype.getBoundingClientRect = function (this: Element) {
@@ -424,7 +424,7 @@ describe('VirtualForDirective (shift animation)', () => {
   afterEach(() => {
     dragState.endDrag();
     fixture.destroy();
-    global.ResizeObserver = originalResizeObserver;
+    globalThis.ResizeObserver = originalResizeObserver;
     Element.prototype.animate = originalAnimate;
     Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
   });

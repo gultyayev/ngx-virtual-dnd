@@ -29,7 +29,9 @@ describe('ShiftAnimator', () => {
       // Visual position = layout position + in-flight animation offset
       let offset = 0;
       if (running && running.cancel.mock.calls.length === 0 && running.progress !== null) {
-        const from = /translate\([^,]+, ([-\d.]+)px\)/.exec(String(running.keyframes[0].transform));
+        const from = /translate\([^,]+, ([-\d.]+)px\)/.exec(
+          String(running.keyframes[0]['transform']),
+        );
         offset = Number(from?.[1] ?? 0) * (1 - running.progress);
       }
       const y = (tops.get(el) ?? 0) + offset;
@@ -46,7 +48,9 @@ describe('ShiftAnimator', () => {
 
   const lastAnimation = (el: HTMLElement): FakeAnimation | undefined => animations.get(el)?.at(-1);
   const fromY = (animation: FakeAnimation | undefined): number =>
-    Number(/translate\([^,]+, ([-\d.]+)px\)/.exec(String(animation?.keyframes[0].transform))?.[1]);
+    Number(
+      /translate\([^,]+, ([-\d.]+)px\)/.exec(String(animation?.keyframes[0]['transform']))?.[1],
+    );
 
   const createAnimator = (config: VdndAnimationConfig = { shiftDuration: 200 }): ShiftAnimator =>
     new ShiftAnimator({
@@ -128,7 +132,7 @@ describe('ShiftAnimator', () => {
     expect(animations.has(a)).toBe(false);
     const animation = lastAnimation(b);
     expect(fromY(animation)).toBe(-50);
-    expect(animation?.keyframes[1].transform).toBe('translate(0px, 0px)');
+    expect(animation?.keyframes[1]['transform']).toBe('translate(0px, 0px)');
     expect(animation?.options).toEqual(
       expect.objectContaining({ duration: 150, easing: 'linear', composite: 'add' }),
     );

@@ -35,12 +35,12 @@ describe('VirtualViewportComponent', () => {
   let originalResizeObserver: typeof ResizeObserver;
 
   beforeAll(() => {
-    originalResizeObserver = global.ResizeObserver;
-    global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
   });
 
   afterAll(() => {
-    global.ResizeObserver = originalResizeObserver;
+    globalThis.ResizeObserver = originalResizeObserver;
   });
 
   beforeEach(() => {

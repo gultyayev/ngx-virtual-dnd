@@ -116,7 +116,7 @@ describe('KeyboardDragHandler', () => {
       envInjector: mockEnvInjector,
       callbacks: mockCallbacks,
       getContext: () => mockContext,
-    } as KeyboardDragDeps);
+    } as unknown as KeyboardDragDeps);
   });
 
   afterEach(() => {
@@ -711,7 +711,7 @@ describe('KeyboardDragHandler', () => {
         envInjector: mockEnvInjector,
         callbacks: mockCallbacks,
         getContext: () => ({ ...mockContext, groupName: 'test-group' }),
-      } as KeyboardDragDeps);
+      } as unknown as KeyboardDragDeps);
 
       // Source list on the left so the target is the right-hand neighbour.
       makeDroppable('source-list', 0);
