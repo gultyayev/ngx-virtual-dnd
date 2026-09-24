@@ -13,7 +13,13 @@ import {
 import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
-import { DragState, DropEvent, END_OF_LIST } from '../models/drag-drop.models';
+import {
+  DraggedItem,
+  DragState,
+  DropEvent,
+  END_OF_LIST,
+  PlaceholderMoveEvent,
+} from '../models/drag-drop.models';
 import { VDND_GROUP_TOKEN } from './droppable-group.directive';
 import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
@@ -100,6 +106,12 @@ export class DroppableDirective implements OnDestroy {
   // eslint-disable-next-line @angular-eslint/no-output-native
   drop = output<DropEvent>();
 
+  /**
+   * Emits each time the placeholder moves within this droppable during a drag
+   * (every item displacement) — e.g. to trigger haptic feedback.
+   */
+  placeholderMove = output<PlaceholderMoveEvent>();
+
   /** Whether this droppable is currently being targeted */
   readonly isActive = computed(() => {
     const activeId = this.#dragState.activeDroppableId();
@@ -113,6 +125,30 @@ export class DroppableDirective implements OnDestroy {
     }
     return this.#dragState.placeholderId();
   });
+
+  /**
+   * The placeholder's insertion index in this droppable (DropEvent convention),
+   * or null when the placeholder is not here.
+   */
+  readonly #placeholderInsertionIndex = computed(() => {
+    if (!this.isActive() || !this.#dragState.isDragging()) {
+      return null;
+    }
+    const sourceIndex = this.#dragState.sourceIndex();
+    return normalizeDropDestinationIndex({
+      sourceIndex: sourceIndex ?? -1,
+      placeholderIndex: this.#dragState.placeholderIndex(),
+      // Without a known source index there is no hidden-source adjustment to undo
+      sourceDroppableId: sourceIndex === null ? null : this.#dragState.sourceDroppableId(),
+      activeDroppableId: this.vdndDroppable(),
+    });
+  });
+
+  /** Last insertion index reported via placeholderMove (null when not here) */
+  #lastPlaceholderIndex: number | null = null;
+
+  /** Drag whose initial placeholder position has already been seen by this droppable */
+  #placeholderTrackedDrag: DraggedItem | null = null;
 
   /** Track previous active state to detect the drag-end transition */
   #wasActive = false;
@@ -145,6 +181,11 @@ export class DroppableDirective implements OnDestroy {
       if (group) {
         this.#positionCalculator.notifyCandidatesChanged(group);
       }
+    });
+
+    effect(() => {
+      const currentIndex = this.#placeholderInsertionIndex();
+      untracked(() => this.#handlePlaceholderMove(currentIndex));
     });
 
     // React to state changes and handle drop events.
@@ -201,6 +242,41 @@ export class DroppableDirective implements OnDestroy {
     if (group) {
       this.#positionCalculator.notifyCandidatesChanged(group);
     }
+  }
+
+  /**
+   * Emit placeholderMove when the placeholder moved within (or entered) this droppable.
+   */
+  #handlePlaceholderMove(currentIndex: number | null): void {
+    let previousIndex = this.#lastPlaceholderIndex;
+    this.#lastPlaceholderIndex = currentIndex;
+
+    const draggedItem = this.#dragState.draggedItem();
+    if (currentIndex === null || currentIndex === previousIndex || !draggedItem) {
+      return;
+    }
+
+    // The drag's first placement in the source list starts from the item's own slot:
+    // nothing is displaced when the placeholder simply takes the hidden item's place.
+    const isFirstPlacement = this.#placeholderTrackedDrag !== draggedItem;
+    this.#placeholderTrackedDrag = draggedItem;
+    const sourceDroppableId = this.#dragState.sourceDroppableId();
+    const sourceIndex = this.#dragState.sourceIndex();
+    if (isFirstPlacement && sourceDroppableId === this.vdndDroppable() && sourceIndex !== null) {
+      if (currentIndex === sourceIndex) {
+        return;
+      }
+      previousIndex = sourceIndex;
+    }
+
+    this.placeholderMove.emit({
+      draggableId: draggedItem.draggableId,
+      sourceDroppableId: sourceDroppableId ?? '',
+      droppableId: this.vdndDroppable(),
+      previousIndex,
+      currentIndex,
+      data: draggedItem.data,
+    });
   }
 
   /**

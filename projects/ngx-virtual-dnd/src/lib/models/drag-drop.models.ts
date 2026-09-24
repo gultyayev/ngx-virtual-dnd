@@ -122,6 +122,32 @@ export interface DropEvent {
 }
 
 /**
+ * Event emitted by a droppable each time the placeholder moves within it during a drag,
+ * i.e. whenever items are displaced. Useful for haptic feedback on every step.
+ *
+ * Indexes use the same convention as `DropEvent.destination.index` (the insertion index
+ * the item would get if dropped now). Not emitted for the placeholder's initial position
+ * at drag start, nor when the placeholder leaves this droppable.
+ */
+export interface PlaceholderMoveEvent {
+  /** Unique identifier for the dragged item */
+  draggableId: string;
+  /** ID of the droppable container the item originated from */
+  sourceDroppableId: string;
+  /** ID of the droppable the placeholder moved within */
+  droppableId: string;
+  /**
+   * Previous insertion index in this droppable, or `null` when the placeholder just entered
+   * it from elsewhere. For the first move in the source list this is the item's own index.
+   */
+  previousIndex: number | null;
+  /** New insertion index in this droppable */
+  currentIndex: number;
+  /** Optional user-provided data associated with the dragged item */
+  data?: unknown;
+}
+
+/**
  * Event emitted when a drag operation ends (including cancel).
  */
 export interface DragEndEvent {

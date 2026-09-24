@@ -275,6 +275,27 @@
                 </span>
                 <span class="check-lbl">Disable List 2 drop target</span>
               </label>
+              <label class="check">
+                <input
+                  type="checkbox"
+                  [checked]="shiftAnimation()"
+                  (change)="toggleShiftAnimation($event)"
+                  data-testid="shift-animation-checkbox"
+                />
+                <span class="check-box" aria-hidden="true">
+                  <svg viewBox="0 0 14 14">
+                    <path
+                      d="M3 7.2 5.8 10 11 4.2"
+                      fill="none"
+                      stroke-width="2.2"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <span class="check-lbl">Animate item shifts</span>
+              </label>
             </div>
 
             <!-- API mode -->
@@ -366,6 +387,7 @@
                 [itemTemplate]="simplifiedItemTpl"
                 [constrainToContainer]="constrainToContainer()"
                 (drop)="onDropSimplified($event)"
+                (placeholderMove)="onPlaceholderMove($event)"
               />
             </div>
           </div>
@@ -389,6 +411,7 @@
                 [itemTemplate]="simplifiedItemTpl"
                 [constrainToContainer]="constrainToContainer()"
                 (drop)="onDropSimplified($event)"
+                (placeholderMove)="onPlaceholderMove($event)"
               />
             </div>
           </div>
@@ -439,6 +462,7 @@
               vdndDroppableGroup="demo"
               [constrainToContainer]="constrainToContainer()"
               (drop)="onDrop($event)"
+              (placeholderMove)="onPlaceholderMove($event)"
             >
               <vdnd-virtual-scroll
                 class="virtual-scroll-container"
@@ -468,6 +492,7 @@
               [disabled]="list2DroppableDisabled()"
               [constrainToContainer]="constrainToContainer()"
               (drop)="onDrop($event)"
+              (placeholderMove)="onPlaceholderMove($event)"
             >
               <vdnd-virtual-scroll
                 class="virtual-scroll-container"

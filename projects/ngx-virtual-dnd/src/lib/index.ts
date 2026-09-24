@@ -11,6 +11,8 @@ export { VDND_SCROLL_CONTAINER } from './tokens/scroll-container.token';
 export type { VdndScrollContainer } from './tokens/scroll-container.token';
 export { VDND_VIRTUAL_VIEWPORT } from './tokens/virtual-viewport.token';
 export type { VdndVirtualViewport } from './tokens/virtual-viewport.token';
+export { VDND_ANIMATION_CONFIG } from './tokens/animation-config.token';
+export type { VdndAnimationConfig } from './tokens/animation-config.token';
 
 // Services
 export { DragStateService } from './services/drag-state.service';

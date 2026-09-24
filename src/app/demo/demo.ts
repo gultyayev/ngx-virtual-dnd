@@ -11,10 +11,12 @@ import {
   DroppableGroupDirective,
   isNoOpDrop,
   moveItem,
+  PlaceholderMoveEvent,
   VirtualScrollContainerComponent,
   VirtualSortableListComponent,
 } from 'ngx-virtual-dnd';
 import { TopBarComponent } from '../top-bar/top-bar';
+import { DEMO_SHIFT_DURATION, DemoAnimationSettings } from '../demo-animation-settings';
 
 interface Item {
   id: string;
@@ -31,6 +33,8 @@ interface Item {
     '[attr.data-last-drop-destination-index]': 'lastDropDestinationIndex()',
     '[attr.data-last-drag-end-destination-index]': 'lastDragEndDestinationIndex()',
     '[attr.data-last-drag-end-cancelled]': 'lastDragEndCancelled()',
+    '[attr.data-placeholder-move-count]': 'placeholderMoveCount()',
+    '[attr.data-last-placeholder-move]': 'lastPlaceholderMove()',
   },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
@@ -48,6 +52,10 @@ interface Item {
 })
 export class DemoComponent {
   readonly #dragState = inject(DragStateService);
+  readonly #animationSettings = inject(DemoAnimationSettings);
+
+  /** Whether displaced items slide (VDND_ANIMATION_CONFIG shift animation) */
+  readonly shiftAnimation = computed(() => this.#animationSettings.shiftDuration() > 0);
 
   /** Whether a drag is currently active (drives the debug live indicator). */
   readonly isDragging = this.#dragState.isDragging;
@@ -93,6 +101,12 @@ export class DemoComponent {
 
   /** Whether the last dragEnd event was cancelled (used by interaction tests). */
   readonly lastDragEndCancelled = signal<boolean | null>(null);
+
+  /** Number of placeholderMove events received (used by interaction tests). */
+  readonly placeholderMoveCount = signal(0);
+
+  /** Last placeholderMove as `droppableId:previousIndex->currentIndex` (used by interaction tests). */
+  readonly lastPlaceholderMove = signal<string | null>(null);
 
   /** List 1 items */
   readonly list1 = signal<Item[]>([]);
@@ -200,6 +214,21 @@ export class DemoComponent {
   toggleConstrainToContainer(event: Event): void {
     const checkbox = event.target as HTMLInputElement;
     this.constrainToContainer.set(checkbox.checked);
+  }
+
+  /** Toggle the shift animation setting */
+  toggleShiftAnimation(event: Event): void {
+    const checkbox = event.target as HTMLInputElement;
+    this.#animationSettings.shiftDuration.set(checkbox.checked ? DEMO_SHIFT_DURATION : 0);
+  }
+
+  /** Haptic tick on every item displacement (no-op where vibration is unsupported). */
+  onPlaceholderMove(event: PlaceholderMoveEvent): void {
+    this.placeholderMoveCount.update((count) => count + 1);
+    this.lastPlaceholderMove.set(
+      `${event.droppableId}:${event.previousIndex}->${event.currentIndex}`,
+    );
+    navigator.vibrate?.(10);
   }
 
   /** Toggle the disabled state of the List 2 droppable */

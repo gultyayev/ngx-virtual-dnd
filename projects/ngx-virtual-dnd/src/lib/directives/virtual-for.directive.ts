@@ -22,6 +22,8 @@ import { DroppableDirective } from './droppable.directive';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
+import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
+import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
 
 /**
  * Context provided to the template for each virtual item.
@@ -38,6 +40,9 @@ export interface VirtualForContext<T> {
   /** Count of total items */
   count: number;
 }
+
+/** Render-queue key of the placeholder entry */
+const PLACEHOLDER_KEY = '__placeholder__';
 
 /**
  * Represents an item entry in the render queue for virtual scrolling.
@@ -106,6 +111,9 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
    * When present, droppableId is inherited automatically.
    */
   readonly #droppable = inject(DroppableDirective, { optional: true });
+
+  /** Slides items displaced by the placeholder (only when VDND_ANIMATION_CONFIG is provided) */
+  readonly #shiftAnimator = this.#createShiftAnimator();
 
   /** Whether we're inside a viewport component (use wrapper positioning) */
   readonly #useViewportPositioning = this.#viewport !== null;
@@ -351,6 +359,33 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
     // Clean up ResizeObserver
     this.#resizeObserver?.disconnect();
+
+    this.#shiftAnimator?.cancelAll();
+  }
+
+  #createShiftAnimator(): ShiftAnimator | null {
+    const config = inject(VDND_ANIMATION_CONFIG, { optional: true });
+    if (!config) return null;
+    return new ShiftAnimator({
+      config,
+      injector: this.#injector,
+      getScrollElement: () => this.#scrollContainer.nativeElement,
+      getEntries: () => this.#shiftAnimationEntries(),
+    });
+  }
+
+  /** Rendered item root elements (keyed by trackBy key) plus the placeholder. */
+  *#shiftAnimationEntries(): Iterable<ShiftAnimationEntry> {
+    for (const [key, view] of this.#activeViews) {
+      for (const node of view.rootNodes) {
+        if (node instanceof HTMLElement) {
+          yield [key, node];
+        }
+      }
+    }
+    if (this.#placeholder && this.#placeholderInDom) {
+      yield [PLACEHOLDER_KEY, this.#placeholder];
+    }
   }
 
   /**
@@ -437,6 +472,20 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   }
 
   /**
+   * Stop any shift animation on a view about to be pooled — a recycled view must not
+   * carry an in-flight offset over to the item it renders next.
+   */
+  #cancelShiftAnimation(view: EmbeddedViewRef<VirtualForContext<T>>): void {
+    if (!this.#shiftAnimator) return;
+
+    for (const node of view.rootNodes) {
+      if (node instanceof HTMLElement) {
+        this.#shiftAnimator.cancel(node);
+      }
+    }
+  }
+
+  /**
    * Stop observing an element's root nodes.
    */
   #unobserveViewElements(view: EmbeddedViewRef<VirtualForContext<T>>): void {
@@ -470,6 +519,9 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
       draggedIndex >= 0 &&
       isSourceList &&
       draggedIndex < items.length;
+
+    // Snapshot positions before the DOM changes so displaced items can slide
+    this.#shiftAnimator?.beforeUpdate(this.#dragState.isDragging(), placeholderIndex);
 
     // Notify viewport of render start index for wrapper positioning
     this.#notifyViewportRenderStart(start);
@@ -539,7 +591,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
       if (showPlaceholder && placeholderIndex === i && !placeholderInserted) {
         itemsToRender.push({
           type: 'placeholder',
-          key: '__placeholder__',
+          key: PLACEHOLDER_KEY,
           context: null,
           visualIndex: placeholderIndex,
         });
@@ -565,7 +617,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     if (showPlaceholder && placeholderIndex >= items.length && !placeholderInserted) {
       itemsToRender.push({
         type: 'placeholder',
-        key: '__placeholder__',
+        key: PLACEHOLDER_KEY,
         context: null,
         visualIndex: placeholderIndex,
       });
@@ -620,6 +672,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
           this.#viewContainer.detach(index);
         }
         this.#unobserveViewElements(view);
+        this.#cancelShiftAnimation(view);
         this.#viewPool.push(view);
         this.#activeViews.delete(key);
       }
