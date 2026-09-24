@@ -1,0 +1,102 @@
+---
+title: Directives
+description: Inputs and outputs of every ngx-virtual-dnd directive.
+---
+
+# Directives
+
+## DraggableDirective
+
+**Selector:** `[vdndDraggable]`
+
+Makes an element draggable with mouse, touch and keyboard. See [Drag behavior](/guide/features/drag-behavior).
+
+| Input                | Type                 | Default      | Description                                                                                |
+| -------------------- | -------------------- | ------------ | ------------------------------------------------------------------------------------------ |
+| `vdndDraggable`      | `string`             | **required** | Unique ID across all lists; must equal the list's item ID                                  |
+| `vdndDraggableGroup` | `string`             | —            | Group name. Required unless a `vdndGroup` is in scope where the template is declared       |
+| `vdndDraggableData`  | `unknown`            | —            | Arbitrary data, delivered in drag events, `DropEvent.source.data` and the preview template |
+| `disabled`           | `boolean`            | `false`      | Prevent dragging                                                                           |
+| `dragHandle`         | `string`             | —            | CSS selector; only presses inside a match start a drag                                     |
+| `dragThreshold`      | `number`             | `5`          | Distance in px before a drag starts                                                        |
+| `dragDelay`          | `number`             | `0`          | Hold time in ms before a drag can start                                                    |
+| `lockAxis`           | `'x' \| 'y' \| null` | `null`       | Axis to freeze: `'x'` moves vertically only, `'y'` horizontally only                       |
+
+| Output      | Type             | Description                                           |
+| ----------- | ---------------- | ----------------------------------------------------- |
+| `dragStart` | `DragStartEvent` | A drag started                                        |
+| `dragEnd`   | `DragEndEvent`   | A drag ended, dropped or not (see `destinationIndex`) |
+
+## DroppableDirective
+
+**Selector:** `[vdndDroppable]`
+
+Marks an element as a drop target.
+
+| Input                  | Type                        | Default      | Description                                                                                      |
+| ---------------------- | --------------------------- | ------------ | ------------------------------------------------------------------------------------------------ |
+| `vdndDroppable`        | `string`                    | **required** | Unique ID on the page                                                                            |
+| `vdndDroppableGroup`   | `string`                    | —            | Group name. Required unless inherited from a `vdndGroup` ancestor                                |
+| `vdndDroppableData`    | `unknown`                   | —            | Arbitrary data, delivered as `DropEvent.destination.data`                                        |
+| `disabled`             | `boolean`                   | `false`      | Skip this target for pointer and keyboard; releasing over it emits no `drop`                     |
+| `autoScrollEnabled`    | `boolean`                   | `true`       | Scroll when dragging near the edges                                                              |
+| `autoScrollConfig`     | `Partial<AutoScrollConfig>` | `{}`         | Auto-scroll tuning                                                                               |
+| `constrainToContainer` | `boolean`                   | `false`      | Keep the preview and drop position inside the nearest `vdndScrollable` ancestor, or this element |
+
+| Output            | Type                   | Description                                                                          |
+| ----------------- | ---------------------- | ------------------------------------------------------------------------------------ |
+| `drop`            | `DropEvent`            | An item was dropped here (fires on the destination only)                             |
+| `placeholderMove` | `PlaceholderMoveEvent` | The placeholder moved within this droppable (every row displacement). Added in 3.2.0 |
+
+## DroppableGroupDirective
+
+**Selector:** `[vdndGroup]`
+
+Provides a group name to every draggable and droppable inside it. Declare item templates inside this element as well.
+
+| Input       | Type     | Default      | Description |
+| ----------- | -------- | ------------ | ----------- |
+| `vdndGroup` | `string` | **required** | Group name  |
+
+## ScrollableDirective
+
+**Selector:** `[vdndScrollable]`
+
+Marks the element that scrolls for `<vdnd-virtual-content>` or `*vdndVirtualFor`. The element needs `overflow: auto` (or `scroll`) and a height. Adds the `vdnd-scrollable` class and `overflow-anchor: none`.
+
+| Input               | Type                        | Default | Description                         |
+| ------------------- | --------------------------- | ------- | ----------------------------------- |
+| `scrollContainerId` | `string`                    | —       | ID used to register for auto-scroll |
+| `autoScrollEnabled` | `boolean`                   | `true`  | Scroll when dragging near the edges |
+| `autoScrollConfig`  | `Partial<AutoScrollConfig>` | `{}`    | Auto-scroll tuning                  |
+
+## VirtualForDirective
+
+**Selector:** `*vdndVirtualFor`
+
+Structural directive that renders only the visible items. Use it inside `<vdnd-virtual-viewport>`, `<vdnd-virtual-content>` or a `vdndScrollable` element.
+
+```angular-html
+<ng-container
+  *vdndVirtualFor="let task of tasks(); trackBy: trackById; itemHeight: 48; overscan: 3"
+>
+  <div [vdndDraggable]="task.id">{{ task.title }}</div>
+</ng-container>
+```
+
+| Key                 | Type                                  | Default      | Description                                           |
+| ------------------- | ------------------------------------- | ------------ | ----------------------------------------------------- |
+| `of`                | `T[]`                                 | **required** | Items                                                 |
+| `trackBy`           | `(index: number, item: T) => unknown` | **required** | Must return the same ID as the item's `vdndDraggable` |
+| `itemHeight`        | `number`                              | inherited    | Required when not inside a viewport component         |
+| `dynamicItemHeight` | `boolean`                             | inherited    | Measure rows                                          |
+| `droppableId`       | `string`                              | inherited    | Taken from the enclosing `vdndDroppable`              |
+| `overscan`          | `number`                              | `3`          | Extra rows rendered above and below                   |
+
+Template context (`VirtualForContext<T>`): `$implicit`, `index`, `first`, `last`, `count`.
+
+## ContentHeaderDirective
+
+**Selector:** `[vdndContentHeader]`
+
+Marks a header projected into `<vdnd-virtual-content>`. Its height is measured and used as the content offset. No inputs or outputs.

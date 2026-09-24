@@ -1,11 +1,19 @@
 name: Deploy to GitHub Pages
 
+# Publishes one site: the Rspress docs at /ngx-virtual-dnd/ and the Angular demo at
+# /ngx-virtual-dnd/demo/ (assembled by scripts/assemble-site.js).
 on:
   push:
-    branches: [master] # Change to 'main' if your default branch is main
+    branches: [master]
     paths:
       - 'src/**'
+      - 'public/**'
       - 'projects/**'
+      - 'docs/**'
+      - 'scripts/assemble-site.js'
+      - 'CHANGELOG.md'
+      - angular.json
+      - package.json
       - package-lock.json
   workflow_dispatch:
 
@@ -28,21 +36,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '24' # Or your preferred version
+          node-version: '24'
           cache: 'npm'
+
+      # CI uses the npm pinned in package.json (packageManager), not the one bundled with Node.
+      - name: Use pinned npm
+        run: npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Angular Library
-        run: npx ng build ngx-virtual-dnd # Replace with your library project name from angular.json
-
-      - name: Build Angular App
-        run: |
-          npx ng build --base-href "/ngx-virtual-dnd/"
-        # Replace 'my-app-name' with your app project name
-        # Replace 'your-repo-name' with your actual repository name (for project sites)
-        # If it's a user/org site (repo named username.github.io), use --base-href "/"
+      # Library → demo (base href /ngx-virtual-dnd/demo/) → docs → assemble into dist/site
+      - name: Build site
+        run: npm run site:build
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
@@ -50,7 +56,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: dist/dnd/browser # Replace with your app's output path (check angular.json > projects > my-app-name > architect > build > options > outputPath)
+          path: dist/site
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v5

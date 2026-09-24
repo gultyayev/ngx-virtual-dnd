@@ -1,0 +1,131 @@
+---
+title: Components
+description: Inputs, outputs and methods of every ngx-virtual-dnd component.
+---
+
+# Components
+
+All components are standalone and exported from `ngx-virtual-dnd`.
+
+## VirtualSortableListComponent
+
+**Selector:** `vdnd-sortable-list`
+
+Droppable, virtual scroller and placeholder in one element. The default choice. See the [Quick start](/guide/start/quick-start).
+
+| Input                  | Type                                           | Default                 | Description                                                                                                                         |
+| ---------------------- | ---------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `droppableId`          | `string`                                       | **required**            | Unique ID of this list                                                                                                              |
+| `items`                | `T[]`                                          | **required**            | Items to render                                                                                                                     |
+| `itemHeight`           | `number`                                       | **required**            | Row height in px (the estimate when `dynamicItemHeight` is on)                                                                      |
+| `itemIdFn`             | `(item: T) => string`                          | **required**            | Returns an item's ID; must equal the `vdndDraggable` value rendered for it                                                          |
+| `itemTemplate`         | `TemplateRef<VirtualScrollItemContext<T>>`     | **required**            | Row template; its root element carries `vdndDraggable`                                                                              |
+| `group`                | `string`                                       | —                       | Group name. Not needed inside a `vdndGroup`                                                                                         |
+| `containerHeight`      | `number`                                       | —                       | Height in px. Without it, give the inner `vdnd-virtual-scroll` a CSS height                                                         |
+| `dynamicItemHeight`    | `boolean`                                      | `false`                 | Measure rows instead of using a fixed height                                                                                        |
+| `trackByFn`            | `(index: number, item: T) => string \| number` | derived from `itemIdFn` | Track-by function for rendering                                                                                                     |
+| `droppableData`        | `unknown`                                      | —                       | Arbitrary data, delivered as `DropEvent.destination.data`                                                                           |
+| `disabled`             | `boolean`                                      | `false`                 | Stop items being dropped into this list (items can still be dragged out; set `disabled` on the draggables too for a read-only list) |
+| `overscan`             | `number`                                       | `3`                     | Rows rendered beyond the visible area, above and below                                                                              |
+| `autoScrollEnabled`    | `boolean`                                      | `true`                  | Scroll when dragging near the edges                                                                                                 |
+| `autoScrollConfig`     | `Partial<AutoScrollConfig>`                    | `{}`                    | Auto-scroll tuning, see [Auto-scroll](/guide/features/auto-scroll)                                                                  |
+| `constrainToContainer` | `boolean`                                      | `false`                 | Keep the preview and drop position inside the list                                                                                  |
+
+| Output            | Type                   | Description                                                                     |
+| ----------------- | ---------------------- | ------------------------------------------------------------------------------- |
+| `drop`            | `DropEvent`            | An item was dropped into this list                                              |
+| `placeholderMove` | `PlaceholderMoveEvent` | The placeholder moved within this list (every row displacement). Added in 3.2.0 |
+
+The item template context (`VirtualScrollItemContext<T>`) exposes `$implicit` (the item), `index` (position in the full list) and `isSticky`.
+
+## VirtualScrollContainerComponent
+
+**Selector:** `vdnd-virtual-scroll`
+
+Low-level virtual scroller. Place it inside an element with `vdndDroppable`. See [Choosing a component](/guide/essentials/choosing-a-component#low-level-scroller).
+
+| Input                   | Type                                           | Default                 | Description                                                         |
+| ----------------------- | ---------------------------------------------- | ----------------------- | ------------------------------------------------------------------- |
+| `items`                 | `T[]`                                          | **required**            | Items to render                                                     |
+| `itemHeight`            | `number`                                       | **required**            | Row height in px                                                    |
+| `itemIdFn`              | `(item: T) => string`                          | **required**            | Returns an item's ID; must equal its `vdndDraggable` value          |
+| `itemTemplate`          | `TemplateRef<VirtualScrollItemContext<T>>`     | **required**            | Row template                                                        |
+| `droppableId`           | `string`                                       | —                       | ID of the enclosing `vdndDroppable`; needed to show the placeholder |
+| `containerHeight`       | `number`                                       | —                       | Height in px. Without it, give the element a CSS height             |
+| `dynamicItemHeight`     | `boolean`                                      | `false`                 | Measure rows                                                        |
+| `trackByFn`             | `(index: number, item: T) => string \| number` | derived from `itemIdFn` | Track-by function                                                   |
+| `overscan`              | `number`                                       | `3`                     | Extra rows rendered above and below                                 |
+| `stickyItemIds`         | `string[]`                                     | `[]`                    | IDs of items that stay rendered at any scroll position              |
+| `autoStickyDraggedItem` | `boolean`                                      | `true`                  | Keep the dragged item rendered while it is out of view              |
+| `scrollContainerId`     | `string`                                       | —                       | ID used to register the container for auto-scroll                   |
+| `autoScrollEnabled`     | `boolean`                                      | `true`                  | Scroll when dragging near the edges                                 |
+| `autoScrollConfig`      | `Partial<AutoScrollConfig>`                    | `{}`                    | Auto-scroll tuning                                                  |
+
+| Method            | Signature                    | Description                  |
+| ----------------- | ---------------------------- | ---------------------------- |
+| `scrollTo`        | `(position: number) => void` | Scroll to an absolute offset |
+| `scrollToIndex`   | `(index: number) => void`    | Scroll to an item by index   |
+| `scrollBy`        | `(delta: number) => void`    | Scroll by a relative amount  |
+| `getScrollTop`    | `() => number`               | Current scroll offset        |
+| `getScrollHeight` | `() => number`               | Total scroll height          |
+
+Get the instance with `viewChild(VirtualScrollContainerComponent)`.
+
+## VirtualViewportComponent
+
+**Selector:** `vdnd-virtual-viewport`
+
+Self-scrolling container for `*vdndVirtualFor`. Positions all rows with one GPU-accelerated transform. Children inherit `itemHeight` and `dynamicItemHeight`. Needs a CSS height.
+
+| Input               | Type                        | Default      | Description                         |
+| ------------------- | --------------------------- | ------------ | ----------------------------------- |
+| `itemHeight`        | `number`                    | **required** | Row height in px                    |
+| `dynamicItemHeight` | `boolean`                   | `false`      | Measure rows                        |
+| `contentOffset`     | `number`                    | `0`          | Space in px reserved above the rows |
+| `scrollContainerId` | `string`                    | —            | ID used to register for auto-scroll |
+| `autoScrollEnabled` | `boolean`                   | `true`       | Scroll when dragging near the edges |
+| `autoScrollConfig`  | `Partial<AutoScrollConfig>` | `{}`         | Auto-scroll tuning                  |
+
+## VirtualContentComponent
+
+**Selector:** `vdnd-virtual-content`
+
+Virtual rows inside an external scroll container, for [page-level scrolling](/guide/features/page-scroll). Must be inside a `vdndScrollable` element. Projects an optional `[vdndContentHeader]` above the rows.
+
+| Input               | Type      | Default      | Description                                                                |
+| ------------------- | --------- | ------------ | -------------------------------------------------------------------------- |
+| `itemHeight`        | `number`  | **required** | Row height in px                                                           |
+| `dynamicItemHeight` | `boolean` | `false`      | Measure rows                                                               |
+| `contentOffset`     | `number`  | `0`          | Offset above the rows; replaced by the measured `vdndContentHeader` height |
+
+## DragPreviewComponent
+
+**Selector:** `vdnd-drag-preview`
+
+Renders the element that follows the pointer. **Required**: place it once. It moves itself into a body-level `div.vdnd-overlay-container`. See [Preview and placeholder](/guide/features/preview-and-placeholder).
+
+| Input             | Type                                 | Default          | Description                                               |
+| ----------------- | ------------------------------------ | ---------------- | --------------------------------------------------------- |
+| `previewTemplate` | `TemplateRef<DragPreviewContext<T>>` | —                | Custom preview; replaces the default clone                |
+| `cursorOffset`    | `{ x: number; y: number }`           | `{ x: 8, y: 8 }` | Fallback offset, used only when the grab point is unknown |
+
+## PlaceholderComponent
+
+**Selector:** `vdnd-placeholder`
+
+A drop-position indicator you render yourself. The built-in lists do not use it; they render `DragPlaceholderComponent`.
+
+| Input      | Type                              | Default | Description                |
+| ---------- | --------------------------------- | ------- | -------------------------- |
+| `height`   | `number`                          | `50`    | Height in px               |
+| `template` | `TemplateRef<PlaceholderContext>` | —       | Custom placeholder content |
+
+## DragPlaceholderComponent
+
+**Selector:** `vdnd-drag-placeholder`
+
+The empty placeholder that the lists render at the drop position, sized to the dragged item. You rarely use it directly; style it through `.vdnd-drag-placeholder`.
+
+| Input        | Type     | Default      | Description  |
+| ------------ | -------- | ------------ | ------------ |
+| `itemHeight` | `number` | **required** | Height in px |

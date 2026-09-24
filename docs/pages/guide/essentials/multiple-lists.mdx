@@ -1,0 +1,82 @@
+---
+title: Multiple lists
+description: Move items between lists, build a board, and control which lists accept items.
+---
+
+# Multiple lists
+
+Lists that share a **group** exchange items. Drag a row from one column to the other:
+
+<LiveDemo example="multiple-lists" title="Two lists sharing a group" height={360} />
+
+```ts file="<root>/src/app/examples/multiple-lists/multiple-lists.ts"
+
+```
+
+Three details make this work:
+
+- Both `<vdnd-sortable-list>` elements are inside the same `vdndGroup`, and so is the shared item template.
+- **Both lists bind `(drop)`.** The event fires on the destination list only, so a list without a handler silently rejects items.
+- `moveItem()` receives every list, keyed by `droppableId`. It handles moves within a list as well as between lists. If a droppable ID is missing from the map, the drop is ignored and a warning is logged in dev mode.
+
+## A board with any number of columns
+
+Keep one signal per column and build the map for `moveItem()` from your column list:
+
+```ts
+interface Column {
+  id: string;
+  title: string;
+  tasks: WritableSignal<Task[]>;
+}
+
+readonly columns: Column[] = [
+  { id: 'todo', title: 'To do', tasks: signal([]) },
+  { id: 'doing', title: 'In progress', tasks: signal([]) },
+  { id: 'done', title: 'Done', tasks: signal([]) },
+];
+
+readonly lists = Object.fromEntries(this.columns.map((c) => [c.id, c.tasks]));
+
+onDrop(event: DropEvent): void {
+  moveItem(event, this.lists);
+}
+```
+
+```angular-html
+<div class="board" vdndGroup="board">
+  <ng-template #taskTpl let-task>
+    <div class="row" [vdndDraggable]="task.id">{{ task.title }}</div>
+  </ng-template>
+
+  @for (column of columns; track column.id) {
+    <section>
+      <h3>{{ column.title }}</h3>
+      <vdnd-sortable-list
+        [droppableId]="column.id"
+        [items]="column.tasks()"
+        [itemHeight]="48"
+        [containerHeight]="480"
+        [itemIdFn]="taskId"
+        [itemTemplate]="taskTpl"
+        (drop)="onDrop($event)"
+      />
+    </section>
+  }
+</div>
+```
+
+Draggable IDs must be unique across **all** columns, because drag state is shared across the whole app.
+
+## Controlling where items can go
+
+| Goal                                    | How                                                              |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| Lists that never exchange items         | Put them in different groups (separate `vdndGroup` elements)     |
+| A list that temporarily accepts nothing | `[disabled]="true"` on the list or on `vdndDroppable`            |
+| Items that cannot be moved              | `[disabled]="true"` on the draggable                             |
+| Accept only some items                  | Check the event in `(drop)` and return early; the item stays put |
+
+A disabled droppable is skipped completely. The pointer passes through it to whatever is underneath, and the keyboard's left and right arrows skip it. See [Drag behavior](/guide/features/drag-behavior#disabling).
+
+Releasing over nothing, or over a disabled list, emits no `(drop)`. The item returns to where it started.

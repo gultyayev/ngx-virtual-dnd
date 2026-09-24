@@ -1,0 +1,468 @@
+/*
+ * ngx-virtual-dnd docs theme.
+ * Level 1 (CSS variables) maps the shared design tokens onto Rspress; level 2 (BEM class
+ * overrides) covers what variables cannot reach. Design rules: .claude/skills/ngx-virtual-dnd-design.
+ */
+/* Loaded here rather than through `head` in the config: Rspress injects `head` only into
+   built pages, so the dev server would otherwise fall back to system fonts. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import '../../src/styles/tokens.css';
+
+/* ══════════ TOKEN → RSPRESS MAPPING ══════════ */
+/* `html:root` outranks Rspress's own `:root` / `.dark` blocks regardless of load order.
+   Values are var() references, so they follow the light/dark tokens automatically. */
+html:root {
+  --rp-font-family-base: var(--font-sans);
+  --rp-font-family-mono: var(--font-mono);
+
+  /* Rspress also uses --rp-c-brand as a text color (edit link, anchors), so it takes the
+     AA-safe --accent-text rather than the raw accent. */
+  --rp-c-brand: var(--accent-text);
+  --rp-c-brand-light: color-mix(in srgb, var(--accent) 85%, #fff);
+  --rp-c-brand-lighter: color-mix(in srgb, var(--accent) 60%, #fff);
+  --rp-c-brand-dark: var(--accent-hover);
+  --rp-c-brand-darker: color-mix(in srgb, var(--accent) 70%, #000);
+  --rp-c-brand-tint: var(--accent-soft);
+
+  --rp-c-bg: var(--surface);
+  --rp-c-bg-soft: var(--field-bg);
+  --rp-c-bg-mute: var(--surface-2);
+  --rp-c-bg-alt: var(--surface);
+  --rp-c-divider: var(--border-2);
+  --rp-c-divider-light: var(--border);
+
+  --rp-c-text-0: var(--ink);
+  --rp-c-text-1: var(--ink);
+  --rp-c-text-2: var(--ink-2);
+  /* --ink-3 is below 4.5:1 on light surfaces; Rspress uses text-3 for readable text. */
+  --rp-c-text-3: var(--ink-2);
+  --rp-c-text-4: var(--border-2);
+  --rp-c-link: var(--accent-text);
+
+  --rp-c-text-code: var(--ink);
+  --rp-c-text-code-bg: var(--bg-sunk);
+  --rp-c-text-code-border: transparent;
+
+  --rp-radius: 15px;
+  --rp-radius-small: 9px;
+  --rp-radius-large: 16px;
+  --rp-shadow-1: var(--shadow-sm);
+  --rp-shadow-2: var(--shadow);
+  --rp-shadow-3: var(--shadow-lg);
+
+  --rp-nav-height: 60px;
+
+  /* No gradients anywhere: flat hero title, flat page background. */
+  --rp-home-hero-title-color: var(--ink);
+  --rp-home-hero-title-bg: none;
+  --rp-home-hero-secondary-color: var(--accent);
+  --rp-home-background-bg: var(--bg);
+  --rp-home-feature-bg: var(--surface);
+
+  /* Code blocks are dark in both themes. */
+  --rp-code-font-size: 13px;
+  --rp-code-block-bg: var(--code-bg);
+  --rp-code-title-bg: var(--code-title-bg);
+  --rp-code-block-color: var(--code-fg);
+  --rp-code-block-border: 1px solid var(--code-border);
+  --rp-code-block-shadow: none;
+  --rp-code-line-highlight-color: var(--code-highlight);
+
+  /* Callouts: tip uses the accent, info is neutral; warning and danger keep Rspress's hues. */
+  --rp-container-tip-bg: var(--accent-soft);
+  --rp-container-tip-border: var(--accent-soft-bd);
+  --rp-container-tip-text: var(--accent-text);
+  --rp-container-tip-code-bg: color-mix(in srgb, var(--accent) 16%, transparent);
+  /* Info is neutral (Rspress's default is an off-palette blue). */
+  --rp-container-info-bg: var(--field-bg);
+  --rp-container-info-border: var(--border);
+  --rp-container-info-text: var(--ink);
+  --rp-container-info-code-bg: var(--surface-2);
+}
+
+/* Dark --bg-sunk is darker than the page, which makes inline code look like holes. */
+html.dark:root {
+  --rp-c-text-code-bg: var(--surface-2);
+}
+
+/* Shiki (css-variables theme) — one dark palette, since code blocks are always dark. */
+html:root:not(.rp-dark),
+html:root.rp-dark {
+  --shiki-foreground: var(--code-fg);
+  --shiki-background: transparent;
+  --shiki-token-constant: var(--code-number);
+  --shiki-token-string: var(--code-string);
+  --shiki-token-comment: var(--code-comment);
+  --shiki-token-keyword: var(--code-keyword);
+  --shiki-token-parameter: var(--code-fg);
+  --shiki-token-function: var(--code-function);
+  --shiki-token-string-expression: var(--code-string);
+  --shiki-token-punctuation: var(--code-muted);
+  --shiki-token-link: var(--code-keyword);
+  --shiki-token-deleted: var(--code-deleted);
+  --shiki-token-inserted: var(--code-string);
+}
+
+/* ══════════ TOP BAR ══════════ */
+/* BEM overrides are prefixed with `html` so they outrank Rspress's equal-specificity
+   rules regardless of stylesheet order. */
+/* Mirrors the demo's top bar: 60px, translucent, blurred, 1px bottom border. */
+html .rp-nav {
+  border-bottom: 1px solid var(--border);
+  background: var(--topbar-bg);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+}
+
+html .rp-nav__title__link {
+  gap: 9px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+html .rp-nav__title__logo-image {
+  width: 32px;
+  height: 32px;
+}
+
+/* Nav tabs: compact 13px pills like the demo's, instead of full-height items.
+   Rspress drops the first item's left padding and the last item's right padding
+   (`:first-child` / `:last-child`) and bumps the font size on `:hover`, all with more
+   specific selectors. `:is(…)` lifts these rules above them, so every pill keeps the same
+   padding and size in every state. */
+html .rp-nav-menu {
+  gap: 2px;
+}
+
+html .rp-nav-menu__item {
+  height: auto;
+}
+
+html .rp-nav-menu__item:is(*, :first-child, :last-child, :hover) > .rp-nav-menu__item__container {
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+html .rp-nav-menu__item:is(:hover, :focus-within) > .rp-nav-menu__item__container {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+html
+  .rp-nav-menu__item--active:is(*, :first-child, :last-child, :hover)
+  > .rp-nav-menu__item__container {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.vdnd-version-badge {
+  margin-left: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.vdnd-version-badge:hover {
+  color: var(--accent-hover);
+}
+
+html .rp-search-button {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--field-bg);
+}
+
+/* ══════════ SIDEBAR ══════════ */
+html .rp-doc-layout__sidebar {
+  background: var(--field-bg);
+}
+
+html .rp-sidebar-section-header__left {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+html .rp-sidebar-item {
+  border-radius: 7px;
+  font-size: 13.5px;
+  line-height: 22px;
+}
+
+html .rp-sidebar-item--active,
+html .rp-sidebar-item--active:hover {
+  background-color: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+/* Outline: 13px fits the longest API names (VirtualScrollContainerComponent) on one line.
+   The text span also carries .rp-doc, hence the extra class. */
+html .rp-toc-item .rp-toc-item__text {
+  font-size: 13px;
+}
+
+/* ══════════ DOC CONTENT ══════════ */
+html .rp-doc {
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h1) {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2) {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h3) {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+/* Code ligatures turn `=>` into an arrow; show what the reader should type. */
+html .rp-doc code {
+  font-variant-ligatures: none;
+}
+
+html .rp-doc kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* Inline code: the padding stays inside the line box, so lines with code are not taller. */
+html .rp-doc :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+/* ══════════ TABLES ══════════ */
+/* Rspress draws tables with the code-block border and title colors, which are dark here. */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(table) {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(thead) {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(th) {
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(td) {
+  font-size: 14px;
+  line-height: 1.55;
+  vertical-align: top;
+}
+
+/* Code in tables wraps at spaces. In the 4-column API tables (name, type, default,
+   description) long types may also break mid-word, so the description keeps its width and
+   the table fits the page. Names in the first column never break. */
+html .rp-doc td code {
+  white-space: normal;
+}
+
+html .rp-doc table:has(td:nth-child(4)) td code {
+  overflow-wrap: anywhere;
+}
+
+html .rp-doc td:first-child code {
+  white-space: nowrap;
+}
+
+/* Phones: let columns shrink to their content instead of Rspress's 8rem minimum, so most
+   tables fit without sideways scrolling. */
+@media (width < 768px) {
+  html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(th, td) {
+    min-width: 0;
+    padding: 10px 12px;
+  }
+}
+
+/* Phones: the 4-column API tables (name | type | default | description) become one card per
+   row, with the type and default labelled, instead of four squeezed columns. */
+@media (width < 768px) {
+  html .rp-doc table:has(td:nth-child(4)) {
+    display: block;
+    border: 0;
+    border-radius: 0;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) thead {
+    display: none;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) :where(tbody, tr, td) {
+    display: block;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) tbody {
+    background: none;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) tr {
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td {
+    padding: 2px 0;
+    border: 0;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td:first-child {
+    padding-bottom: 6px;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td:nth-child(2)::before,
+  html .rp-doc table:has(td:nth-child(4)) td:nth-child(3)::before {
+    margin-right: 8px;
+    color: var(--ink-2);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td:nth-child(2)::before {
+    content: 'Type';
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td:nth-child(3)::before {
+    content: 'Default';
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td:last-child {
+    padding-top: 6px;
+  }
+}
+
+/* With the outline column visible, its "Edit this page" makes the footer one redundant. */
+@media (width >= 1280px) {
+  html .rp-doc-footer__edit {
+    display: none;
+  }
+}
+
+html .rp-codeblock {
+  border-radius: 12px;
+}
+
+html .rp-codeblock__title {
+  color: var(--code-muted);
+}
+
+/* ══════════ HOME ══════════ */
+html .rp-home-hero__title {
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+html .rp-home-hero__title-brand {
+  background: none;
+  color: var(--accent-text);
+  -webkit-text-fill-color: currentcolor;
+}
+
+html .rp-button {
+  border-radius: 9px;
+}
+
+/* White on the raw accent is 3.7:1, so buttons use the darker accent (5.2:1). */
+html .rp-button--brand {
+  background: var(--accent-hover);
+  color: var(--on-accent);
+}
+
+html .rp-button--brand:hover {
+  background: color-mix(in srgb, var(--accent-hover) 85%, #000);
+  opacity: 1;
+}
+
+html .rp-button--alt {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+html .rp-home-feature__card {
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  box-shadow: var(--shadow-sm);
+}
+
+html .rp-home-feature__item__shine {
+  display: none;
+}
+
+/* ══════════ LIVE DEMO (docs/components/LiveDemo.tsx) ══════════ */
+.vdnd-live-demo {
+  margin: 24px 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.vdnd-live-demo__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.vdnd-live-demo__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.vdnd-live-demo__open {
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+.vdnd-live-demo__frame {
+  display: block;
+  width: 100%;
+  border: 0;
+}

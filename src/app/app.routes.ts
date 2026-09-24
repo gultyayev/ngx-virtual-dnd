@@ -21,4 +21,9 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./mid-drag-mount-demo/mid-drag-mount-demo').then((m) => m.MidDragMountDemoComponent),
   },
+  {
+    path: 'examples',
+    loadComponent: () => import('./examples/examples-shell').then((m) => m.ExamplesShellComponent),
+    loadChildren: () => import('./examples/examples.routes').then((m) => m.EXAMPLE_ROUTES),
+  },
 ];

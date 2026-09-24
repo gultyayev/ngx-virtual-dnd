@@ -1,0 +1,41 @@
+---
+title: Installation
+description: Install ngx-virtual-dnd and check the requirements.
+---
+
+import { PackageManagerTabs } from '@rspress/core/theme';
+
+# Installation
+
+<PackageManagerTabs command="install ngx-virtual-dnd" />
+
+## Requirements
+
+| Requirement       | Version                                 |
+| ----------------- | --------------------------------------- |
+| `@angular/core`   | `^21.0.0 \|\| ^22.0.0`                  |
+| `@angular/common` | `^21.0.0 \|\| ^22.0.0`                  |
+| Browsers          | Latest Chrome, Edge, Firefox and Safari |
+
+Its only runtime dependency is `tslib`.
+
+## Imports
+
+Every component, directive, utility and type is exported from the package root. They are all standalone, so you import them directly in the component that uses them:
+
+```ts
+import {
+  DraggableDirective,
+  DragPreviewComponent,
+  DropEvent,
+  DroppableGroupDirective,
+  moveItem,
+  VirtualSortableListComponent,
+} from 'ngx-virtual-dnd';
+```
+
+There are no providers to register and no global stylesheet to include. The one optional token, `VDND_ANIMATION_CONFIG`, turns on [shift animations](/guide/features/animations). The library only sets the layout styles that virtual scrolling needs. How items, lists and the drop placeholder look is up to your app. See [Styling](/guide/features/styling) for the CSS classes the library adds.
+
+## Next
+
+Build your first list in the [Quick start](/guide/start/quick-start).

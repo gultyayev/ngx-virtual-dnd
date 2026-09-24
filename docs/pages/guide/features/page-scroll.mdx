@@ -1,0 +1,103 @@
+---
+title: Page-level scrolling
+description: Virtual lists that scroll with the page or an Ionic ion-content, with headers and footers.
+---
+
+# Page-level scrolling
+
+Sometimes the list is not its own scroll box: it scrolls together with a page header, other content and a footer. Mark the element that actually scrolls with `vdndScrollable`, and render items with `<vdnd-virtual-content>` and `*vdndVirtualFor`.
+
+```ts
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import {
+  ContentHeaderDirective,
+  DraggableDirective,
+  DragPreviewComponent,
+  DropEvent,
+  DroppableDirective,
+  DroppableGroupDirective,
+  reorderItems,
+  ScrollableDirective,
+  VirtualContentComponent,
+  VirtualForDirective,
+} from 'ngx-virtual-dnd';
+
+interface Task {
+  id: string;
+  title: string;
+}
+
+@Component({
+  selector: 'app-task-page',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    ScrollableDirective,
+    VirtualContentComponent,
+    VirtualForDirective,
+    ContentHeaderDirective,
+    DraggableDirective,
+    DroppableDirective,
+    DroppableGroupDirective,
+    DragPreviewComponent,
+  ],
+  template: `
+    <!-- The element that scrolls: it needs overflow and a height -->
+    <div class="page" vdndScrollable>
+      <div vdndGroup="tasks">
+        <vdnd-virtual-content [itemHeight]="72" vdndDroppable="tasks" (drop)="onDrop($event)">
+          <!-- Measured automatically and scrolls with the list -->
+          <h1 vdndContentHeader>Today</h1>
+
+          <ng-container *vdndVirtualFor="let task of tasks(); trackBy: trackById">
+            <div class="task" [vdndDraggable]="task.id">{{ task.title }}</div>
+          </ng-container>
+        </vdnd-virtual-content>
+      </div>
+
+      <footer>Regular content after the list</footer>
+    </div>
+
+    <vdnd-drag-preview />
+  `,
+  styles: `
+    .page {
+      height: 100vh;
+      overflow: auto;
+    }
+  `,
+})
+export class TaskPageComponent {
+  readonly tasks = signal<Task[]>([]);
+  readonly trackById = (_index: number, task: Task): string => task.id;
+
+  onDrop(event: DropEvent): void {
+    reorderItems(event, this.tasks);
+  }
+}
+```
+
+- `<vdnd-virtual-content>` must be inside the `vdndScrollable` element, and that element must be the one that scrolls.
+- Inside `<vdnd-virtual-content>`, `*vdndVirtualFor` inherits `itemHeight` and `dynamicItemHeight` from it, and the droppable ID from the enclosing `vdndDroppable`. Only `trackBy` is required.
+- `vdndContentHeader` marks a header inside the component. Its height is measured and used as the list's top offset. If the header lives outside the component, pass its height with `[contentOffset]` instead.
+- Auto-scroll uses the `vdndScrollable` element, so dragging near the top or bottom of the page scrolls it.
+
+## Ionic
+
+`<ion-content>` scrolls an element inside its shadow DOM, so `vdndScrollable` cannot go on `ion-content` itself. Turn off its scrolling and add a scroll host in the light DOM:
+
+```angular-html
+<ion-content [scrollY]="false">
+  <div class="ion-content-scroll-host" vdndScrollable>
+    <!-- vdndGroup, vdnd-virtual-content, footer... -->
+  </div>
+</ion-content>
+```
+
+```css
+.ion-content-scroll-host {
+  height: 100%;
+  overflow-y: auto;
+}
+```
+
+The [page scroll demo](https://gultyayev.github.io/ngx-virtual-dnd/demo/page-scroll) is a complete Ionic task manager built this way.

@@ -1,0 +1,171 @@
+/*
+ * ngx-virtual-dnd Design System
+ * CSS Custom Properties — synced with gultyayev/ngx-virtual-dnd@master src/styles.scss
+ * Teal accent, light + dark themes. Legacy --color-* names kept, remapped to the new values.
+ *
+ * This is the design-system export, kept for reference and throwaway prototypes.
+ * Production code in this repo imports `src/styles/tokens.css` instead.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root, [data-theme='light'] {
+  /* Accent */
+  --accent: #0e9488;
+  --accent-hover: #0b7a70;
+  --on-accent: #fff;
+  --accent-soft: color-mix(in srgb, var(--accent) 11%, #fff);
+  --accent-soft-bd: color-mix(in srgb, var(--accent) 30%, #fff);
+  --accent-text: var(--accent-hover);
+  --accent-ring: color-mix(in srgb, var(--accent) 26%, transparent);
+
+  /* Surfaces & ink */
+  --bg: #eef1f6;
+  --bg-sunk: #e5eaf2;
+  --surface: #ffffff;
+  --surface-2: #eef2f8;
+  --field-bg: #f6f8fc;
+  --border: #e2e7f0;
+  --border-2: #ccd4e0;
+  --ink: #18202f;
+  --ink-2: #5a6474;
+  --ink-3: #8b94a3;
+  --topbar-bg: color-mix(in srgb, #fff 80%, transparent);
+
+  /* Semantic */
+  --live: #22c55e;
+  --danger: #dc2626;
+  --danger-soft: #fdecec;
+  --danger-text: #c62f2f;
+  --cat-personal-soft: #ecebfd;
+  --cat-personal-text: #5b52c9;
+
+  /* Code tokens (debug panel) */
+  --c-str: #3f8f66;
+  --c-num: #c07d1f;
+  --c-bool: #8f5cd6;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(20, 28, 46, 0.06);
+  --shadow: 0 2px 8px -2px rgba(20, 28, 46, 0.12), 0 1px 2px rgba(20, 28, 46, 0.05);
+  --shadow-lg: 0 18px 40px -18px rgba(20, 28, 46, 0.3);
+
+  /* Legacy aliases */
+  --color-primary: var(--accent);
+  --color-primary-hover: var(--accent-hover);
+  --color-primary-light: var(--accent-soft);
+  --color-accent: var(--accent);
+  --color-success: var(--live);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-border-hover: var(--border-2);
+  --color-text: var(--ink);
+  --color-text-muted: var(--ink-2);
+  --color-text-subtle: var(--ink-3);
+  --shadow-drag: var(--shadow-lg);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0e131e;
+  --bg-sunk: #090d16;
+  --surface: #161d2c;
+  --surface-2: #1e2637;
+  --field-bg: #0d1220;
+  --border: #262f42;
+  --border-2: #354056;
+  --ink: #eaeef7;
+  --ink-2: #98a2b5;
+  --ink-3: #697488;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 3px 10px -2px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 20px 46px -16px rgba(0, 0, 0, 0.7);
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, #161d2c);
+  --accent-soft-bd: color-mix(in srgb, var(--accent) 45%, #161d2c);
+  --accent-text: color-mix(in srgb, var(--accent) 52%, #fff);
+  --accent-ring: color-mix(in srgb, var(--accent) 42%, transparent);
+  --topbar-bg: color-mix(in srgb, #10151f 78%, transparent);
+  --c-str: #5cba8a;
+  --c-num: #d69a4a;
+  --c-bool: #a983e8;
+  --danger: #f87171;
+  --danger-soft: color-mix(in srgb, #ef4444 24%, #161d2c);
+  --danger-text: #f2a2a2;
+  --cat-personal-soft: color-mix(in srgb, #6f66e8 26%, #161d2c);
+  --cat-personal-text: #b7b0f2;
+}
+
+/* ══════════ CODE BLOCKS ══════════ */
+/* Theme-independent: code blocks are dark in both themes (docs site). All foregrounds
+   are at least 6:1 against --code-bg. */
+:root {
+  --code-bg: #0e131e;
+  --code-title-bg: #161d2c;
+  --code-border: #262f42;
+  --code-fg: #eaeef7;
+  --code-muted: #98a2b5;
+  --code-comment: #8b94a3;
+  --code-keyword: #5ecfc3;
+  --code-string: #5cba8a;
+  --code-number: #d69a4a;
+  --code-function: #a983e8;
+  --code-deleted: #f87171;
+  --code-highlight: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+[data-density='comfortable'] { --row-h: 50px; --row-pad: 16px; --row-fs: 14.5px; --tm-pad: 16px; }
+[data-density='compact'] { --row-h: 38px; --row-pad: 13px; --row-fs: 13.5px; --tm-pad: 11px; }
+
+:root {
+  /* Type */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-2xs: 10.5px;  /* tags, VIRTUAL label */
+  --text-xs: 11px;     /* set-label (uppercase) */
+  --text-sm: 12px;     /* hints, field labels */
+  --text-ui: 13px;     /* nav tabs, chips, seg buttons */
+  --text-body: 13.5px; /* descriptions, buttons */
+  --text-base: 15px;   /* panel/list titles, wordmark */
+  --text-hero-sub: 15px;
+  --text-tm-title: 28px;
+  --text-hero: 30px;
+  --font-normal: 400; --font-medium: 500; --font-semibold: 600; --font-bold: 700;
+  --tracking-tight: -0.025em; /* hero / page titles */
+  --tracking-snug: -0.01em;   /* panel titles */
+  --tracking-wordmark: -0.02em;
+  --tracking-label: 0.07em;   /* uppercase set-labels */
+  --code-size: 11px;
+
+  /* Spacing (4px base; demo also uses 3/6/9/13/14/18/22px steps) */
+  --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px; --space-2xl: 48px;
+
+  /* Radii */
+  --radius-xs: 5px;    /* inline code */
+  --radius-sm: 6px;    /* tags, checkboxes */
+  --radius: 9px;       /* buttons, inputs, nav tabs, icon tiles */
+  --radius-md: 10px;   /* list items, segmented */
+  --radius-lg: 12px;   /* list body, drag preview */
+  --radius-panel: 15px;/* panels, list cards */
+  --radius-xl: 16px;   /* task list */
+  --radius-pill: 999px;
+
+  /* Layout */
+  --content-width: 1160px;
+  --topbar-h: 60px;
+
+  --transition: 150ms ease; /* @kind other */
+  --ease-emph: cubic-bezier(0.3, 0.7, 0.4, 1); /* @kind other */
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body { font-family: var(--font-sans); font-size: 1rem; line-height: 1.5; background: var(--bg); color: var(--ink); }
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+code { font-family: var(--font-mono); font-size: var(--code-size); background: var(--bg-sunk); padding: 1px 5px; border-radius: var(--radius-xs); color: var(--ink-2); }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }

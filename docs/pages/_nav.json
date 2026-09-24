@@ -1,0 +1,6 @@
+[
+  { "text": "Guide", "link": "/guide/start/introduction", "activeMatch": "^/guide/" },
+  { "text": "API", "link": "/api/components", "activeMatch": "^/api/" },
+  { "text": "Changelog", "link": "/changelog", "activeMatch": "^/changelog" },
+  { "text": "Demo", "link": "https://gultyayev.github.io/ngx-virtual-dnd/demo/" }
+]

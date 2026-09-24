@@ -1,0 +1,74 @@
+---
+title: Choosing a component
+description: Pick between the sortable list, the low-level scroller, page-level scrolling and the virtual viewport.
+---
+
+# Choosing a component
+
+The first three options support dynamic heights, pointer auto-scroll and moving items between lists. They differ in how much markup you control and in which element scrolls. Only `<vdnd-sortable-list>` and `<vdnd-virtual-scroll>` scroll to follow a keyboard drag.
+
+| You want                                                         | Use                                                                |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------ |
+| A sortable list with the least code                              | [`<vdnd-sortable-list>`](#sortable-list)                           |
+| Your own markup around the scroller, or programmatic scrolling   | [`vdndDroppable` + `<vdnd-virtual-scroll>`](#low-level-scroller)   |
+| A list that scrolls with the page, or inside Ionic `ion-content` | [`vdndScrollable` + `<vdnd-virtual-content>`](#page-level-scroll)  |
+| A self-scrolling building block for a structural directive       | [`<vdnd-virtual-viewport>` + `*vdndVirtualFor`](#virtual-viewport) |
+
+## Sortable list
+
+The default. One element combines the droppable, the virtual scroller and the placeholder. It also keeps the dragged item rendered while it is scrolled out of view. See the [Quick start](/guide/start/quick-start).
+
+```angular-html
+<vdnd-sortable-list
+  droppableId="tasks"
+  [items]="tasks()"
+  [itemHeight]="48"
+  [containerHeight]="400"
+  [itemIdFn]="taskId"
+  [itemTemplate]="taskTpl"
+  (drop)="onDrop($event)"
+/>
+```
+
+## Low-level scroller
+
+Put `vdndDroppable` on your own element and place `<vdnd-virtual-scroll>` inside it. Use this when you need a wrapper with its own layout, the `stickyItemIds` input, or the scrolling methods (`scrollTo`, `scrollToIndex`, `scrollBy`).
+
+```angular-html
+<div vdndGroup="tasks">
+  <ng-template #taskTpl let-task>
+    <div class="row" [vdndDraggable]="task.id">{{ task.title }}</div>
+  </ng-template>
+
+  <div class="panel" vdndDroppable="tasks" (drop)="onDrop($event)">
+    <vdnd-virtual-scroll
+      droppableId="tasks"
+      [items]="tasks()"
+      [itemHeight]="48"
+      [containerHeight]="400"
+      [itemIdFn]="taskId"
+      [itemTemplate]="taskTpl"
+    />
+  </div>
+</div>
+```
+
+Pass the same ID to `vdndDroppable` and to `droppableId` on `<vdnd-virtual-scroll>`. The scroller needs it to show the placeholder. To scroll from code, get the component with `viewChild(VirtualScrollContainerComponent)`.
+
+## Page-level scroll
+
+When the list scrolls together with the page, headers and footers, the scroll container is an element you own. Mark it with `vdndScrollable` and render items with `<vdnd-virtual-content>` and `*vdndVirtualFor`. See [Page-level scrolling](/guide/features/page-scroll).
+
+## Virtual viewport
+
+`<vdnd-virtual-viewport>` is a lower-level building block: a self-scrolling container for `*vdndVirtualFor` that positions all rows with a single transform. Children inherit `itemHeight` and `dynamicItemHeight` from it.
+
+```angular-html
+<vdnd-virtual-viewport class="viewport" [itemHeight]="48">
+  <ng-container *vdndVirtualFor="let task of tasks(); trackBy: trackById">
+    <div class="row">{{ task.title }}</div>
+  </ng-container>
+</vdnd-virtual-viewport>
+```
+
+Give the viewport a height with CSS (for example `.viewport { height: 400px; }`). For drag and drop, prefer `<vdnd-sortable-list>` or the low-level scroller. They are the tested paths, and they scroll to follow keyboard drags.

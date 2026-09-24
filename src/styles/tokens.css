@@ -1,0 +1,132 @@
+/*
+ * ngx-virtual-dnd design tokens — single source of truth for the demo app
+ * (imported by src/styles.scss) and the docs site (imported by docs/theme/index.css).
+ * Mirrors the "ngx-virtual-dnd Design System" (see .claude/skills/ngx-virtual-dnd-design).
+ *
+ * Theme selectors:
+ * - Light is the default (`:root`); the demo also sets `[data-theme='light']`.
+ * - Dark applies under `[data-theme='dark']` (demo) or `html.dark` (Rspress docs).
+ * - `[data-scheme='porcelain']` and `[data-density]` are demo-only refinements.
+ */
+/* ══════════ FONT FAMILIES ══════════ */
+:root {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ══════════ THEME TOKENS ══════════ */
+:root {
+  --accent: #0e9488;
+  --accent-hover: #0b7a70;
+  --on-accent: #fff;
+}
+
+:root,
+[data-theme='light'] {
+  --bg: #eef1f6;
+  --bg-sunk: #e5eaf2;
+  --surface: #ffffff;
+  --surface-2: #eef2f8;
+  --field-bg: #f6f8fc;
+  --border: #e2e7f0;
+  --border-2: #ccd4e0;
+  --ink: #18202f;
+  --ink-2: #5a6474;
+  --ink-3: #8b94a3;
+  --shadow-sm: 0 1px 2px rgba(20, 28, 46, 0.06);
+  --shadow: 0 2px 8px -2px rgba(20, 28, 46, 0.12), 0 1px 2px rgba(20, 28, 46, 0.05);
+  --shadow-lg: 0 18px 40px -18px rgba(20, 28, 46, 0.3);
+  --accent-soft: color-mix(in srgb, var(--accent) 11%, #fff);
+  --accent-soft-bd: color-mix(in srgb, var(--accent) 30%, #fff);
+  --accent-text: var(--accent-hover);
+  --accent-ring: color-mix(in srgb, var(--accent) 26%, transparent);
+  --topbar-bg: color-mix(in srgb, #fff 80%, transparent);
+  --c-str: #3f8f66;
+  --c-num: #c07d1f;
+  --c-bool: #8f5cd6;
+  --danger: #dc2626;
+  --danger-soft: #fdecec;
+  --danger-text: #c62f2f;
+  --cat-personal-soft: #ecebfd;
+  --cat-personal-text: #5b52c9;
+}
+
+/* Fixed light scheme (Porcelain). */
+[data-theme='light'][data-scheme='porcelain'] {
+  --bg: #fbfcfe;
+  --bg-sunk: #eef2f8;
+  --surface: #ffffff;
+  --surface-2: #f4f7fc;
+  --field-bg: #f7fafd;
+  --border: #e6ebf2;
+  --border-2: #d3dbe6;
+  --ink: #0e1826;
+  --ink-2: #586479;
+  --ink-3: #8a95a6;
+  --shadow-sm: 0 1px 2px rgba(15, 25, 45, 0.05);
+  --shadow: 0 4px 14px -4px rgba(15, 25, 45, 0.14), 0 1px 3px rgba(15, 25, 45, 0.06);
+  --shadow-lg: 0 22px 48px -18px rgba(15, 25, 45, 0.28);
+  --topbar-bg: color-mix(in srgb, #fff 78%, transparent);
+}
+
+[data-theme='dark'],
+html.dark {
+  color-scheme: dark;
+  --bg: #0e131e;
+  --bg-sunk: #090d16;
+  --surface: #161d2c;
+  --surface-2: #1e2637;
+  --field-bg: #0d1220;
+  --border: #262f42;
+  --border-2: #354056;
+  --ink: #eaeef7;
+  --ink-2: #98a2b5;
+  --ink-3: #697488;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 3px 10px -2px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 20px 46px -16px rgba(0, 0, 0, 0.7);
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, #161d2c);
+  --accent-soft-bd: color-mix(in srgb, var(--accent) 45%, #161d2c);
+  --accent-text: color-mix(in srgb, var(--accent) 52%, #fff);
+  --accent-ring: color-mix(in srgb, var(--accent) 42%, transparent);
+  --topbar-bg: color-mix(in srgb, #10151f 78%, transparent);
+  --c-str: #5cba8a;
+  --c-num: #d69a4a;
+  --c-bool: #a983e8;
+  --danger: #f87171;
+  --danger-soft: color-mix(in srgb, #ef4444 24%, #161d2c);
+  --danger-text: #f2a2a2;
+  --cat-personal-soft: color-mix(in srgb, #6f66e8 26%, #161d2c);
+  --cat-personal-text: #b7b0f2;
+}
+
+[data-density='comfortable'] {
+  --row-h: 50px;
+  --row-pad: 16px;
+  --row-fs: 14.5px;
+  --tm-pad: 16px;
+}
+[data-density='compact'] {
+  --row-h: 38px;
+  --row-pad: 13px;
+  --row-fs: 13.5px;
+  --tm-pad: 11px;
+}
+
+/* ══════════ CODE BLOCKS ══════════ */
+/* Theme-independent: code blocks are dark in both themes (docs site). All foregrounds
+   are at least 6:1 against --code-bg. */
+:root {
+  --code-bg: #0e131e;
+  --code-title-bg: #161d2c;
+  --code-border: #262f42;
+  --code-fg: #eaeef7;
+  --code-muted: #98a2b5;
+  --code-comment: #8b94a3;
+  --code-keyword: #5ecfc3;
+  --code-string: #5cba8a;
+  --code-number: #d69a4a;
+  --code-function: #a983e8;
+  --code-deleted: #f87171;
+  --code-highlight: color-mix(in srgb, var(--accent) 18%, transparent);
+}

@@ -1,0 +1,6 @@
+[
+  { "type": "dir-section-header", "name": "start", "label": "Getting started" },
+  { "type": "dir-section-header", "name": "essentials", "label": "Essentials" },
+  { "type": "dir-section-header", "name": "features", "label": "Features" },
+  { "type": "dir-section-header", "name": "more", "label": "More" }
+]

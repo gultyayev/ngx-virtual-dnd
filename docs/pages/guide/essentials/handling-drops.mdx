@@ -1,0 +1,104 @@
+---
+title: Handling drops
+description: The drop event, the helper functions for signals and immutable state, and drag lifecycle events.
+---
+
+# Handling drops
+
+The library never mutates your data. When an item is dropped, the destination droppable emits a `DropEvent`, and you apply the move.
+
+## The drop event
+
+```ts
+interface DropEvent {
+  source: {
+    draggableId: string;
+    droppableId: string;
+    index: number; // where the item was
+    data?: unknown; // vdndDraggableData
+  };
+  destination: {
+    droppableId: string;
+    placeholderId: string; // ID of the item the placeholder sat before, or END_OF_LIST
+    index: number; // where the item goes, after it is removed from the source
+    data?: unknown; // vdndDroppableData (droppableData on vdnd-sortable-list)
+  };
+}
+```
+
+`destination.index` is the insertion index **after** the item is removed from its source. "Remove at `source.index`, then insert at `destination.index`" is always correct, whether the move stays in one list or crosses lists.
+
+With virtual scrolling most items are not in the DOM, so always work from the event's indexes, never from DOM order.
+
+## Helpers
+
+| Function                      | Use when                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| `moveItem(event, lists)`      | Your lists are `WritableSignal<T[]>`. Works within one list and across lists.  |
+| `reorderItems(event, list)`   | A single signal-based list. Reorders only.                                     |
+| `applyMove(event, lists)`     | Immutable state (a store, a service). Takes plain arrays and returns new ones. |
+| `isNoOpDrop(event)`           | `true` when the item was dropped back where it started.                        |
+| `insertAt(list, item, index)` | Returns a new array with the item inserted.                                    |
+| `removeAt(list, index)`       | Returns a new array without the item at `index`.                               |
+
+### Signals
+
+```ts
+onDrop(event: DropEvent): void {
+  moveItem(event, { todo: this.todo, done: this.done });
+}
+```
+
+### Stores and immutable state
+
+```ts
+onDrop(event: DropEvent): void {
+  if (isNoOpDrop(event)) return;
+
+  const lists = applyMove(event, {
+    todo: this.store.todo(),
+    done: this.store.done(),
+  });
+  this.store.setLists(lists);
+}
+```
+
+`applyMove()` returns a shallow copy of the record, with new arrays for the lists that changed.
+
+### Saving to a server
+
+Apply the move straight away and roll back if the request fails:
+
+```ts
+onDrop(event: DropEvent): void {
+  if (isNoOpDrop(event)) return;
+
+  const previous = { todo: this.todo(), done: this.done() };
+  moveItem(event, { todo: this.todo, done: this.done });
+
+  this.api
+    .moveTask(event.source.draggableId, event.destination.droppableId, event.destination.index)
+    .subscribe({
+      error: () => {
+        this.todo.set(previous.todo);
+        this.done.set(previous.done);
+      },
+    });
+}
+```
+
+## Drag lifecycle events
+
+Draggables also emit `(dragStart)` and `(dragEnd)`:
+
+```angular-html
+<div [vdndDraggable]="task.id" (dragStart)="onDragStart($event)" (dragEnd)="onDragEnd($event)">
+  {{ task.title }}
+</div>
+```
+
+`(dragEnd)` fires after every drag, dropped or not. `DragEndEvent.destinationIndex` is `null` when nothing was dropped: the drag was cancelled (<kbd>Escape</kbd>, or <kbd>Tab</kbd> during a keyboard drag), it was released outside every droppable, or it was released over a disabled droppable. Check `destinationIndex === null` to detect "no drop". `cancelled` is `true` only for an explicit cancel, so it misses the other two cases.
+
+During a drag, droppables and `<vdnd-sortable-list>` emit `(placeholderMove)` each time the placeholder moves within them. Use it for per-step feedback such as haptics. See [Animations and haptics](/guide/features/animations#placeholder-move-events).
+
+To react to drags anywhere in the app, for example to show a hint, inject `DragStateService` and read its signals, such as `isDragging()` and `activeDroppableId()`. See the [API reference](/api/services).

@@ -1,0 +1,57 @@
+---
+title: Preview and placeholder
+description: Customize the element that follows the pointer and the drop-position placeholder.
+---
+
+# Preview and placeholder
+
+During a drag the original element is hidden. Two elements take its place:
+
+- the **preview**, which follows the pointer
+- the **placeholder**, an empty slot that marks where the item will land
+
+## Default preview
+
+`<vdnd-drag-preview />` clones the dragged element, copies its computed styles and sizes the clone to match the original. The point where the user grabbed the item stays under the pointer.
+
+## Custom preview
+
+Pass a template to render your own preview instead of a clone:
+
+```angular-html
+<ng-template #preview let-task let-droppableId="droppableId">
+  <div class="preview-card">Moving {{ task.title }}</div>
+</ng-template>
+
+<vdnd-drag-preview [previewTemplate]="preview" />
+```
+
+The template context:
+
+| Variable      | Value                                                   |
+| ------------- | ------------------------------------------------------- |
+| `$implicit`   | The draggable's `vdndDraggableData` (`null` if not set) |
+| `draggableId` | ID of the dragged item                                  |
+| `droppableId` | ID of the droppable the drag started in                 |
+
+Set `[vdndDraggableData]="task"` on the draggable so the template receives the item.
+
+:::warning The preview lives under `<body>`
+The preview is moved into a `div.vdnd-overlay-container` at the end of `<body>`. This escapes ancestor `transform`, `filter` and `perspective` styles, which would otherwise break `position: fixed` (Ionic's `ion-page` is one example). Your component's styles still apply to elements in the preview template. But selectors that depend on ancestors, such as `.board .card`, no longer match. Style the preview by its own classes.
+:::
+
+`cursorOffset` (default `{ x: 8, y: 8 }`) is only a fallback for when the grab point is unknown. Drags started by the library always know it.
+
+## Placeholder
+
+Lists render the placeholder at the drop position, sized to the dragged item. It is an empty element with the classes `vdnd-drag-placeholder` and `vdnd-drag-placeholder-visible`. Style it globally:
+
+```css
+.vdnd-drag-placeholder {
+  box-sizing: border-box;
+  border: 2px dashed #9aa4b2;
+  border-radius: 8px;
+}
+```
+
+`<vdnd-placeholder>` (`PlaceholderComponent`) is a separate indicator that accepts a custom template and that you render yourself. The built-in lists do not use it.

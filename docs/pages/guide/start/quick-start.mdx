@@ -1,0 +1,37 @@
+---
+title: Quick start
+description: Build a sortable, virtually scrolled list with VirtualSortableListComponent.
+---
+
+# Quick start
+
+This page builds a sortable list of 1,000 tasks. `<vdnd-sortable-list>` combines the drop target, the virtual scroller and the drop placeholder, so it is the right starting point for most apps.
+
+<LiveDemo example="quick-start" title="Sortable list with 1,000 items" height={370} />
+
+## The code
+
+```ts file="<root>/src/app/examples/quick-start/quick-start.ts"
+
+```
+
+The `row` and `list` classes, and the dashed drop placeholder in the example, come from the demo app's own styles. The library does not style items; see [Styling](/guide/features/styling) for the classes to target.
+
+## What each part does
+
+1. **`vdndGroup="tasks"`** names the group that draggables and drop targets belong to. Items can only move between drop targets in the same group. A group is required even for a single list; without one, dragging is disabled.
+2. **The item template** is declared _inside_ the `vdndGroup` element. Angular templates resolve dependency injection where they are declared, so this is how each draggable finds its group.
+3. **`[vdndDraggable]="task.id"`** makes each row draggable. The ID must equal what `itemIdFn` returns for that item, and it must sit on the template's root element.
+4. **`<vdnd-sortable-list>`** renders the visible rows. `itemHeight` is the row height in pixels and `containerHeight` is the height of the scroll area.
+5. **`(drop)`** fires when an item is dropped. The library never changes your data. `reorderItems()` applies the move to the `tasks` signal.
+6. **`<vdnd-drag-preview />`** renders the element that follows the pointer. Place it once, anywhere in the template.
+
+:::tip Keyboard support is built in
+Every draggable can be focused with <kbd>Tab</kbd>. <kbd>Space</kbd> picks it up, the arrow keys move it, and <kbd>Space</kbd> or <kbd>Enter</kbd> drops it. See [Accessibility](/guide/more/accessibility).
+:::
+
+## Next steps
+
+- [Core concepts](/guide/essentials/core-concepts): what groups, draggables and droppables are, and the rules that keep them working
+- [Multiple lists](/guide/essentials/multiple-lists): move items between lists
+- [Choosing a component](/guide/essentials/choosing-a-component): when to use something other than `<vdnd-sortable-list>`
