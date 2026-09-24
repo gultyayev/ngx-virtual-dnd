@@ -22,7 +22,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   // Keep local runs single-shot so flakes are visible; CI still retries for browser variance.
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // GitHub runners have 4 vCPUs: two workers (one browser each) halve the wall time, while more
+  // workers starve the time-based autoscroll tests of frames.
+  workers: process.env.CI ? 2 : undefined,
   reporter: [['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:4200',
@@ -63,8 +65,14 @@ export default defineConfig({
       testMatch: /.*\.mobile\.spec\.ts/,
     },
   ],
+  // CI serves the production build from the build job's artifact: its optimized bundles load
+  // ~2x faster than the dev server's, and every test starts with a page load. Local runs keep
+  // `ng serve` (live library rebuilds, Angular dev-mode checks). To reproduce CI locally:
+  // `npm run build:lib && npm run build && CI=1 npx playwright test`.
   webServer: {
-    command: 'npm start -- --host 127.0.0.1 --port 4200',
+    command: process.env.CI
+      ? 'node scripts/serve-dist.js'
+      : 'npm start -- --host 127.0.0.1 --port 4200',
     url: 'http://127.0.0.1:4200',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,

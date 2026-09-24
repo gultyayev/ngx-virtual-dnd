@@ -413,4 +413,11 @@ npx playwright test --reporter=dot --max-failures=1 --project=chromium
 
 # All browsers (required before done)
 npx playwright test --reporter=dot --max-failures=1
+
+# Reproduce CI: production build served by scripts/serve-dist.js, 2 workers, retries
+npm run build:lib && npm run build && CI=1 npx playwright test --reporter=dot
 ```
+
+Local runs use `ng serve` (dev mode keeps Angular's dev-only checks such as
+`ExpressionChangedAfterItHasBeenChecked`). CI serves the production build from the
+build job's artifact instead, because every test starts with a page load.

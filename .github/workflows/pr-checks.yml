@@ -67,14 +67,16 @@ jobs:
       - name: Build Angular Library
         run: npm run build:lib
 
-      # Built with the GitHub Pages base href so the assemble step below can reuse it.
+      # Built with the GitHub Pages base href so the assemble step below can reuse it. The E2E
+      # jobs serve this same production build (scripts/serve-dist.js swaps the base href).
       - name: Build Angular App
         run: npm run build:demo:pages
 
       - name: Run unit tests
         run: npm test -- --silent
 
-      # Share the built library so E2E jobs can serve the demo without rebuilding it 5x.
+      # Share the built library and demo so E2E jobs serve the production demo without
+      # rebuilding it 5x.
       - name: Upload built library
         uses: actions/upload-artifact@v4
         with:
@@ -82,8 +84,9 @@ jobs:
           path: dist/
           retention-days: 1
 
-      # After the upload so the E2E artifact stays library-only. docs:build type-checks the
-      # docs theme and fails on dead links; the assemble step validates the Pages layout.
+      # After the upload so the E2E artifact holds only the library and demo. docs:build
+      # type-checks the docs theme and fails on dead links; the assemble step validates the
+      # Pages layout.
       - name: Build docs site
         run: npm run docs:build
 
@@ -132,6 +135,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # playwright.config.ts serves dist/dnd/browser (production build) when CI is set.
       - name: Download built library
         uses: actions/download-artifact@v4
         with:
