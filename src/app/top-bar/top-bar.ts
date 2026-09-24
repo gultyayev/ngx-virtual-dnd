@@ -34,21 +34,22 @@ interface NavTab {
     <div class="topbar-in">
       <a class="brand" routerLink="/" aria-label="ngx-virtual-dnd home">
         <span class="brand-mark">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <rect x="3" y="3" width="7" height="7" rx="1.4" />
-            <rect x="14" y="3" width="7" height="7" rx="1.4" />
-            <rect x="3" y="14" width="7" height="7" rx="1.4" />
-            <rect x="14" y="14" width="7" height="7" rx="1.4" />
-            <path d="M10 7h4M7 10v4M17 10v4M10 17h4" stroke-dasharray="1.8 2.4" opacity="0.6" />
+          <!-- Viewport mark: rows inside a frame, faint virtual rows outside, one row dragged across the edge -->
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="5" y="1" width="14" height="2" rx="1" fill="currentColor" opacity="0.3" />
+            <rect x="5" y="8.75" width="14" height="2.5" rx="1.1" fill="currentColor" />
+            <rect x="8" y="12.75" width="14" height="2.5" rx="1.1" fill="currentColor" />
+            <rect x="5" y="21" width="14" height="2" rx="1" fill="currentColor" opacity="0.3" />
+            <rect
+              x="2"
+              y="5.5"
+              width="20"
+              height="13"
+              rx="3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
           </svg>
         </span>
         <span class="wordmark">ngx-virtual-dnd</span>
@@ -63,6 +64,7 @@ interface NavTab {
             >{{ tab.label }}</a
           >
         }
+        <a class="nav-tab" [href]="docsUrl">Docs</a>
       </nav>
       <button
         type="button"
@@ -182,6 +184,7 @@ interface NavTab {
               }
             </a>
           }
+          <a class="nav-sheet-item" [href]="docsUrl">Docs</a>
         </nav>
       </div>
     }
@@ -207,6 +210,9 @@ export class TopBarComponent {
     { label: 'Page scroll', link: '/page-scroll', exact: false },
     { label: 'Dynamic height', link: '/dynamic-height', exact: false },
   ];
+
+  /** Absolute so it resolves the same from any demo route and from local dev. */
+  protected readonly docsUrl = 'https://gultyayev.github.io/ngx-virtual-dnd/';
 
   constructor() {
     // Move the open sheet to <body>, out of any clipping/containing-block ancestor.
