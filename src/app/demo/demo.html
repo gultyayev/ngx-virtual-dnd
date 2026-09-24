@@ -307,6 +307,7 @@
                   type="button"
                   class="seg-btn"
                   [class.is-active]="!useSimplifiedApi()"
+                  [attr.aria-pressed]="!useSimplifiedApi()"
                   (click)="useSimplifiedApi.set(false)"
                 >
                   Verbose
@@ -315,6 +316,7 @@
                   type="button"
                   class="seg-btn"
                   [class.is-active]="useSimplifiedApi()"
+                  [attr.aria-pressed]="useSimplifiedApi()"
                   (click)="useSimplifiedApi.set(true)"
                   data-testid="simplified-api-checkbox"
                 >

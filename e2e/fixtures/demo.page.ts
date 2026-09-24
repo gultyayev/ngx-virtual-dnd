@@ -87,7 +87,11 @@ export class DemoPage {
    * `goto({ api: 'simplified' })` instead.
    */
   async enableSimplifiedApi(): Promise<void> {
-    await this.page.getByTestId('simplified-api-checkbox').click();
+    const simplifiedButton = this.page.getByTestId('simplified-api-checkbox');
+    await simplifiedButton.click();
+    // The old (verbose) lists satisfy every check below, so first wait for the render that swaps
+    // the trees: aria-pressed updates in the same change detection pass as the @if swap
+    await expect(simplifiedButton).toHaveAttribute('aria-pressed', 'true');
     // Wait for items to render in the new component tree
     await expect(this.list1Items.first()).toBeVisible();
     // The @if template swap destroys and recreates scroll containers.

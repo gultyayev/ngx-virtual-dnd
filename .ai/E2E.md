@@ -419,7 +419,15 @@ container computes its content height. `toBeVisible()` alone is insufficient.
 (`DemoPage.enableSimplifiedApi()` handles this; tests that merely need the simplified
 API start in it with `goto({ api: 'simplified' })`.)
 
-Verify functional readiness by checking `scrollHeight`:
+First wait for a signal that the swap rendered: the **old** tree satisfies every item and
+`scrollHeight` check, so under load those checks can pass before the swap happens. The
+demo's API toggle sets `aria-pressed`, which updates in the same render as the `@if`:
+
+```typescript
+await expect(simplifiedButton).toHaveAttribute('aria-pressed', 'true');
+```
+
+Then verify functional readiness by checking `scrollHeight`:
 
 ```typescript
 await expect(this.list1Items.first()).toBeVisible();
