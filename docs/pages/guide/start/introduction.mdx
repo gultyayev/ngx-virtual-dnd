@@ -1,0 +1,41 @@
+---
+title: Introduction
+description: What ngx-virtual-dnd is, the problem it solves, and when to use it.
+---
+
+# Introduction
+
+ngx-virtual-dnd is a drag-and-drop library for Angular, built for **virtually scrolled lists**. It renders only the rows in view plus a small buffer, so the DOM stays small however long the list grows. Drag and drop still works across the whole list.
+
+<LiveDemo example="quick-start" title="Sortable list with 1,000 items" height={370} />
+
+Try it: drag a row, or focus one with <kbd>Tab</kbd>, press <kbd>Space</kbd> and move it with the arrow keys. The list holds 1,000 tasks, but only about a dozen rows are in the DOM at any time.
+
+## Why a separate library
+
+Most drag-and-drop libraries work out the drop position by measuring sibling elements in the DOM. With virtual scrolling most siblings do not exist, so those libraries drop items in the wrong place, or cannot scroll to a target that has not been rendered yet.
+
+ngx-virtual-dnd works from geometry instead. At drag start it records the position and size of each drop target. While you drag, it compares the pointer with those recorded bounds and calculates the drop index from the scroll offset and row heights. See [How it works](/guide/more/how-it-works) for details.
+
+## Features
+
+- **Virtual scrolling** with fixed or [dynamic item heights](/guide/features/dynamic-heights)
+- **[Multiple lists](/guide/essentials/multiple-lists)** that exchange items within a group
+- **[Page-level scrolling](/guide/features/page-scroll)**, including Ionic `ion-content`
+- **[Auto-scroll](/guide/features/auto-scroll)** near container edges, with configurable speed and threshold
+- **[Drag handles, delays, axis locking and constraints](/guide/features/drag-behavior)**
+- **[Custom previews and placeholders](/guide/features/preview-and-placeholder)**
+- **[Keyboard and screen reader support](/guide/more/accessibility)**
+- **Angular 21+:** standalone components, signals, `OnPush`-friendly
+
+## When to use it
+
+Use ngx-virtual-dnd for **vertical lists**, such as sortable lists and kanban-style boards, especially when a list can grow to hundreds or thousands of items.
+
+It is not a general-purpose drag-and-drop toolkit. Freeform canvases, grids with 2D reordering and dragging files from the desktop are out of scope.
+
+## Next steps
+
+- [Install the package](/guide/start/installation)
+- [Build a sortable list](/guide/start/quick-start) in a few minutes
+- Using an AI coding assistant? [Install the agent skill](/guide/more/ai-assistants)

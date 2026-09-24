@@ -1,0 +1,49 @@
+---
+title: How it works
+description: Geometric hit-testing, virtual scroll math, and the resulting limitations.
+---
+
+# How it works
+
+## The problem
+
+Typical drag-and-drop libraries find the drop position by calling `getBoundingClientRect()` on sibling elements. A virtual list renders only the rows in view, so most siblings do not exist and that approach breaks.
+
+## Geometric hit-testing
+
+When a drag starts, ngx-virtual-dnd records the drop targets in the active group and their bounding rectangles. On each pointer move it compares the pointer position with those cached rectangles, instead of asking the browser which element is under the pointer. This avoids forcing a layout recalculation on every frame of the drag.
+
+The cache updates itself:
+
+- rectangles are re-read after scroll and resize, and when a target resizes (through `ResizeObserver`)
+- targets mounted or removed during the drag are added or dropped
+- each rectangle is clipped to its nearest `vdndScrollable` ancestor, so a list scrolled out of view inside a container cannot be hit
+
+When rectangles overlap, the last one in document order wins.
+
+## Placeholder math
+
+Once the target list is known, the drop index comes from arithmetic, not DOM queries:
+
+- The probe point is the dragged preview's center, capped at half an item below the preview's top edge, so tall items do not jump ahead of the pointer.
+- **Fixed heights:** the index is `floor((probeY - listTop + scrollTop) / itemHeight)`.
+- **Dynamic heights:** a binary search over prefix sums of measured heights finds the row under the probe. The placeholder only moves past that row once the preview's top edge crosses the row's midpoint, so a short item entering a tall row needs half of that row's height.
+
+While an item is dragged within its own list it is hidden with `display: none`, and the list's total height shrinks by one row. The index calculation adds the item back, so the logical position stays correct.
+
+## Rendering
+
+Pointer moves are coalesced into a single `requestAnimationFrame` loop that reads layout, computes the new state and then writes styles, in that order. Drag state lives in signals, so only the parts of the page that depend on it update. The loop and all high-frequency listeners run outside Angular's zone.
+
+## Known limitations
+
+Because hit-testing uses geometry rather than `elementFromPoint()`, some browser behavior is not reproduced:
+
+- **Overlays do not block drops.** A modal or toolbar painted over a droppable does not stop the droppable underneath from being hit.
+- **Stacking order is approximated.** "Last in document order wins" matches the paint order in most layouts. It does not follow `z-index` or stacking contexts, so a droppable earlier in the DOM but raised visually loses to a later sibling.
+
+If your layout depends on either, keep overlapping droppables in different groups, or avoid painting interactive overlays across active drop targets during a drag.
+
+## Browser support
+
+The latest versions of Chrome, Edge, Firefox and Safari, on desktop and mobile. Every change runs the end-to-end suite in Chromium, Firefox and WebKit, with mobile touch runs in Chromium and WebKit.

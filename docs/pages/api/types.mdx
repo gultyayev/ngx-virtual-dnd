@@ -1,0 +1,153 @@
+---
+title: Types, tokens and strategies
+description: Configuration types, template contexts, virtual scroll strategies, injection tokens and constants.
+---
+
+# Types, tokens and strategies
+
+## Configuration
+
+```ts
+interface AutoScrollConfig {
+  threshold: number; // distance from the edge that starts scrolling (px). Default 50
+  maxSpeed: number; // max speed in px per 60 fps frame. Default 15
+  accelerate: boolean; // faster closer to the edge. Default true
+}
+```
+
+## Template contexts
+
+```ts
+// <vdnd-sortable-list> / <vdnd-virtual-scroll> itemTemplate
+interface VirtualScrollItemContext<T> {
+  $implicit: T;
+  index: number;
+  isSticky: boolean;
+}
+
+// *vdndVirtualFor
+interface VirtualForContext<T> {
+  $implicit: T;
+  index: number;
+  first: boolean;
+  last: boolean;
+  count: number;
+}
+
+// <vdnd-drag-preview [previewTemplate]>
+interface DragPreviewContext<T = unknown> {
+  $implicit: T;
+  draggableId: string;
+  droppableId: string;
+}
+
+// <vdnd-placeholder [template]>
+interface PlaceholderContext {
+  $implicit: number; // height in px
+  height: number;
+}
+```
+
+## Drag state
+
+```ts
+interface DraggedItem {
+  draggableId: string;
+  droppableId: string;
+  element: HTMLElement;
+  clonedElement?: HTMLElement;
+  height: number;
+  width: number;
+  data?: unknown;
+}
+
+interface CursorPosition {
+  x: number;
+  y: number;
+}
+
+interface GrabOffset {
+  x: number;
+  y: number;
+}
+
+interface DragState {
+  isDragging: boolean;
+  draggedItem: DraggedItem | null;
+  sourceDroppableId: string | null;
+  sourceIndex: number | null;
+  activeDroppableId: string | null;
+  placeholderId: string | null;
+  placeholderIndex: number | null;
+  cursorPosition: CursorPosition | null;
+  grabOffset: GrabOffset | null;
+  initialPosition: CursorPosition | null;
+  lockAxis: 'x' | 'y' | null;
+  isKeyboardDrag: boolean;
+  keyboardTargetIndex: number | null;
+}
+```
+
+## Strategies
+
+Virtual scroll math is pluggable. The components pick a strategy from `dynamicItemHeight`, so you only need these to build your own container.
+
+```ts
+interface VirtualScrollStrategy {
+  readonly version: Signal<number>;
+  getTotalHeight(itemCount: number): number;
+  getFirstVisibleIndex(scrollTop: number): number;
+  getVisibleCount(startIndex: number, containerHeight: number): number;
+  getOffsetForIndex(index: number): number;
+  getItemHeight(index: number): number;
+  setMeasuredHeight(key: unknown, height: number): void;
+  setItemKeys(keys: unknown[]): void;
+  setExcludedIndex(index: number | null): void;
+  findIndexAtOffset(offset: number): number;
+  getItemCount(): number;
+}
+```
+
+| Class                   | Constructor                           | Behavior                                                           |
+| ----------------------- | ------------------------------------- | ------------------------------------------------------------------ |
+| `FixedHeightStrategy`   | `new FixedHeightStrategy(itemHeight)` | `index * itemHeight`; the default                                  |
+| `DynamicHeightStrategy` | `new DynamicHeightStrategy(estimate)` | Measured heights, prefix sums and binary search (O(log n) lookups) |
+
+## Injection tokens
+
+| Token                   | Provides              | Provided by                                                                  |
+| ----------------------- | --------------------- | ---------------------------------------------------------------------------- |
+| `VDND_SCROLL_CONTAINER` | `VdndScrollContainer` | `VirtualViewportComponent`, `VirtualContentComponent`, `ScrollableDirective` |
+| `VDND_VIRTUAL_VIEWPORT` | `VdndVirtualViewport` | `VirtualViewportComponent`, `VirtualContentComponent`                        |
+| `VDND_GROUP_TOKEN`      | `VdndGroupContext`    | `DroppableGroupDirective`                                                    |
+
+```ts
+interface VdndScrollContainer {
+  readonly nativeElement: HTMLElement;
+  scrollTop(): number;
+  containerHeight(): number;
+  scrollTo(options: ScrollToOptions): void;
+}
+
+interface VdndVirtualViewport {
+  scrollTop(): number;
+  containerHeight(): number;
+  itemHeight(): number;
+  contentOffset(): number;
+  readonly nativeElement: HTMLElement;
+  setRenderStartIndex(index: number): void;
+  getOffsetForIndex(index: number): number;
+  readonly strategy: VirtualScrollStrategy | null;
+}
+
+interface VdndGroupContext {
+  readonly group: Signal<string>;
+}
+```
+
+## Constants
+
+```ts
+const END_OF_LIST = 'END_OF_LIST'; // placeholderId when dropping at the end of a list
+const INITIAL_DRAG_STATE: DragState; // the idle state
+```

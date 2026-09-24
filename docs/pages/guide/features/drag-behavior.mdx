@@ -1,0 +1,85 @@
+---
+title: Drag behavior
+description: Drag handles, interactive children, threshold and delay, axis locking, container constraints and disabling.
+---
+
+# Drag behavior
+
+These inputs change when a drag starts and how it moves. All of them are optional.
+
+## Drag handles
+
+Set `dragHandle` to a CSS selector, and only presses inside a matching element start a drag. The rest of the row stays free for selecting text, clicking and so on.
+
+<LiveDemo example="drag-handle" title="List with drag handles" height={370} />
+
+```ts file="<root>/src/app/examples/drag-handle/drag-handle.ts"
+
+```
+
+Make the handle a non-interactive element such as a `<span>`. Presses inside buttons never start a drag, as the next section explains. Keyboard dragging is unaffected: the whole row stays focusable.
+
+## Interactive children
+
+Presses inside a `button`, `input`, `textarea`, `select` or `[contenteditable]` element never start a drag, so controls inside rows keep working. To exclude another element, add the `no-drag` class. It applies only to the exact element that is pressed, not to its children. Only the primary mouse button starts a drag.
+
+## Threshold and delay
+
+```angular-html
+<div [vdndDraggable]="task.id" [dragThreshold]="10" [dragDelay]="200">{{ task.title }}</div>
+```
+
+| Input           | Default | Effect                                                                                                                                                   |
+| --------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dragThreshold` | `5`     | How far (px) the pointer must move before the drag starts. Stops clicks from turning into drags.                                                         |
+| `dragDelay`     | `0`     | How long (ms) the pointer must be held first. Moving past the threshold before the delay ends cancels the drag attempt, so touch users can still scroll. |
+
+When the delay has passed, the element gets the `vdnd-drag-pending` class. Style it so users can see the item is ready to move:
+
+```css
+.vdnd-drag-pending {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+}
+```
+
+A delay of 150–250 ms works well on touch devices.
+
+## Axis locking
+
+```angular-html
+<div [vdndDraggable]="task.id" lockAxis="x">{{ task.title }}</div>
+```
+
+`lockAxis` names the axis that is **frozen**:
+
+- `'x'`: the X axis is frozen, so the item moves only vertically
+- `'y'`: the Y axis is frozen, so the item moves only horizontally
+
+:::warning Migrating from Angular CDK
+This is the opposite of CDK's `cdkDragLockAxis`, where `'x'` means the item moves along the X axis.
+:::
+
+## Constraining to the container
+
+```angular-html
+<vdnd-sortable-list [constrainToContainer]="true" ... />
+<!-- or -->
+<div vdndDroppable="tasks" [constrainToContainer]="true">...</div>
+```
+
+The preview cannot leave the container, and the drop position snaps to its edges. The container is the nearest `vdndScrollable` ancestor if there is one, and the droppable otherwise.
+
+## Disabling
+
+Every draggable, droppable and list accepts `disabled`:
+
+```angular-html
+<div [vdndDraggable]="task.id" [disabled]="task.locked">{{ task.title }}</div>
+
+<!-- Nothing can be dropped into this list -->
+<vdnd-sortable-list [disabled]="locked()" ... />
+```
+
+- A **disabled draggable** cannot be picked up. It gets `tabindex="-1"` and the `vdnd-draggable-disabled` class.
+- A **disabled droppable** (or `<vdnd-sortable-list>`) is skipped as a target. Its items can still be dragged out, so for a read-only list also disable the draggables in its item template. The pointer passes through to whatever enabled droppable is underneath, and keyboard left/right navigation skips it. Releasing over it emits no `(drop)`. `(dragEnd)` still fires with `destinationIndex: null`. It gets the `vdnd-droppable-disabled` class.

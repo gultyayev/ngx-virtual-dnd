@@ -1,0 +1,38 @@
+---
+title: Auto-scroll
+description: Edge scrolling while dragging, and how to tune or disable it.
+---
+
+# Auto-scroll
+
+While an item is dragged near the edge of a scrollable list, the list scrolls toward that edge. The closer the pointer is to the edge, the faster it scrolls. Auto-scroll is on by default.
+
+```angular-html
+<vdnd-sortable-list [autoScrollConfig]="{ threshold: 80, maxSpeed: 20 }" ... />
+```
+
+| Option       | Default | Meaning                                                  |
+| ------------ | ------- | -------------------------------------------------------- |
+| `threshold`  | `50`    | Distance from the edge, in px, at which scrolling starts |
+| `maxSpeed`   | `15`    | Maximum speed, in px per frame at 60 fps                 |
+| `accelerate` | `true`  | Scroll faster the closer the pointer is to the edge      |
+
+`autoScrollConfig` accepts a partial object. Options you leave out keep their defaults.
+
+## Where it applies
+
+`autoScrollEnabled` and `autoScrollConfig` exist on every scroll container:
+
+- `<vdnd-sortable-list>`
+- `<vdnd-virtual-scroll>`
+- `<vdnd-virtual-viewport>`
+- `vdndDroppable`
+- `vdndScrollable` (page-level and external scroll containers)
+
+When scroll containers are nested, auto-scroll starts with the innermost container under the pointer. Once that container reaches its end, it moves on to the outer one.
+
+## Disabling
+
+```angular-html
+<vdnd-sortable-list [autoScrollEnabled]="false" ... />
+```

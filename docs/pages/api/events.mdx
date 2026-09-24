@@ -1,0 +1,70 @@
+---
+title: Events
+description: DragStartEvent, DropEvent and DragEndEvent.
+---
+
+# Events
+
+| Output        | Event            | Emitted by                                                          |
+| ------------- | ---------------- | ------------------------------------------------------------------- |
+| `(dragStart)` | `DragStartEvent` | `vdndDraggable`                                                     |
+| `(dragEnd)`   | `DragEndEvent`   | `vdndDraggable`, after every drag, dropped or not                   |
+| `(drop)`      | `DropEvent`      | `vdndDroppable` and `<vdnd-sortable-list>`, on the destination only |
+
+## DragStartEvent
+
+```ts
+interface DragStartEvent {
+  draggableId: string;
+  droppableId: string; // the list the drag started in
+  data?: unknown; // vdndDraggableData
+  position: CursorPosition;
+  sourceIndex: number;
+}
+```
+
+## DropEvent
+
+```ts
+interface DropEvent {
+  source: DropSource;
+  destination: DropDestination;
+}
+
+interface DropSource {
+  draggableId: string;
+  droppableId: string;
+  index: number;
+  data?: unknown; // vdndDraggableData
+}
+
+interface DropDestination {
+  droppableId: string;
+  placeholderId: string; // ID of the item the placeholder was before, or END_OF_LIST
+  index: number; // final insertion index, after removal from the source
+  data?: unknown; // vdndDroppableData / droppableData
+}
+```
+
+Apply the move with [`moveItem()`, `reorderItems()` or `applyMove()`](/api/utilities).
+
+## DragEndEvent
+
+```ts
+interface DragEndEvent {
+  draggableId: string;
+  droppableId: string; // the source list
+  cancelled: boolean;
+  data?: unknown;
+  sourceIndex: number;
+  destinationIndex: number | null;
+}
+```
+
+`destinationIndex` is `null` when nothing was dropped:
+
+- the drag was cancelled (<kbd>Escape</kbd>, or <kbd>Tab</kbd> during a keyboard drag)
+- it was released outside every droppable
+- it was released over a disabled droppable
+
+A non-null value means a `drop` event fired on the destination. `cancelled` is `true` only for an explicit cancel.

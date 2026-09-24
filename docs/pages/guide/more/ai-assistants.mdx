@@ -1,0 +1,36 @@
+---
+title: AI assistants
+description: Give coding assistants accurate ngx-virtual-dnd knowledge with the agent skill and llms.txt.
+---
+
+# AI assistants
+
+Coding assistants often guess at a library's API. ngx-virtual-dnd provides two sources they can read instead.
+
+## Agent skill
+
+The **ngx-virtual-dnd** skill teaches an assistant how to integrate the library. It covers setup, the [rules that fail silently](/guide/essentials/core-concepts#rules-that-fail-silently), recipes and the full API reference. Install it into your project:
+
+```bash
+npx skills add gultyayev/ngx-virtual-dnd
+```
+
+It works with Claude Code, Cursor, Windsurf, GitHub Copilot and [more than 40 other agents](https://skills.sh). The assistant loads the skill when a task involves the library, for example "make this list sortable" or "let tasks move between these columns".
+
+The skill's source is in the repository under [`skills/ngx-virtual-dnd`](https://github.com/gultyayev/ngx-virtual-dnd/tree/master/skills/ngx-virtual-dnd).
+
+## llms.txt
+
+This site is also published as Markdown for language models:
+
+| URL                                                                           | Contents                                 |
+| ----------------------------------------------------------------------------- | ---------------------------------------- |
+| [`/llms.txt`](https://gultyayev.github.io/ngx-virtual-dnd/llms.txt)           | Index of every page with a short summary |
+| [`/llms-full.txt`](https://gultyayev.github.io/ngx-virtual-dnd/llms-full.txt) | The whole site in one file               |
+| `<page>.md`                                                                   | Any single page as Markdown              |
+
+Paste one of these URLs into a chat, or point a tool at it. On every page, the outline sidebar also has buttons to copy the page as Markdown or open it in Claude or ChatGPT.
+
+## Example prompt
+
+> Using ngx-virtual-dnd, turn the task list in `tasks.component.ts` into a sortable list that can hold 5,000 items. Keep the existing task template and persist the new order with `TasksService.reorder()`.

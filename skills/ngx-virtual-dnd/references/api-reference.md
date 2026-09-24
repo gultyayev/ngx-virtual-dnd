@@ -35,7 +35,7 @@ High-level component combining droppable, virtual scroll, and placeholder. Defau
 | `dynamicItemHeight` | `boolean` | `false` | No | Enable auto-measured variable heights |
 | `trackByFn` | `(index: number, item: T) => string \| number` | derived from `itemIdFn` | No | Track-by function for rendering |
 | `droppableData` | `unknown` | `undefined` | No | Custom data attached to this droppable (available in `DropDestination.data`) |
-| `disabled` | `boolean` | `false` | No | Disable drag and drop for this list |
+| `disabled` | `boolean` | `false` | No | Disable dropping into this list (forwarded to its droppable). Items can still be dragged out; disable the draggables too for a read-only list |
 | `containerHeight` | `number` | `undefined` | No | Container height in pixels. Without it, the inner `vdnd-virtual-scroll` must get a CSS height |
 | `overscan` | `number` | `3` | No | Number of items to render beyond visible viewport |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling during drag |

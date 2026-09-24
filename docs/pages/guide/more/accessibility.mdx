@@ -1,0 +1,76 @@
+---
+title: Accessibility
+description: Keyboard dragging, managed ARIA attributes, focus handling and screen reader announcements.
+---
+
+# Accessibility
+
+Every draggable can be moved with the keyboard. There is nothing to enable.
+
+## Keyboard
+
+| Key                       | Not dragging                   | During a keyboard drag                                                                               |
+| ------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| <kbd>Tab</kbd>            | Moves focus between draggables | Cancels the drag                                                                                     |
+| <kbd>Space</kbd>          | Picks up the focused item      | Drops                                                                                                |
+| <kbd>Enter</kbd>          | —                              | Drops                                                                                                |
+| <kbd>↑</kbd> <kbd>↓</kbd> | —                              | Moves the target position                                                                            |
+| <kbd>←</kbd> <kbd>→</kbd> | —                              | Moves to the neighbouring list in the same group, by on-screen position (disabled lists are skipped) |
+| <kbd>Escape</kbd>         | —                              | Cancels. Also cancels pointer drags.                                                                 |
+
+In `<vdnd-sortable-list>` and `<vdnd-virtual-scroll>`, moving past the edge of the visible area scrolls the list, so the keyboard reaches every item, not just the rendered ones. `<vdnd-virtual-content>` and `<vdnd-virtual-viewport>` do not scroll to follow the keyboard target.
+
+## Managed for you
+
+- `tabindex="0"` on draggables (`-1` when disabled)
+- `aria-grabbed` on draggables and `aria-dropeffect="move"` on droppables
+- After a keyboard drag, focus returns to the moved item in its new position
+
+## Screen reader announcements
+
+The library does not make announcements itself, so wording and translations stay in your hands. The drag events carry everything you need. Render the messages in a live region:
+
+```ts
+@Component({
+  template: `
+    <div vdndGroup="tasks">
+      <ng-template #taskTpl let-task>
+        <div
+          [vdndDraggable]="task.id"
+          (dragStart)="
+            announce('Picked up ' + task.title + ', position ' + ($event.sourceIndex + 1))
+          "
+          (dragEnd)="announceEnd($event)"
+        >
+          {{ task.title }}
+        </div>
+      </ng-template>
+
+      <!-- vdnd-sortable-list using taskTpl ... -->
+    </div>
+
+    <div class="sr-only" aria-live="assertive">{{ announcement() }}</div>
+  `,
+})
+export class TasksComponent {
+  readonly announcement = signal('');
+
+  announce(message: string): void {
+    this.announcement.set(message);
+  }
+
+  announceEnd(event: DragEndEvent): void {
+    this.announce(
+      event.destinationIndex === null
+        ? `Cancelled. Back at position ${event.sourceIndex + 1}`
+        : `Dropped at position ${event.destinationIndex + 1}`,
+    );
+  }
+}
+```
+
+`.sr-only` is the usual visually-hidden utility (`position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);`).
+
+## Touch
+
+Touch drags work out of the box. If your lists also need to scroll by touch, add a short [`dragDelay`](/guide/features/drag-behavior#threshold-and-delay) so a quick swipe scrolls and a press-and-hold drags.

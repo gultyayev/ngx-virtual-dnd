@@ -1,0 +1,49 @@
+---
+title: Utilities
+description: Helper functions for applying drops to signals and immutable state.
+---
+
+# Utilities
+
+See [Handling drops](/guide/essentials/handling-drops) for how to choose between them.
+
+## moveItem
+
+```ts
+function moveItem<T>(event: DropEvent, lists: Record<string, WritableSignal<T[]>>): void;
+```
+
+Moves the item between (or within) signal-based lists, keyed by droppable ID. Same-list drops are delegated to `reorderItems`. If either droppable ID is missing from `lists`, nothing happens and a warning is logged in dev mode.
+
+## reorderItems
+
+```ts
+function reorderItems<T>(event: DropEvent, list: WritableSignal<T[]>): void;
+```
+
+Reorders a single signal-based list. Use it for same-list drops only.
+
+## applyMove
+
+```ts
+function applyMove<T>(event: DropEvent, lists: Record<string, T[]>): Record<string, T[]>;
+```
+
+Immutable version for stores. Returns a shallow copy of `lists` with new arrays for the source and destination. If the source item does not exist, it returns a shallow copy with the original arrays.
+
+## isNoOpDrop
+
+```ts
+function isNoOpDrop(event: DropEvent): boolean;
+```
+
+`true` when the source and destination droppable and index are equal, meaning the item was dropped where it started.
+
+## insertAt / removeAt
+
+```ts
+function insertAt<T>(list: T[], item: T, index: number): T[];
+function removeAt<T>(list: T[], index: number): T[];
+```
+
+Return new arrays; the input is not modified.

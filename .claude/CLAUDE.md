@@ -22,16 +22,19 @@ These rules prevent common mistakes that cause hard-to-debug issues:
 
 8. **Test fails = you broke it:** If a test fails after your changes, fix it before declaring done.
 
-9. **Keep instructions in sync:** Any change to code documented in this file must include a corresponding update in the same commit. This includes: tables (services, directives, components, data attributes, public API, test files), code examples (if a pattern shown changes, update the example), architecture descriptions (if behavior in Architecture or a lazy doc changes, update it), and lazy docs (`.ai/E2E.md`, `.claude/history/*.md`, `.claude/TROUBLESHOOTING.md`, `.claude/demo/DESIGN_SYSTEM.md`).
+9. **Keep instructions in sync:** Any change to code documented in this file must include a corresponding update in the same commit. This includes: tables (services, directives, components, data attributes, public API, test files), code examples (if a pattern shown changes, update the example), architecture descriptions (if behavior in Architecture or a lazy doc changes, update it), and lazy docs (`.ai/E2E.md`, `.claude/history/*.md`, `.claude/TROUBLESHOOTING.md`, `.claude/demo/DESIGN_SYSTEM.md`, `.claude/DOCS_SITE.md`).
 
 10. **Never use `expect(true).toBe(true)` or similar no-op assertions:** Every test assertion must verify actual behavior. Tests that always pass regardless of code behavior provide false confidence and zero coverage. If you can't write a meaningful assertion, the test shouldn't exist.
 
-11. **Keep skills in sync with public API:** Any change to the consumer-facing API (new/changed/removed component, directive, input, output, event, utility, token, CSS class, or keyboard shortcut) must update `skills/ngx-virtual-dnd/SKILL.md` and/or `skills/ngx-virtual-dnd/references/api-reference.md` in the same commit. Internal-only changes (bug fixes, refactoring, performance) do not require skill updates unless they change observable consumer behavior.
+11. **Keep skills and docs in sync with public API:** Any change to the consumer-facing API (new/changed/removed component, directive, input, output, event, utility, token, CSS class, or keyboard shortcut) must update `skills/ngx-virtual-dnd/SKILL.md` and/or `skills/ngx-virtual-dnd/references/api-reference.md` **and** the docs site (`docs/pages/api/*.mdx` plus any guide page that covers it) in the same commit. Internal-only changes (bug fixes, refactoring, performance) do not require skill or docs updates unless they change observable consumer behavior.
 
 ## Project Structure
 
-- **Main app** (`/src`) - Demo application showcasing the library
+- **Main app** (`/src`) - Demo application showcasing the library, plus the docs live examples (`src/app/examples/`)
 - **ngx-virtual-dnd** (`/projects/ngx-virtual-dnd`) - Reusable drag-and-drop library
+- **Docs site** (`/docs`) - Rspress 2 documentation site. GitHub Pages serves the docs at `/ngx-virtual-dnd/` and the demo at `/ngx-virtual-dnd/demo/` (see `.claude/DOCS_SITE.md`)
+
+Design tokens for the demo and docs live in `src/styles/tokens.css`.
 
 **Prefixes:** `app-` for main app components, `vdnd-` for library components/directives.
 
@@ -150,6 +153,7 @@ Unit test filenames mirror source filenames (`foo.service.ts` → `foo.service.s
 | Mobile touch             | `touch-scroll.mobile.spec.ts`                                   |
 | Mid-drag droppable mount | `mid-drag-mount.spec.ts`                                        |
 | Shift animation / events | `shift-animation.spec.ts`                                       |
+| Docs live examples       | `docs-examples.spec.ts`                                         |
 
 ### Skills (for library consumers)
 
@@ -292,7 +296,7 @@ Use direct `element.scrollTop += delta` (not `scrollBy()`) with synchronous call
 - Gotcha: Call `stopPropagation()` when starting to prevent immediate drop
 - Focus: Restore with `afterNextRender()` using `EnvironmentInjector`
 
-**Screen Reader Announcements:** Not built-in (i18n complexity). Consumers implement using position data in drag events. See README.md for example.
+**Screen Reader Announcements:** Not built-in (i18n complexity). Consumers implement using position data in drag events. See the Accessibility guide (`docs/pages/guide/more/accessibility.mdx`) for an example.
 
 ## Lazy Documentation
 
@@ -301,7 +305,8 @@ Load these ONLY when working on specific areas:
 | Doc                                                  | When to Load                                     |
 | ---------------------------------------------------- | ------------------------------------------------ |
 | `.ai/E2E.md`                                         | Before writing/modifying Playwright tests        |
-| `.claude/demo/DESIGN_SYSTEM.md`                      | Before styling demo pages                        |
+| `.claude/demo/DESIGN_SYSTEM.md`                      | Before styling demo pages, docs pages, or theme  |
+| `.claude/DOCS_SITE.md`                               | Before working on the docs site or live examples |
 | `.claude/history/safari-autoscroll.md`               | If debugging Safari scroll drift                 |
 | `.claude/history/placeholder-algorithm.md`           | If modifying placeholder index calculation       |
 | `.claude/TROUBLESHOOTING.md`                         | If debugging unexpected behavior                 |
@@ -323,6 +328,7 @@ See `.claude/TROUBLESHOOTING.md` for common error symptoms, causes, and fixes.
 | New E2E test                   | `.ai/E2E.md`                                          | All browsers: `npx playwright test --reporter=dot --max-failures=1`                                      |
 | Modify placeholder calc        | `.claude/history/placeholder-algorithm.md`            | `placeholder-behavior.spec.ts`, `placeholder-integrity.spec.ts`, `drag-index-calculator.service.spec.ts` |
 | Update skills after API change | `skills/ngx-virtual-dnd/SKILL.md`, `api-reference.md` | -                                                                                                        |
+| Docs page or live example      | `.claude/DOCS_SITE.md`                                | `npm run docs:build`, `docs-examples.spec.ts`                                                            |
 | Add new subsystem doc          | See lazy doc criteria above                           | -                                                                                                        |
 
 ## Testing
@@ -342,6 +348,10 @@ npx playwright test --reporter=dot --max-failures=1 --project=chromium
 
 # E2E - ALL BROWSERS (required before done)
 npx playwright test --reporter=dot --max-failures=1
+
+# Docs site
+npm run docs:dev    # :3000 (run `npm start` too for live examples)
+npm run docs:build  # type-check + build; fails on dead links
 
 # Verbose (only when debugging)
 npm test -- --verbose
@@ -397,11 +407,17 @@ type(scope): description
 
 ## Documentation Updates
 
-### README.md (`/README.md`)
+### Docs site (`/docs/pages`)
 
-**Update when:** new/removed/changed component, directive, input, output, utility, token, CSS class, keyboard shortcut, event, or configuration option; changed default behavior consumers will observe.
+The primary human-facing documentation. See `.claude/DOCS_SITE.md`.
+
+**Update when:** new/removed/changed component, directive, input, output, utility, token, CSS class, keyboard shortcut, event, or configuration option; changed default behavior consumers will observe. Update the API page and every guide page that covers the change.
 
 **Do NOT update for:** bug fixes, internal algorithm changes, performance improvements (unless new config), refactoring, test changes, build/tooling changes.
+
+### README.md (`/README.md`)
+
+A short landing page (also the npm README): pitch, install, one example, links to the docs. Update it only when the install steps, the example, or the docs structure it links to changes.
 
 ### CHANGELOG.md
 
@@ -413,4 +429,4 @@ Run `npm run release [patch|minor|major]` to release. Use `npm run release:dry-r
 
 ## Design System
 
-When working on demo pages, refer to `.claude/demo/DESIGN_SYSTEM.md` for consistent styling guidelines.
+When working on demo pages, docs pages or the docs theme, load the `ngx-virtual-dnd-design` skill and follow `.claude/demo/DESIGN_SYSTEM.md`.

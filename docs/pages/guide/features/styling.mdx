@@ -1,0 +1,70 @@
+---
+title: Styling
+description: The CSS classes the library adds, with common recipes.
+---
+
+# Styling
+
+The library ships no visual styles for items or lists. Its only built-in style is a `grabbing` cursor while a drag is in progress. Everything else is state classes that you style however you like.
+
+## Classes
+
+| Class                                                    | On                                  | When                                                 |
+| -------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------- |
+| `vdnd-draggable`                                         | Draggables                          | Always                                               |
+| `vdnd-draggable-dragging`                                | Draggables                          | While being dragged (the element is `display: none`) |
+| `vdnd-draggable-disabled`                                | Draggables                          | `disabled` is true                                   |
+| `vdnd-drag-pending`                                      | Draggables                          | `dragDelay` has passed, drag not started yet         |
+| `vdnd-droppable`                                         | Droppables                          | Always                                               |
+| `vdnd-droppable-active`                                  | Droppables                          | The pointer or keyboard target is this droppable     |
+| `vdnd-droppable-disabled`                                | Droppables                          | `disabled` is true                                   |
+| `vdnd-drag-placeholder`, `vdnd-drag-placeholder-visible` | Drop-position placeholder           | During a drag, in the target list                    |
+| `vdnd-drag-preview`                                      | Preview box                         | During a drag                                        |
+| `vdnd-overlay-container`                                 | Body-level container of the preview | After `<vdnd-drag-preview>` renders                  |
+| `vdnd-dragging`                                          | `<body>`                            | While any drag is in progress                        |
+
+`<vdnd-sortable-list>`, `<vdnd-virtual-scroll>`, `<vdnd-virtual-viewport>`, `<vdnd-virtual-content>`, `vdndScrollable` and `<vdnd-placeholder>` also carry their own name as a class (for example `vdnd-sortable-list`).
+
+## Recipes
+
+Highlight the list under the pointer. With `<vdnd-sortable-list>` the droppable is an inner element, so target it through the list:
+
+```css
+.vdnd-sortable-list .vdnd-droppable-active {
+  background: #e4f3f2;
+  box-shadow: inset 0 0 0 2px #0e9488;
+}
+```
+
+Show a grab cursor on hover, and stop hover styles from firing on other rows during a drag:
+
+```css
+.vdnd-draggable {
+  cursor: grab;
+}
+
+body.vdnd-dragging .vdnd-draggable {
+  pointer-events: none;
+}
+```
+
+Give the preview some lift:
+
+```css
+.vdnd-drag-preview > * {
+  border-radius: 12px;
+  box-shadow: 0 18px 40px -18px rgb(20 28 46 / 0.3);
+  transform: rotate(1.5deg);
+}
+```
+
+Dim items that cannot be dragged:
+
+```css
+.vdnd-draggable-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+```
+
+These selectors must be global, in `styles.css` or with `ViewEncapsulation.None`, because the preview and placeholder are rendered outside your component's view.

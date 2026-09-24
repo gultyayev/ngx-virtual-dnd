@@ -1,0 +1,67 @@
+---
+title: Services
+description: DragStateService and the lower-level services exported for advanced use.
+---
+
+# Services
+
+All services are root singletons (`providedIn: 'root'`).
+
+## DragStateService
+
+Read-only signals describing the current drag. Inject it to react to drags anywhere in the app:
+
+```ts
+protected readonly dragState = inject(DragStateService);
+```
+
+```angular-html
+@if (dragState.isDragging()) {
+  <p class="hint">Drop the item into a list</p>
+}
+```
+
+| Signal                | Type                     | Description                                               |
+| --------------------- | ------------------------ | --------------------------------------------------------- |
+| `isDragging`          | `boolean`                | A drag is in progress                                     |
+| `draggedItem`         | `DraggedItem \| null`    | The dragged item, its element and size                    |
+| `draggedItemId`       | `string \| null`         | ID of the dragged item                                    |
+| `sourceDroppableId`   | `string \| null`         | List the drag started in                                  |
+| `sourceIndex`         | `number \| null`         | Index the drag started at                                 |
+| `activeDroppableId`   | `string \| null`         | List currently targeted                                   |
+| `placeholderId`       | `string \| null`         | ID of the item the placeholder is before                  |
+| `placeholderIndex`    | `number \| null`         | Current drop index                                        |
+| `cursorPosition`      | `CursorPosition \| null` | Pointer position                                          |
+| `grabOffset`          | `GrabOffset \| null`     | Offset between the pointer and the item's top-left corner |
+| `initialPosition`     | `CursorPosition \| null` | Pointer position at drag start                            |
+| `lockAxis`            | `'x' \| 'y' \| null`     | Axis lock of the current drag                             |
+| `isKeyboardDrag`      | `boolean`                | The drag was started with the keyboard                    |
+| `keyboardTargetIndex` | `number \| null`         | Target index during a keyboard drag                       |
+| `wasCancelled`        | `boolean`                | Whether the last drag was cancelled                       |
+| `endedDragState`      | `DragState \| null`      | Snapshot of the last drag, taken just before it was reset |
+
+For styling a single list, the `vdnd-droppable-active` class is usually simpler.
+
+## AutoScrollService
+
+Edge scrolling during drags. It is normally configured through component inputs.
+
+| Method                | Signature                        | Description                   |
+| --------------------- | -------------------------------- | ----------------------------- |
+| `registerContainer`   | `(id, element, config?) => void` | Register a scroll container   |
+| `unregisterContainer` | `(id) => void`                   | Unregister a scroll container |
+| `startMonitoring`     | `(onScroll?) => void`            | Start watching the pointer    |
+| `stopMonitoring`      | `() => void`                     | Stop watching                 |
+| `isScrolling`         | `() => boolean`                  | Whether auto-scroll is active |
+| `getScrollDirection`  | `() => { x: number; y: number }` | Current scroll direction      |
+
+## Advanced services
+
+These are exported for advanced customization. Most apps never need them.
+
+| Service                     | Purpose                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `PositionCalculatorService` | Hit-testing and drop-index math. `refreshCandidates()` re-reads the drop targets of an active drag. |
+| `ElementCloneService`       | Clones an element with its computed styles inlined; used for the default preview.                   |
+| `KeyboardDragService`       | Keyboard drag state.                                                                                |
+| `OverlayContainerService`   | The body-level container that hosts the drag preview.                                               |

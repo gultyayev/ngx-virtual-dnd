@@ -59,8 +59,9 @@ jobs:
       - name: Build Angular Library
         run: npm run build:lib
 
+      # Built with the GitHub Pages base href so the assemble step below can reuse it.
       - name: Build Angular App
-        run: npm run build
+        run: npm run build:demo:pages
 
       - name: Run unit tests
         run: npm test -- --silent
@@ -72,6 +73,14 @@ jobs:
           name: dist-lib
           path: dist/
           retention-days: 1
+
+      # After the upload so the E2E artifact stays library-only. docs:build type-checks the
+      # docs theme and fails on dead links; the assemble step validates the Pages layout.
+      - name: Build docs site
+        run: npm run docs:build
+
+      - name: Assemble GitHub Pages site
+        run: node scripts/assemble-site.js
 
   e2e:
     name: E2E (${{ matrix.project }})

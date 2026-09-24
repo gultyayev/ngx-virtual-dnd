@@ -1,0 +1,47 @@
+---
+title: Core concepts
+description: Droppables, draggables, groups, the preview and placeholder, and the rules that keep them working.
+---
+
+# Core concepts
+
+Every setup, from one list to a full board, is made of the same four parts.
+
+| Concept       | What it is                                                                                      | Declared with                                                    |
+| ------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **Droppable** | A list that items can be dropped into, identified by an ID.                                     | `vdndDroppable="id"`, or `droppableId` on `<vdnd-sortable-list>` |
+| **Draggable** | An item that can be picked up, identified by an ID.                                             | `[vdndDraggable]="item.id"`                                      |
+| **Group**     | A name linking draggables and droppables. Items move only between droppables of the same group. | `vdndGroup="name"` on an ancestor element                        |
+| **Preview**   | The element that follows the pointer during a drag.                                             | `<vdnd-drag-preview />`, placed once                             |
+
+## Life of a drag
+
+1. The user presses on a draggable and moves past the drag threshold (5 px by default), or presses <kbd>Space</kbd> on a focused draggable.
+2. The dragged element is hidden with `display: none`. The preview appears under the pointer and an empty **placeholder** marks the drop position in the target list.
+3. As the pointer moves, the library works out which droppable is under it and at which index the item would land. Near the edges of a scrollable list it scrolls automatically.
+4. On release, the **destination** droppable emits `(drop)` with the source and destination indexes. The dragged draggable emits `(dragEnd)`, whether the item was dropped or not.
+5. Your handler updates the data. The library never changes your arrays.
+
+```ts
+onDrop(event: DropEvent): void {
+  // Same list or across lists, keyed by droppable ID
+  moveItem(event, { todo: this.todo, done: this.done });
+}
+```
+
+See [Handling drops](/guide/essentials/handling-drops) for the event shape and the helper functions.
+
+## Rules that fail silently
+
+Breaking any of these rules causes no build error. The list just does not drag, or drops items in the wrong place.
+
+1. **Every draggable and droppable needs a group**, even when there is only one list. Wrap them in `vdndGroup`, or set `vdndDraggableGroup` / `vdndDroppableGroup` (`group` on `<vdnd-sortable-list>`). Without a group, dragging is disabled and the only hint is a warning in the console in dev mode.
+2. **Declare the item `<ng-template>` inside the `vdndGroup` element.** Templates resolve injection where they are declared, not where they are rendered.
+3. **The draggable ID must equal the list's item ID**: what `itemIdFn(item)` returns, or the `trackBy` key for `*vdndVirtualFor`. IDs are strings, so convert numeric IDs the same way in both places.
+4. **Draggable IDs must be unique across all lists**, and droppable IDs must be unique on the page.
+5. **Render `<vdnd-drag-preview />` once.** Without it, dragging works but nothing follows the pointer.
+6. **Give every virtual list a height**, with `containerHeight` or with CSS. A list without a height collapses to 0 px.
+7. **Put `vdndDraggable` on the root element of the item template.** A wrapper around it would stay in the list during the drag and leave a gap.
+8. **Bind `(drop)` on every list that can receive items.** It fires on the destination only.
+
+[Troubleshooting](/guide/more/troubleshooting) maps common symptoms back to these rules.

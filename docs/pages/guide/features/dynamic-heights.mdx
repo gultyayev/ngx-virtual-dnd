@@ -1,0 +1,47 @@
+---
+title: Dynamic item heights
+description: Virtual lists with rows of different heights, measured automatically.
+---
+
+# Dynamic item heights
+
+When rows have different heights, set `[dynamicItemHeight]="true"`. `itemHeight` then becomes the **estimate** for rows that have not been rendered yet.
+
+<LiveDemo example="dynamic-height" title="List with variable row heights" height={370} />
+
+```ts file="<root>/src/app/examples/dynamic-height/dynamic-height.ts"
+
+```
+
+## How it works
+
+- Rendered rows are measured with a `ResizeObserver`. If a row's content changes height later, the list updates.
+- Heights are cached **by item ID** in each list, so they survive reordering. An item moved into another list is measured again there, starting from that list's estimate.
+- Offsets are kept as prefix sums, so finding the row at a scroll position is a binary search (O(log n)).
+
+Two rules from [Core concepts](/guide/essentials/core-concepts#rules-that-fail-silently) matter most here. The draggable ID must equal the item ID, and `vdndDraggable` must be on the template's root element. The list uses both to find the element it measures.
+
+## Choosing the estimate
+
+Pick an estimate close to your typical row height. A poor estimate still works, but the scrollbar size and position shift more as rows are measured.
+
+## Other components
+
+The same input exists on every virtual container:
+
+```angular-html
+<vdnd-virtual-scroll [itemHeight]="80" [dynamicItemHeight]="true" ... />
+
+<vdnd-virtual-content [itemHeight]="80" [dynamicItemHeight]="true" vdndDroppable="notes">
+  ...
+</vdnd-virtual-content>
+
+<!-- *vdndVirtualFor directly inside a vdndScrollable, with no parent viewport -->
+<ng-container
+  *vdndVirtualFor="let note of notes(); itemHeight: 80; dynamicItemHeight: true; trackBy: trackById"
+>
+  ...
+</ng-container>
+```
+
+Inside `<vdnd-virtual-content>` or `<vdnd-virtual-viewport>`, `*vdndVirtualFor` inherits `itemHeight` and `dynamicItemHeight` from its parent.
