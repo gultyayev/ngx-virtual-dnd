@@ -35,9 +35,10 @@ test.describe('Keyboard Drag - Focus Management', () => {
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Space'); // Drop
 
-    // Focus returns to the moved item at its new position
+    // Focus is restored once the item is visible again, which can be a frame before the
+    // consumer's reorder renders — wait for the reorder, then check focus survived it.
+    await expect(demoPage.items('list1').nth(1)).toHaveAttribute('data-draggable-id', itemId!);
     await expect(page.locator(':focus')).toHaveAttribute('data-draggable-id', itemId!);
-    expect(await demoPage.getItemId('list1', 1)).toBe(itemId);
   });
 
   test('should restore focus to original position after cancel', async ({ page }) => {
