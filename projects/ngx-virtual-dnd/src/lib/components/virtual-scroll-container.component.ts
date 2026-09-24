@@ -534,15 +534,18 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
       });
     }
 
-    // Keyboard drag autoscroll: scroll to keep target index visible
+    // Keyboard drag autoscroll: scroll to keep the placeholder visible
     effect(() => {
       // Only apply when this droppable is active during keyboard drag
       if (!this.#dragState.isKeyboardDrag()) return;
       const activeDroppable = this.#dragState.activeDroppableId();
       if (activeDroppable !== this.droppableId()) return;
 
-      const targetIndex = this.#dragState.keyboardTargetIndex();
-      if (targetIndex === null) return;
+      // The placeholder renders before the item at placeholderIndex. Below the source in the
+      // same list that is keyboardTargetIndex + 1: the dragged item's slot is excluded.
+      if (this.#dragState.keyboardTargetIndex() === null) return;
+      const placeholderIndex = this.placeholderIndex();
+      if (placeholderIndex < 0) return;
 
       const strategy = this.#strategy();
       strategy.version();
@@ -552,9 +555,9 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
       const element = this.#elementRef.nativeElement;
       const currentScrollTop = element.scrollTop;
 
-      // Calculate target item position using strategy
-      const targetTop = strategy.getOffsetForIndex(targetIndex);
-      const targetBottom = targetTop + strategy.getItemHeight(targetIndex);
+      // Calculate placeholder position using strategy
+      const targetTop = strategy.getOffsetForIndex(placeholderIndex);
+      const targetBottom = targetTop + this.placeholderHeight();
 
       // Calculate visible range
       const viewportTop = currentScrollTop;
