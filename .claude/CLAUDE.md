@@ -390,6 +390,7 @@ When finished a task always kill servers started during development. Never leave
 - **ESLint:** @epam/eslint-config-angular
 - **Stylelint:** stylelint-config-sass-guidelines
 - **Git hooks:** Lefthook (lint on pre-commit, test on pre-push, commitlint on commit-msg)
+- **npm:** version pinned by `packageManager` in `package.json` (npm 12); CI installs exactly that version. npm 12 blocks dependency install scripts unless `allowScripts` in `package.json` allows them. When a new or updated dependency has install scripts, review them with `npm approve-scripts --allow-scripts-pending`, then `npm approve-scripts <pkg> --no-allow-scripts-pin` or `npm deny-scripts <pkg>`. Never approve with `--all`.
 
 ## Commits
 

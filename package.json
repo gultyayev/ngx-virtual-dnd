@@ -43,7 +43,7 @@
     ]
   },
   "private": true,
-  "packageManager": "npm@10.9.4",
+  "packageManager": "npm@12.1.0",
   "dependencies": {
     "@angular/common": "^21.0.0",
     "@angular/compiler": "^21.0.0",
@@ -95,5 +95,15 @@
     "typescript": "~5.9.2",
     "typescript-eslint": "8.47.0",
     "vitest": "^4.0.8"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "lefthook": true,
+    "lmdb": true,
+    "msgpackr-extract": true,
+    "@parcel/watcher": true,
+    "unrs-resolver": true,
+    "@compodoc/compodoc": false,
+    "fsevents": false
   }
 }

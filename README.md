@@ -100,6 +100,8 @@ It works with Claude Code, Cursor, Windsurf, GitHub Copilot and [40+ other agent
 
 ## Development
 
+Requires npm 12 (the version pinned in `packageManager`): `npm install -g npm@12`.
+
 ```bash
 npm start              # Demo app (localhost:4200)
 npm run build:lib      # Build the library (required after library edits)

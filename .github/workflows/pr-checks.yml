@@ -27,6 +27,10 @@ jobs:
           node-version: '24'
           cache: 'npm'
 
+      # CI uses the npm pinned in package.json (packageManager), not the one bundled with Node.
+      - name: Use pinned npm
+        run: npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
+
       - name: Install dependencies
         run: npm ci
 
@@ -49,6 +53,10 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+
+      # CI uses the npm pinned in package.json (packageManager), not the one bundled with Node.
+      - name: Use pinned npm
+        run: npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
 
       - name: Install dependencies
         run: npm ci
@@ -116,6 +124,10 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+
+      # CI uses the npm pinned in package.json (packageManager), not the one bundled with Node.
+      - name: Use pinned npm
+        run: npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
 
       - name: Install dependencies
         run: npm ci
