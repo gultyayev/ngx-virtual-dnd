@@ -119,7 +119,7 @@
 :root {
   /* Type */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --text-2xs: 10.5px;  /* tags, VIRTUAL label */
   --text-xs: 11px;     /* set-label (uppercase) */
   --text-sm: 12px;     /* hints, field labels */

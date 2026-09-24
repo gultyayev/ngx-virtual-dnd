@@ -8,7 +8,10 @@ interface LiveDemoProps {
   example: string;
   /** Accessible name of the embedded frame. */
   title: string;
-  /** Frame height in px. Match the example's rendered height to avoid inner scrollbars. */
+  /**
+   * Initial frame height in px, used until the example reports its own height. Match the
+   * example's desktop height to avoid a layout shift.
+   */
   height?: number;
 }
 
@@ -27,12 +30,17 @@ function currentTheme(): 'light' | 'dark' {
  *   is not lost;
  * - later toggles are posted as `{ type: 'vdnd-theme', theme }`, which keeps the example's
  *   state (no reload). Nothing is posted before the frame has loaded.
+ *
+ * Sizing: the example posts `{ type: 'vdnd-example-size', height }` whenever its height
+ * changes (ExamplesShellComponent), and the frame follows it, so there is no inner scrollbar
+ * or empty space at any width.
  */
 export default function LiveDemo({ example, title, height = 380 }: LiveDemoProps) {
   const dark = useDark();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const loadedRef = useRef(false);
   const [src, setSrc] = useState<string | null>(null);
+  const [frameHeight, setFrameHeight] = useState(height);
   // Trailing slash: GitHub Pages serves examples/<slug>/index.html and would redirect otherwise.
   const exampleUrl = `${process.env.DEMO_URL}examples/${example}/`;
 
@@ -48,11 +56,15 @@ export default function LiveDemo({ example, title, height = 380 }: LiveDemoProps
     setSrc(`${exampleUrl}?theme=${currentTheme()}`);
   }, [exampleUrl]);
 
-  // Reply to the example's ready handshake.
+  // Reply to the example's ready handshake and follow its reported height.
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
       if (event.source !== frameRef.current?.contentWindow) return;
-      const data = event.data as { type?: unknown } | null;
+      const data = event.data as { type?: unknown; height?: unknown } | null;
+      if (data?.type === 'vdnd-example-size') {
+        if (typeof data.height === 'number' && data.height > 0) setFrameHeight(data.height);
+        return;
+      }
       if (data?.type !== 'vdnd-theme-ready') return;
       loadedRef.current = true;
       postTheme();
@@ -82,7 +94,7 @@ export default function LiveDemo({ example, title, height = 380 }: LiveDemoProps
           src={src}
           title={title}
           loading="lazy"
-          style={{ height }}
+          style={{ height: frameHeight }}
           onLoad={() => {
             loadedRef.current = true;
             postTheme();

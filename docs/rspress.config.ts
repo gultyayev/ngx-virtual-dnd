@@ -42,10 +42,10 @@ export default defineConfig({
     // Available in every MDX page without an import.
     globalComponents: [path.join(docsDir, 'components/LiveDemo.tsx')],
   },
+  // The font stylesheet itself is imported by theme/index.css (works in dev too).
   head: [
     '<link rel="preconnect" href="https://fonts.googleapis.com">',
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
-    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">',
     ['meta', { name: 'theme-color', content: '#0e9488' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'ngx-virtual-dnd' }],

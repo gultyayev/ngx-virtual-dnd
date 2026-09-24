@@ -3,6 +3,9 @@
  * Level 1 (CSS variables) maps the shared design tokens onto Rspress; level 2 (BEM class
  * overrides) covers what variables cannot reach. Design rules: .claude/skills/ngx-virtual-dnd-design.
  */
+/* Loaded here rather than through `head` in the config: Rspress injects `head` only into
+   built pages, so the dev server would otherwise fall back to system fonts. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import '../../src/styles/tokens.css';
 
 /* ══════════ TOKEN → RSPRESS MAPPING ══════════ */
@@ -65,11 +68,21 @@ html:root {
   --rp-code-block-shadow: none;
   --rp-code-line-highlight-color: var(--code-highlight);
 
-  /* Callouts: tip uses the accent; the rest keep Rspress's semantic hues. */
+  /* Callouts: tip uses the accent, info is neutral; warning and danger keep Rspress's hues. */
   --rp-container-tip-bg: var(--accent-soft);
   --rp-container-tip-border: var(--accent-soft-bd);
-  --rp-container-tip-text: var(--ink);
+  --rp-container-tip-text: var(--accent-text);
   --rp-container-tip-code-bg: color-mix(in srgb, var(--accent) 16%, transparent);
+  /* Info is neutral (Rspress's default is an off-palette blue). */
+  --rp-container-info-bg: var(--field-bg);
+  --rp-container-info-border: var(--border);
+  --rp-container-info-text: var(--ink);
+  --rp-container-info-code-bg: var(--surface-2);
+}
+
+/* Dark --bg-sunk is darker than the page, which makes inline code look like holes. */
+html.dark:root {
+  --rp-c-text-code-bg: var(--surface-2);
 }
 
 /* Shiki (css-variables theme) — one dark palette, since code blocks are always dark. */
@@ -186,6 +199,12 @@ html .rp-sidebar-item--active:hover {
   color: var(--accent-text);
 }
 
+/* Outline: 13px fits the longest API names (VirtualScrollContainerComponent) on one line.
+   The text span also carries .rp-doc, hence the extra class. */
+html .rp-toc-item .rp-toc-item__text {
+  font-size: 13px;
+}
+
 /* ══════════ DOC CONTENT ══════════ */
 html .rp-doc {
   font-size: 15px;
@@ -210,15 +229,143 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h3) {
   letter-spacing: -0.01em;
 }
 
-html .rp-doc :not(pre) > code {
-  border-radius: 5px;
-  font-size: 0.85em;
+/* Code ligatures turn `=>` into an arrow; show what the reader should type. */
+html .rp-doc code {
+  font-variant-ligatures: none;
 }
 
-/* API tables: let long type names wrap instead of pushing the table wider than the page. */
+html .rp-doc kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* Inline code: the padding stays inside the line box, so lines with code are not taller. */
+html .rp-doc :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+/* ══════════ TABLES ══════════ */
+/* Rspress draws tables with the code-block border and title colors, which are dark here. */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(table) {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(thead) {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(th) {
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(td) {
+  font-size: 14px;
+  line-height: 1.55;
+  vertical-align: top;
+}
+
+/* Code in tables wraps at spaces. In the 4-column API tables (name, type, default,
+   description) long types may also break mid-word, so the description keeps its width and
+   the table fits the page. Names in the first column never break. */
 html .rp-doc td code {
-  overflow-wrap: anywhere;
   white-space: normal;
+}
+
+html .rp-doc table:has(td:nth-child(4)) td code {
+  overflow-wrap: anywhere;
+}
+
+html .rp-doc td:first-child code {
+  white-space: nowrap;
+}
+
+/* Phones: let columns shrink to their content instead of Rspress's 8rem minimum, so most
+   tables fit without sideways scrolling. */
+@media (width < 768px) {
+  html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(th, td) {
+    min-width: 0;
+    padding: 10px 12px;
+  }
+}
+
+/* Phones: the 4-column API tables (name | type | default | description) become one card per
+   row, with the type and default labelled, instead of four squeezed columns. */
+@media (width < 768px) {
+  html .rp-doc table:has(td:nth-child(4)) {
+    display: block;
+    border: 0;
+    border-radius: 0;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) thead {
+    display: none;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) :where(tbody, tr, td) {
+    display: block;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) tbody {
+    background: none;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) tr {
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td {
+    padding: 2px 0;
+    border: 0;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td:first-child {
+    padding-bottom: 6px;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td:nth-child(2)::before,
+  html .rp-doc table:has(td:nth-child(4)) td:nth-child(3)::before {
+    margin-right: 8px;
+    color: var(--ink-2);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td:nth-child(2)::before {
+    content: 'Type';
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td:nth-child(3)::before {
+    content: 'Default';
+  }
+
+  html .rp-doc table:has(td:nth-child(4)) td:last-child {
+    padding-top: 6px;
+  }
+}
+
+/* With the outline column visible, its "Edit this page" makes the footer one redundant. */
+@media (width >= 1280px) {
+  html .rp-doc-footer__edit {
+    display: none;
+  }
 }
 
 html .rp-codeblock {
