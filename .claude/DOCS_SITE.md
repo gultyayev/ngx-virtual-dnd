@@ -45,4 +45,4 @@ npm run site:build    # lib → demo (base href /ngx-virtual-dnd/demo/) → docs
 - **Examples inherit the demo's app-wide providers** (`src/app/app.config.ts`), including `provideDemoAnimationConfig()` (shift duration 0 unless `?shiftAnimation=`). An example that depends on a provider must declare it in its own `providers` so the shown source is complete.
 - **Links** are root-relative to the docs root (`/guide/...`); Rspress adds the base and checks them. Links to the demo must be absolute URLs, because the demo is not part of the Rspress build.
 - **Public assets** live in `docs/pages/public/` (inside the content root), not `docs/public/`.
-- **Local production builds of the demo** inline Google Fonts, so they need network access. If DNS for `fonts.googleapis.com` is blocked, use `ng build --configuration development --base-href /ngx-virtual-dnd/demo/` to test assembly locally.
+- **Fonts:** the demo self-hosts Inter and JetBrains Mono (`@fontsource/*`, imported in `src/styles.scss`), so its builds and E2E runs need no network. The docs theme still loads them from Google Fonts.
