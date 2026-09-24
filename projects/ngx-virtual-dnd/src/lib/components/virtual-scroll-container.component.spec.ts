@@ -56,6 +56,7 @@ interface TestItem {
       [itemTemplate]="itemTpl"
       [dynamicItemHeight]="dynamicItemHeight()"
       [scrollContainerId]="scrollContainerId()"
+      [droppableId]="droppableId()"
       [autoScrollEnabled]="autoScrollEnabled()"
       [autoScrollConfig]="autoScrollConfig()"
     >
@@ -71,6 +72,7 @@ class TestHostComponent {
   overscan = signal(3);
   stickyItemIds = signal<string[]>([]);
   scrollContainerId = signal<string | undefined>('test-scroll');
+  droppableId = signal<string | undefined>(undefined);
   autoScrollEnabled = signal(true);
   autoScrollConfig = signal<Partial<AutoScrollConfig>>({});
   dynamicItemHeight = signal(false);
@@ -556,6 +558,57 @@ describe('VirtualScrollContainerComponent', () => {
 
       // Height stays the same after drag end
       expect(virtualScrollComponent.getScrollHeight()).toBe(heightBefore);
+    });
+  });
+
+  describe('keyboard drag autoscroll', () => {
+    /** Keyboard drag of `item-${sourceIndex}` inside this list (droppable 'list'). */
+    const startSameListKeyboardDrag = (sourceIndex: number): void => {
+      component.droppableId.set('list');
+      fixture.detectChanges();
+      const item: DraggedItem = {
+        draggableId: `item-${sourceIndex}`,
+        droppableId: 'list',
+        element: document.createElement('div'),
+        height: 50,
+        width: 200,
+      };
+      // The placeholder starts in the item's own slot (placeholder index = source + 1)
+      dragStateService.startDrag(
+        item,
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'list',
+        null,
+        sourceIndex + 1,
+        sourceIndex,
+        true,
+      );
+      fixture.detectChanges();
+    };
+
+    it('should keep the placeholder in view when moving down past the source', () => {
+      startSameListKeyboardDrag(0);
+
+      // Target 10 → placeholder index 11. Item 0's slot is excluded, so the placeholder
+      // renders at [500, 550); the 300px viewport must end at its bottom edge.
+      dragStateService.setKeyboardTargetIndex(10);
+      fixture.detectChanges();
+
+      expect(virtualScrollComponent.getScrollTop()).toBe(550 - 300);
+      expect(virtualScrollEl.scrollTop).toBe(250);
+    });
+
+    it('should keep the placeholder in view when moving up above the source', () => {
+      virtualScrollComponent.scrollTo(2000);
+      startSameListKeyboardDrag(50);
+
+      // Target 10 (above the source) → placeholder index 10, rendered at [500, 550)
+      dragStateService.setKeyboardTargetIndex(10);
+      fixture.detectChanges();
+
+      expect(virtualScrollComponent.getScrollTop()).toBe(500);
     });
   });
 
