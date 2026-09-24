@@ -90,6 +90,9 @@ export class DemoComponent {
   /** Whether debug panel is expanded */
   readonly debugExpanded = signal(false);
 
+  /** Whether a panel was toggled by the user; panels animate only from then on. */
+  readonly panelToggled = signal(false);
+
   /** Last source index received by the demo drop handler (used by interaction tests). */
   readonly lastDropSourceIndex = signal<number | null>(null);
 
@@ -140,11 +143,13 @@ export class DemoComponent {
 
   /** Toggle settings panel */
   toggleSettings(): void {
+    this.panelToggled.set(true);
     this.settingsExpanded.update((v) => !v);
   }
 
   /** Toggle debug panel */
   toggleDebug(): void {
+    this.panelToggled.set(true);
     this.debugExpanded.update((v) => !v);
   }
 
