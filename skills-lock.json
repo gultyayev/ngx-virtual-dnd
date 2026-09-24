@@ -12,6 +12,24 @@
       "sourceType": "github",
       "skillPath": "skills/angular-tooling/SKILL.md",
       "computedHash": "2a67063279e8ac1b5cf3d9c4e9ed4652508564640c1fc59642857d4f6d20db11"
+    },
+    "rspress-best-practices": {
+      "source": "rstackjs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/rspress-best-practices/SKILL.md",
+      "computedHash": "6aa7f74c6f1d0ae1f000d412c068a17023269192a056c84f8ffcae561c2e2a12"
+    },
+    "rspress-custom-theme": {
+      "source": "rstackjs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/rspress-custom-theme/SKILL.md",
+      "computedHash": "9efebf0ef0da8d388d182fabd8e2b0ef05b385f5ee53de71912e7ebc7fbacda0"
+    },
+    "rspress-docs-generator": {
+      "source": "rstackjs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/rspress-docs-generator/SKILL.md",
+      "computedHash": "ac15a47048425a68fc671cf3754eef2b857e41db08354d09deb98f3bed1d6a1d"
     }
   }
 }
