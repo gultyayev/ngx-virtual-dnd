@@ -45,15 +45,15 @@ import {
     DragPreviewComponent,
   ],
   template: `
-    <!-- Item template -->
-    <ng-template #itemTpl let-item>
-      <div class="item" [vdndDraggable]="item.id" [vdndDraggableData]="item">
-        {{ item.name }}
-      </div>
-    </ng-template>
-
     <!-- Lists wrapped in a group -->
     <div vdndGroup="my-group">
+      <!-- Item template: declare it inside vdndGroup so the draggables inherit the group -->
+      <ng-template #itemTpl let-item>
+        <div class="item" [vdndDraggable]="item.id" [vdndDraggableData]="item">
+          {{ item.name }}
+        </div>
+      </ng-template>
+
       <vdnd-sortable-list
         droppableId="list-1"
         group="my-group"
@@ -97,6 +97,8 @@ export class MyComponent {
 ```
 
 **That's it!** `VirtualSortableListComponent` handles placeholder positioning, sticky items during drag, and virtual scroll integration automatically.
+
+> Every draggable and droppable needs a group (from a `vdndGroup` ancestor or `vdndDraggableGroup` / `vdndDroppableGroup`), even for a single list — without one, drag is disabled. Templates resolve the group from where they are **declared**, so keep the `<ng-template>` inside the `vdndGroup` element.
 
 ## API Overview
 
@@ -339,13 +341,13 @@ For maximum control, use individual components instead of `VirtualSortableListCo
     DragPreviewComponent,
   ],
   template: `
-    <ng-template #itemTpl let-item>
-      <div class="item" [vdndDraggable]="item.id" [vdndDraggableData]="item">
-        {{ item.name }}
-      </div>
-    </ng-template>
-
     <div vdndGroup="demo">
+      <ng-template #itemTpl let-item>
+        <div class="item" [vdndDraggable]="item.id" [vdndDraggableData]="item">
+          {{ item.name }}
+        </div>
+      </ng-template>
+
       <div vdndDroppable="list-1" (drop)="onDrop($event)">
         <vdnd-virtual-scroll
           droppableId="list-1"
@@ -433,6 +435,7 @@ The library emits events with position data. Implement announcements in your app
 ```typescript
 @Component({
   template: `
+    <!-- Inside a vdndGroup, like any draggable -->
     <div
       vdndDraggable="item-1"
       (dragStart)="announce('Grabbed ' + item.name)"
