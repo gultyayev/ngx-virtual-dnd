@@ -40,7 +40,7 @@ export interface PointerDragDeps {
  * - Pointer down / move / up lifecycle
  * - Drag threshold detection
  * - Drag delay timer
- * - RAF throttling for move updates
+ * - Forwarding moves to the directive (DragSchedulerService coalesces them per frame)
  * - Document-level listener management
  * - Escape key cancellation during pointer drag
  */

@@ -16,9 +16,10 @@ export type SchedulerTickFn = (cursor: CursorPosition | null, cursorDirty: boole
  *      AutoScrollService registers here to perform edge-scroll + immediate
  *      placeholder recalculation in the same synchronous frame — preserving
  *      the Safari synchronous-callback constraint.
- *   2. Main compute phase (COMPUTE+WRITE): onTick is called with the latest
- *      cursor. Only runs when the cursor has changed (cursorDirty=true), so
- *      autoscroll-only frames (cursor stationary) incur zero hit-test work.
+ *   2. Main compute phase (COMPUTE+WRITE): onTick is called every frame with the
+ *      latest cursor and a `cursorDirty` flag. Callers skip their hit-test when
+ *      the flag is false, so autoscroll-only frames (cursor stationary) incur
+ *      zero hit-test work.
  *
  * PointerDragHandler calls `queueCursorUpdate()` instead of managing its own
  * RAF per pointermove. This coalesces all moves within a frame into one update

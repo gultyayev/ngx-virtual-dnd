@@ -123,6 +123,10 @@ export class DragIndexCalculatorService {
   calculatePlaceholderIndex(args: {
     droppableElement: HTMLElement;
     position: CursorPosition;
+    /**
+     * Unused: the index probe is direction-independent (capped center + midpoint refinement).
+     * Kept so callers don't change.
+     */
     previousPosition: CursorPosition | null;
     grabOffset: GrabOffset | null;
     draggedItemHeight: number;
