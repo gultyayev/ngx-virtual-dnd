@@ -93,6 +93,8 @@ test.describe('Docs live examples', () => {
   });
 
   test('shift animation slides displaced rows and counts placeholder moves', async ({ page }) => {
+    // The slide is skipped under reduced motion; pin it so the host OS setting cannot leak in.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await examples.goto('shift-animation');
     const moves = page.locator('[data-placeholder-moves]');
     await expect(moves).toHaveText('0');
@@ -116,7 +118,7 @@ test.describe('Docs live examples', () => {
 
     await page.keyboard.press('ArrowDown');
     await expect(moves).toHaveText('1');
-    await expect(page.locator('.status')).toContainText('0 → 1');
+    await expect(page.locator('[data-last-placeholder-move]')).toHaveText('0 → 1');
     // task-2 was displaced by the placeholder and slides into its new slot.
     await expect
       .poll(() =>

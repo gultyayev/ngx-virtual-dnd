@@ -6,7 +6,7 @@ All exports are from `'ngx-virtual-dnd'`. Setup rules, recipes, CSS classes, and
 
 - [Components](#components): VirtualSortableListComponent, VirtualScrollContainerComponent, VirtualViewportComponent, VirtualContentComponent, DragPreviewComponent, PlaceholderComponent, DragPlaceholderComponent
 - [Directives](#directives): DraggableDirective, DroppableDirective, DroppableGroupDirective, ScrollableDirective, VirtualForDirective, ContentHeaderDirective
-- [Events](#events): DragStartEvent, DropEvent, DragEndEvent
+- [Events](#events): DragStartEvent, DropEvent, DragEndEvent, PlaceholderMoveEvent
 - [Utilities](#utilities)
 - [Services](#services): DragStateService, AutoScrollService, PositionCalculatorService, ElementCloneService, KeyboardDragService, OverlayContainerService
 - [Configuration Types](#configuration-types)

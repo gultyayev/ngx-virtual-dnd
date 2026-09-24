@@ -15,7 +15,7 @@ Try it: drag a row, or focus one with <kbd>Tab</kbd>, press <kbd>Space</kbd> and
 
 Most drag-and-drop libraries work out the drop position by measuring sibling elements in the DOM. With virtual scrolling most siblings do not exist, so those libraries drop items in the wrong place, or cannot scroll to a target that has not been rendered yet.
 
-ngx-virtual-dnd works from geometry instead. At drag start it records the position and size of each drop target. While you drag, it compares the pointer with those recorded bounds and calculates the drop index from the scroll offset and row heights. See [How it works](/guide/more/how-it-works) for details.
+ngx-virtual-dnd works from geometry instead. At drag start it records the position and size of each drop target. While you drag, it compares the pointer with those recorded bounds and calculates the drop index from the scroll offset and row heights. See [How it works](/guide/more/how-it-works) for details. The approach was inspired by [react-virtualized-dnd](https://github.com/forecast-it/react-virtualized-dnd).
 
 ## Features
 

@@ -7,6 +7,10 @@ description: Slide displaced rows into place while dragging, and react to every 
 
 By default, rows displaced by the placeholder jump to their new position. Provide `VDND_ANIMATION_CONFIG` to make them slide instead. For feedback on every step, such as a haptic tick, listen to `(placeholderMove)`.
 
+:::info Added in 3.2.0
+Both features are new in 3.2.0, which is currently a pre-release. Install it with `npm install ngx-virtual-dnd@next`.
+:::
+
 <LiveDemo
   example="shift-animation"
   title="Sliding rows and a placeholder move counter"
@@ -41,6 +45,7 @@ export const appConfig: ApplicationConfig = {
 - If the placeholder moves again mid-slide, rows continue from where they currently are.
 - Drop positions are calculated from geometry, so a row that is still sliding never changes where an item lands.
 - Rows jump into their final order on drop or cancel.
+- The slide is added on top of any `transform` you set on rows, so your own transforms are kept.
 
 The config is read each time an animation starts, so a getter can switch it at runtime, for example from a user setting:
 
@@ -63,7 +68,7 @@ The config is read each time an animation starts, so a getter can switch it at r
 Rows animate in `<vdnd-sortable-list>`, `<vdnd-virtual-scroll>` and every `*vdndVirtualFor` list, including those inside `<vdnd-virtual-viewport>` and `<vdnd-virtual-content>`.
 
 :::warning
-Do not add your own CSS `transition` on the rows' `transform` or `top` to get this effect. Rows move through layout, so such a transition has nothing to animate, and one on `transform` can conflict with the built-in slide.
+Do not add your own CSS `transition` on the rows' `transform` or `top` to get this effect. Rows are repositioned by layout (or by an inline `top` in a `*vdndVirtualFor` placed directly in a `vdndScrollable`), and a transition on either property competes with the built-in slide.
 :::
 
 ## Placeholder move events

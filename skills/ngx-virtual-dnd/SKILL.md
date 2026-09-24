@@ -383,7 +383,7 @@ providers: [{ provide: VDND_ANIMATION_CONFIG, useValue: { shiftDuration: 200 } }
 // optional: shiftEasing (default 'cubic-bezier(0.2, 0, 0, 1)'); shiftDuration: 0 disables
 ```
 
-Items then slide into their new position (works with virtual scrolling and dynamic heights; skipped under reduced motion; a new move mid-slide continues from the current spot). Don't add your own CSS `transition` on item `transform`/`top` to get this — items move via layout, not transforms.
+Items then slide into their new position (works with virtual scrolling and dynamic heights; skipped under reduced motion; a new move mid-slide continues from the current spot). Don't add your own CSS `transition` on item `transform`/`top` to get this — items are repositioned by layout (or inline `top` for a bare `*vdndVirtualFor`), and such a transition competes with the built-in slide. Consumer transforms on rows are kept (the slide uses `composite: 'add'`).
 
 For haptics on every step, use `(placeholderMove)` on `vdndDroppable` / `vdnd-sortable-list` (`PlaceholderMoveEvent`: `previousIndex` → `currentIndex`, same index convention as `DropEvent.destination.index`; `previousIndex` is `null` when the placeholder entered the list). Not emitted for the initial pick-up or when the placeholder leaves.
 

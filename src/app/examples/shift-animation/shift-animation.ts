@@ -29,8 +29,8 @@ interface Task {
   template: `
     <p class="status">
       Placeholder moves: <strong data-placeholder-moves>{{ moves() }}</strong>
-      @if (lastMove(); as move) {
-        · last <strong>{{ move.previousIndex ?? 'entered' }} → {{ move.currentIndex }}</strong>
+      @if (lastMove()) {
+        · last <strong data-last-placeholder-move>{{ lastMove() }}</strong>
       }
     </p>
 
@@ -61,7 +61,7 @@ export class ShiftAnimationExampleComponent {
   );
 
   readonly moves = signal(0);
-  readonly lastMove = signal<PlaceholderMoveEvent | null>(null);
+  readonly lastMove = signal('');
 
   readonly taskId = (task: Task): string => task.id;
 
@@ -69,7 +69,7 @@ export class ShiftAnimationExampleComponent {
     // One event per displacement: a good place for haptic feedback
     navigator.vibrate?.(10);
     this.moves.update((count) => count + 1);
-    this.lastMove.set(event);
+    this.lastMove.set(`${event.previousIndex ?? 'entered'} → ${event.currentIndex}`);
   }
 
   onDrop(event: DropEvent): void {
