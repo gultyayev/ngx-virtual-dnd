@@ -47,6 +47,7 @@ High-level component combining droppable, virtual scroll, and placeholder. Defau
 | Output | Type | Description |
 |--------|------|-------------|
 | `drop` | `DropEvent` | Item dropped into this list (fires on the destination list only) |
+| `placeholderMove` | `PlaceholderMoveEvent` | Placeholder moved within this list during a drag (every item displacement) |
 
 ---
 
@@ -241,6 +242,7 @@ Marks an element as a drop target.
 | Output | Type | Description |
 |--------|------|-------------|
 | `drop` | `DropEvent` | Item dropped into this droppable (destination only) |
+| `placeholderMove` | `PlaceholderMoveEvent` | Placeholder moved within this droppable during a drag (every item displacement) |
 
 ---
 
@@ -375,6 +377,21 @@ interface DragEndEvent {
 ```
 
 `droppableId` is the source droppable. `destinationIndex` is `null` when there is no valid drop target — a cancelled drag (Escape, or Tab during a keyboard drag) or a release over a disabled droppable / outside every droppable. A non-`null` value pairs with a `drop` event on the destination. `cancelled` is `true` only for explicit cancels.
+
+### PlaceholderMoveEvent
+
+```typescript
+interface PlaceholderMoveEvent {
+  draggableId: string;
+  sourceDroppableId: string;
+  droppableId: string;           // the droppable the placeholder moved within
+  previousIndex: number | null;  // null when the placeholder just entered this droppable
+  currentIndex: number;
+  data?: unknown;                // the dragged item's vdndDraggableData
+}
+```
+
+Indexes use the `DropEvent.destination.index` convention (where the item would land if dropped now). Emitted on every placeholder move inside the droppable, including entering it; not emitted for the initial pick-up (placeholder in the item's own slot) or when the placeholder leaves. For the first move in the source list, `previousIndex` is the item's source index. Typical use: haptic feedback.
 
 ---
 
@@ -692,6 +709,19 @@ interface VdndGroupContext {
 ```
 
 Provided by: `DroppableGroupDirective`
+
+### VDND_ANIMATION_CONFIG
+
+```typescript
+const VDND_ANIMATION_CONFIG: InjectionToken<VdndAnimationConfig>;
+
+interface VdndAnimationConfig {
+  shiftDuration?: number; // ms, default 200; 0 disables
+  shiftEasing?: string;   // default 'cubic-bezier(0.2, 0, 0, 1)'
+}
+```
+
+Provided by: the consumer (opt-in). When present, items displaced by the placeholder slide via a `transform` animation (`composite: 'add'`, so item transforms are preserved) in `vdnd-virtual-scroll` / `vdnd-sortable-list` and `*vdndVirtualFor` lists. Resolved through the element injector — provide app-wide or per component subtree. Skipped under `prefers-reduced-motion: reduce`. Values are read each time an animation starts (getters can toggle it at runtime).
 
 ---
 

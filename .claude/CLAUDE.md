@@ -149,6 +149,7 @@ Unit test filenames mirror source filenames (`foo.service.ts` → `foo.service.s
 | Page scroll              | `page-scroll.spec.ts`                                           |
 | Mobile touch             | `touch-scroll.mobile.spec.ts`                                   |
 | Mid-drag droppable mount | `mid-drag-mount.spec.ts`                                        |
+| Shift animation / events | `shift-animation.spec.ts`                                       |
 
 ### Skills (for library consumers)
 
@@ -158,17 +159,17 @@ Unit test filenames mirror source filenames (`foo.service.ts` → `foo.service.s
 
 ### Public API (from public-api.ts)
 
-**Events:** `DragStartEvent`, `DropEvent`, `DragEndEvent`
+**Events:** `DragStartEvent`, `DropEvent`, `DragEndEvent`, `PlaceholderMoveEvent`
 
 **Utilities:** `moveItem()`, `reorderItems()`, `applyMove()`, `isNoOpDrop()`, `insertAt()`, `removeAt()`
 
-**Tokens:** `VDND_SCROLL_CONTAINER`, `VDND_VIRTUAL_VIEWPORT`, `VDND_GROUP_TOKEN`
+**Tokens:** `VDND_SCROLL_CONTAINER`, `VDND_VIRTUAL_VIEWPORT`, `VDND_GROUP_TOKEN`, `VDND_ANIMATION_CONFIG`
 
 **Constants:** `INITIAL_DRAG_STATE`, `END_OF_LIST`
 
 **Strategies:** `VirtualScrollStrategy` (interface), `FixedHeightStrategy`, `DynamicHeightStrategy`
 
-**Types:** `AutoScrollConfig`, `DraggedItem`, `CursorPosition`, `GrabOffset`, `DragState`, `DropSource`, `DropDestination`, `VdndGroupContext`, `VdndScrollContainer`, `VdndVirtualViewport`, `VirtualScrollItemContext`, `DragPreviewContext`, `PlaceholderContext`, `VirtualForContext`
+**Types:** `AutoScrollConfig`, `DraggedItem`, `CursorPosition`, `GrabOffset`, `DragState`, `DropSource`, `DropDestination`, `VdndAnimationConfig`, `VdndGroupContext`, `VdndScrollContainer`, `VdndVirtualViewport`, `VirtualScrollItemContext`, `DragPreviewContext`, `PlaceholderContext`, `VirtualForContext`
 
 ## Code Patterns
 
@@ -275,6 +276,8 @@ Use `createBoundListener()` from `lib/utils/event-listener-bindings.ts` to bind/
 5. **Gap prevention**: Dragged item hidden with `display: none`. Virtual scroll's `totalHeight` subtracts 1 during drag.
 
 6. **Overlay container for drag preview**: `DragPreviewComponent` teleports its host element into a body-level `<div class="vdnd-overlay-container">` via `afterNextRender`. This escapes ancestor CSS `transform`/`perspective`/`filter` that create new containing blocks for `position: fixed` (e.g. Ionic's `ion-page`). Angular change detection works on the logical component tree, so signals/effects/bindings keep working after the DOM move. Unit tests must use `document.querySelector()` instead of `fixture.debugElement.query()` to find the teleported preview.
+
+7. **Shift animation is FLIP on top of layout**: Items move by layout (placeholder in flow), so CSS transitions can't animate them. When `VDND_ANIMATION_CONFIG` is provided, `ShiftAnimator` (`lib/utils/shift-animator.ts`) snapshots rendered item positions (relative to scroll content) before a placeholder change and plays a `transform` WAAPI animation after render. Views recycled by `VirtualForDirective` must cancel their animation. Hit-testing is pure math, so in-flight transforms never affect the drop index.
 
 ### Safari Autoscroll
 

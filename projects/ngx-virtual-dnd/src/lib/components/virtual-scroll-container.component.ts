@@ -14,6 +14,7 @@ import {
   OnInit,
   signal,
   TemplateRef,
+  untracked,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { DragStateService } from '../services/drag-state.service';
@@ -29,6 +30,8 @@ import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
 import { queryByAttribute } from '../utils/attribute-selectors';
+import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
+import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
 
 /**
  * Context provided to the item template.
@@ -167,6 +170,9 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
 
   /** Measured height from ResizeObserver (used when containerHeight is not provided) */
   readonly #measuredHeight = signal(0);
+
+  /** Slides items displaced by the placeholder (only when VDND_ANIMATION_CONFIG is provided) */
+  readonly #shiftAnimator = this.#createShiftAnimator();
 
   /** Template for rendering each item - passed as input instead of content child for reliability */
   itemTemplate = input.required<TemplateRef<VirtualScrollItemContext<T>>>();
@@ -517,6 +523,17 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
       strategy.setExcludedIndex(draggedIndex >= 0 ? draggedIndex : null);
     });
 
+    // Snapshot item positions before the template re-renders the placeholder move.
+    // Component effects run before the component's own template is refreshed.
+    if (this.#shiftAnimator) {
+      const animator = this.#shiftAnimator;
+      effect(() => {
+        const isDragging = this.#dragState.isDragging();
+        const placeholderIndex = this.placeholderIndex();
+        untracked(() => animator.beforeUpdate(isDragging, placeholderIndex));
+      });
+    }
+
     // Keyboard drag autoscroll: scroll to keep target index visible
     effect(() => {
       // Only apply when this droppable is active during keyboard drag
@@ -661,6 +678,34 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
     }
     this.#observedElementByKey.clear();
     this.#itemResizeObserver?.disconnect();
+    this.#shiftAnimator?.cancelAll();
+  }
+
+  #createShiftAnimator(): ShiftAnimator | null {
+    const config = inject(VDND_ANIMATION_CONFIG, { optional: true });
+    if (!config) return null;
+    return new ShiftAnimator({
+      config,
+      injector: this.#injector,
+      getScrollElement: () => this.#elementRef.nativeElement,
+      getEntries: () => this.#shiftAnimationEntries(),
+    });
+  }
+
+  /**
+   * Rendered item roots and the placeholder. `@for` never reuses a view for a different
+   * track key, so each element is its own stable identity.
+   */
+  *#shiftAnimationEntries(): Iterable<ShiftAnimationEntry> {
+    const wrapper = this.#elementRef.nativeElement.querySelector(
+      '.vdnd-virtual-scroll-content-wrapper',
+    );
+    if (!wrapper) return;
+    for (const child of Array.from(wrapper.children)) {
+      if (child instanceof HTMLElement) {
+        yield [child, child];
+      }
+    }
   }
 
   /**

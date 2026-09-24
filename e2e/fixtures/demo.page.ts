@@ -36,8 +36,8 @@ export class DemoPage {
     this.placeholder = page.locator('.vdnd-drag-placeholder-visible');
   }
 
-  async goto(): Promise<void> {
-    await this.page.goto('/', { waitUntil: 'domcontentloaded' });
+  async goto(path = '/'): Promise<void> {
+    await this.page.goto(path, { waitUntil: 'domcontentloaded' });
     // Wait for items to be rendered using auto-waiting assertion
     await expect(this.list1Items.first()).toBeVisible();
     // The expanded settings panel animates from 0fr to 1fr on initial render. Wait for the

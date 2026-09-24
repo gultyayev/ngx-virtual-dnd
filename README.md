@@ -15,6 +15,7 @@ Inspired by [react-virtualized-dnd](https://github.com/forecast-it/react-virtual
 - **Container Constraints** - Constrain drag preview to container boundaries
 - **Axis Locking** - Lock dragging to horizontal or vertical axis
 - **Custom Previews** - Template-based drag preview and placeholder customization
+- **Shift Animations** - Opt-in sliding of displaced items, plus a per-step event for haptics
 - **Keyboard Accessible** - Space to grab, arrows to move, Escape to cancel
 - **Touch Support** - Works with mouse and touch, with configurable delay/threshold
 - **Angular 21+** - Signals, standalone components, modern patterns
@@ -302,6 +303,40 @@ Configure auto-scroll behavior when dragging near container edges:
 
 Set `[autoScrollEnabled]="false"` to disable auto-scroll entirely. These options are available on `VirtualSortableListComponent`, `DroppableDirective`, and `ScrollableDirective`.
 
+### Shift Animations & Haptics
+
+Items displaced by the placeholder jump into place by default. Provide `VDND_ANIMATION_CONFIG` to make them slide instead (a compositor-only `transform` animation, works with virtual scrolling and dynamic heights):
+
+```typescript
+import { VDND_ANIMATION_CONFIG } from 'ngx-virtual-dnd';
+
+// app.config.ts (app-wide) or any component's `providers` (that subtree only)
+providers: [{ provide: VDND_ANIMATION_CONFIG, useValue: { shiftDuration: 200 } }];
+```
+
+| Option          | Default                      | Description                         |
+| --------------- | ---------------------------- | ----------------------------------- |
+| `shiftDuration` | `200`                        | Slide duration in ms (`0` disables) |
+| `shiftEasing`   | `cubic-bezier(0.2, 0, 0, 1)` | CSS easing function                 |
+
+The animation is skipped when the user prefers reduced motion. If the placeholder moves again mid-slide, items continue from where they currently are. Values are read each time an animation starts, so a getter can toggle it at runtime.
+
+For haptic feedback on every step, listen to `(placeholderMove)` on `vdndDroppable` or `vdnd-sortable-list`. It fires each time the placeholder moves within that list (every item displacement), including when it enters the list — not for the initial pick-up or when it leaves:
+
+```html
+<vdnd-sortable-list ... (placeholderMove)="onPlaceholderMove($event)" />
+```
+
+```typescript
+import { Haptics } from '@capacitor/haptics';
+
+onPlaceholderMove(event: PlaceholderMoveEvent): void {
+  Haptics.selectionChanged(); // or navigator.vibrate?.(10) on the web
+}
+```
+
+`PlaceholderMoveEvent` carries `draggableId`, `sourceDroppableId`, `droppableId`, `previousIndex` (`null` when the placeholder just entered the list) and `currentIndex`, using the same index convention as `DropEvent.destination.index`.
+
 ### Disabling Drag & Drop
 
 Use the `disabled` input to conditionally disable draggables, droppables, or entire lists:
@@ -493,11 +528,12 @@ ARIA attributes (`aria-grabbed`, `aria-dropeffect`, `tabindex`) are managed auto
 
 All event types are importable from `ngx-virtual-dnd`.
 
-| Output        | Event Type       | Emitted By                                           |
-| ------------- | ---------------- | ---------------------------------------------------- |
-| `(dragStart)` | `DragStartEvent` | `DraggableDirective`                                 |
-| `(dragEnd)`   | `DragEndEvent`   | `DraggableDirective`                                 |
-| `(drop)`      | `DropEvent`      | `DroppableDirective`, `VirtualSortableListComponent` |
+| Output              | Event Type             | Emitted By                                           |
+| ------------------- | ---------------------- | ---------------------------------------------------- |
+| `(dragStart)`       | `DragStartEvent`       | `DraggableDirective`                                 |
+| `(dragEnd)`         | `DragEndEvent`         | `DraggableDirective`                                 |
+| `(drop)`            | `DropEvent`            | `DroppableDirective`, `VirtualSortableListComponent` |
+| `(placeholderMove)` | `PlaceholderMoveEvent` | `DroppableDirective`, `VirtualSortableListComponent` |
 
 `DragEndEvent.destinationIndex` is `null` when no drop occurred — an Escape cancel, a release outside every droppable, or a release over a disabled droppable — so branch on `destinationIndex === null` to detect that. The `cancelled` boolean is `true` only for an active Escape cancel.
 

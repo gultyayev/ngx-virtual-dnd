@@ -5,7 +5,7 @@ import {
 } from './virtual-scroll-container.component';
 import { DroppableDirective } from '../directives/droppable.directive';
 import { AutoScrollConfig } from '../services/auto-scroll.service';
-import { DropEvent } from '../models/drag-drop.models';
+import { DropEvent, PlaceholderMoveEvent } from '../models/drag-drop.models';
 
 /**
  * A high-level component that combines droppable, virtual scroll, and placeholder
@@ -60,6 +60,7 @@ import { DropEvent } from '../models/drag-drop.models';
       [disabled]="disabled()"
       [constrainToContainer]="constrainToContainer()"
       (drop)="drop.emit($event)"
+      (placeholderMove)="placeholderMove.emit($event)"
     >
       <vdnd-virtual-scroll
         [items]="items()"
@@ -152,4 +153,7 @@ export class VirtualSortableListComponent<T> {
   /** Emits when an item is dropped on this list */
   // eslint-disable-next-line @angular-eslint/no-output-native
   drop = output<DropEvent>();
+
+  /** Emits each time the placeholder moves within this list (every item displacement) */
+  placeholderMove = output<PlaceholderMoveEvent>();
 }

@@ -374,6 +374,19 @@ The drop-position placeholder rendered inside lists is an empty element with hei
 
 `PlaceholderComponent` (`<vdnd-placeholder [template]>`) is a standalone indicator you can render yourself; the built-in lists do not use it.
 
+## Shift animations and haptics
+
+Displaced items jump into place unless `VDND_ANIMATION_CONFIG` is provided (app config or a component's `providers`):
+
+```typescript
+providers: [{ provide: VDND_ANIMATION_CONFIG, useValue: { shiftDuration: 200 } }]
+// optional: shiftEasing (default 'cubic-bezier(0.2, 0, 0, 1)'); shiftDuration: 0 disables
+```
+
+Items then slide into their new position (works with virtual scrolling and dynamic heights; skipped under reduced motion; a new move mid-slide continues from the current spot). Don't add your own CSS `transition` on item `transform`/`top` to get this — items move via layout, not transforms.
+
+For haptics on every step, use `(placeholderMove)` on `vdndDroppable` / `vdnd-sortable-list` (`PlaceholderMoveEvent`: `previousIndex` → `currentIndex`, same index convention as `DropEvent.destination.index`; `previousIndex` is `null` when the placeholder entered the list). Not emitted for the initial pick-up or when the placeholder leaves.
+
 ## Drag state
 
 Inject `DragStateService` (root singleton) to react to drags anywhere, e.g. to highlight valid targets:
@@ -442,6 +455,7 @@ export class TasksComponent {
 | `(dragStart)` | `DragStartEvent` | `vdndDraggable`                                     |
 | `(dragEnd)`   | `DragEndEvent`   | `vdndDraggable` — after every drag, dropped or not  |
 | `(drop)`      | `DropEvent`      | `vdndDroppable`, `vdnd-sortable-list` — destination only |
+| `(placeholderMove)` | `PlaceholderMoveEvent` | `vdndDroppable`, `vdnd-sortable-list` — each placeholder move within that list (haptics) |
 
 `DragEndEvent.destinationIndex` is `null` when nothing was dropped: Escape/Tab cancel, release outside every droppable, or release over a disabled droppable. Branch on `destinationIndex === null` to detect "no drop"; `cancelled` is `true` only for an explicit cancel, so it misses the other cases.
 

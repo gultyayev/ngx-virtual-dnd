@@ -5,7 +5,12 @@ import { DroppableDirective } from './droppable.directive';
 import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
-import { DraggedItem, DropEvent, END_OF_LIST } from '../models/drag-drop.models';
+import {
+  DraggedItem,
+  DropEvent,
+  END_OF_LIST,
+  PlaceholderMoveEvent,
+} from '../models/drag-drop.models';
 
 // Test host component
 @Component({
@@ -19,6 +24,7 @@ import { DraggedItem, DropEvent, END_OF_LIST } from '../models/drag-drop.models'
       [autoScrollConfig]="autoScrollConfig()"
       style="height: 300px; overflow: auto;"
       (drop)="onDrop($event)"
+      (placeholderMove)="onPlaceholderMove($event)"
     >
       @for (item of items; track item.id) {
         <div [attr.data-draggable-id]="item.id" style="height: 50px;">
@@ -45,6 +51,12 @@ class TestHostComponent {
 
   onDrop(event: DropEvent): void {
     this.dropEvents.push(event);
+  }
+
+  placeholderMoveEvents: PlaceholderMoveEvent[] = [];
+
+  onPlaceholderMove(event: PlaceholderMoveEvent): void {
+    this.placeholderMoveEvents.push(event);
   }
 }
 
@@ -533,6 +545,159 @@ describe('DroppableDirective', () => {
 
       expect(component.dropEvents.length).toBe(1);
       expect(component.dropEvents.at(-1)?.destination.index).toBe(3);
+    });
+  });
+
+  describe('placeholderMove emission', () => {
+    /** Start a same-list drag of item-1 (index 0) with the placeholder in its own slot. */
+    const startSameListDrag = (): void => {
+      dragStateService.startDrag(
+        createMockDraggedItem(),
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'test-list',
+        END_OF_LIST,
+        1, // same-list placeholder index includes the +1 hidden-source adjustment
+        0,
+      );
+      fixture.detectChanges();
+    };
+
+    const movePlaceholder = (placeholderIndex: number | null, activeDroppableId = 'test-list') => {
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 0, y: 0 },
+        activeDroppableId,
+        placeholderId: END_OF_LIST,
+        placeholderIndex,
+      });
+      fixture.detectChanges();
+    };
+
+    it('does not emit for the initial placeholder in the dragged item own slot', () => {
+      startSameListDrag();
+
+      expect(component.placeholderMoveEvents).toEqual([]);
+    });
+
+    it('emits every displacement with drop-convention indexes', () => {
+      startSameListDrag();
+
+      movePlaceholder(3);
+      movePlaceholder(4);
+      movePlaceholder(1);
+
+      expect(component.placeholderMoveEvents.map((e) => [e.previousIndex, e.currentIndex])).toEqual(
+        [
+          [0, 2],
+          [2, 3],
+          [3, 0],
+        ],
+      );
+      expect(component.placeholderMoveEvents[0]).toEqual({
+        draggableId: 'item-1',
+        sourceDroppableId: 'test-list',
+        droppableId: 'test-list',
+        previousIndex: 0,
+        currentIndex: 2,
+        data: { id: 'item-1', name: 'Item 1' },
+      });
+    });
+
+    it('does not emit when the placeholder index is unchanged', () => {
+      startSameListDrag();
+
+      movePlaceholder(3);
+      movePlaceholder(3);
+
+      expect(component.placeholderMoveEvents.length).toBe(1);
+    });
+
+    it('reports the source index as previous for a first placement away from the own slot', () => {
+      dragStateService.startDrag(
+        createMockDraggedItem(),
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'test-list',
+        END_OF_LIST,
+        3,
+        0,
+      );
+      fixture.detectChanges();
+
+      expect(component.placeholderMoveEvents.map((e) => e.previousIndex)).toEqual([0]);
+      expect(component.placeholderMoveEvents.map((e) => e.currentIndex)).toEqual([2]);
+    });
+
+    it('emits with a null previous index when entering from another droppable', () => {
+      dragStateService.startDrag(
+        createMockDraggedItem({ droppableId: 'other-list' }),
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'other-list',
+        END_OF_LIST,
+        1,
+        0,
+      );
+      fixture.detectChanges();
+
+      movePlaceholder(2);
+
+      expect(component.placeholderMoveEvents.length).toBe(1);
+      expect(component.placeholderMoveEvents[0]).toEqual(
+        expect.objectContaining({
+          sourceDroppableId: 'other-list',
+          droppableId: 'test-list',
+          previousIndex: null,
+          // Cross-list indexes have no hidden-source adjustment
+          currentIndex: 2,
+        }),
+      );
+    });
+
+    it('emits on re-entering the source list after leaving it', () => {
+      startSameListDrag();
+
+      movePlaceholder(1, 'other-list');
+      movePlaceholder(1);
+
+      expect(component.placeholderMoveEvents.map((e) => [e.previousIndex, e.currentIndex])).toEqual(
+        [[null, 0]],
+      );
+    });
+
+    it('does not emit when the placeholder leaves or the drag ends', () => {
+      startSameListDrag();
+      movePlaceholder(3);
+      component.placeholderMoveEvents = [];
+
+      movePlaceholder(0, 'other-list');
+      movePlaceholder(3);
+      component.placeholderMoveEvents = [];
+      dragStateService.endDrag();
+      fixture.detectChanges();
+
+      expect(component.placeholderMoveEvents).toEqual([]);
+    });
+
+    it('does not emit for a droppable the placeholder never enters', () => {
+      dragStateService.startDrag(
+        createMockDraggedItem({ droppableId: 'other-list' }),
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'other-list',
+        END_OF_LIST,
+        1,
+        0,
+      );
+      fixture.detectChanges();
+
+      movePlaceholder(4, 'other-list');
+
+      expect(component.placeholderMoveEvents).toEqual([]);
     });
   });
 
