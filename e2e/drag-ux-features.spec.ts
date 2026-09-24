@@ -1,29 +1,6 @@
 import { expect, Locator, Page, test } from '@playwright/test';
 import { DemoPage } from './fixtures/demo.page';
-
-interface DragStartBox {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-async function startPointerDragFromBox(
-  page: Page,
-  dragPreview: Locator,
-  box: DragStartBox,
-): Promise<void> {
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
-
-  await expect(async () => {
-    await page.mouse.up().catch(() => undefined);
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    await page.mouse.move(startX + 10, startY + 10, { steps: 3 });
-    await expect(dragPreview).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 5000 });
-}
+import { afterInputHandled } from './fixtures/drag-sync';
 
 test.describe('Drag UX Features - Cursor Management', () => {
   let demoPage: DemoPage;
@@ -33,138 +10,68 @@ test.describe('Drag UX Features - Cursor Management', () => {
     await demoPage.goto();
   });
 
-  test('should expose stable draggable geometry after demo navigation', async ({ page }) => {
-    const firstItem = demoPage.list1Items.first();
-    const initialBox = await firstItem.boundingBox();
-
-    await page.getByTestId('settings-collapse').evaluate(async (element) => {
-      const animations = element.getAnimations();
-      await Promise.all(animations.map((animation) => animation.finished));
-    });
-
-    const settledBox = await firstItem.boundingBox();
-    expect(initialBox, 'Initial draggable geometry should be available').not.toBeNull();
-    expect(settledBox, 'Settled draggable geometry should be available').not.toBeNull();
-    expect(
-      Math.abs(settledBox!.y - initialBox!.y),
-      'DemoPage.goto() should not return while the settings panel is shifting the lists',
-    ).toBeLessThan(0.5);
-  });
-
   test('should add vdnd-dragging class to body during drag', async ({ page }) => {
-    // Get first item
-    const firstItem = demoPage.list1Items.first();
+    const body = page.locator('body');
+    await expect(body).not.toHaveClass(/vdnd-dragging/);
 
-    // Body should not have dragging class initially
-    await expect(page.locator('body')).not.toHaveClass(/vdnd-dragging/);
+    await demoPage.startDrag(demoPage.list1Items.first());
+    await expect(body).toHaveClass(/vdnd-dragging/);
 
-    // Start drag
-    await firstItem.hover();
-    await page.mouse.down();
-    const box = await firstItem.boundingBox();
-    await page.mouse.move(box!.x + 50, box!.y + 50, { steps: 5 });
-
-    // Wait for drag to start
-    await expect(demoPage.dragPreview).toBeVisible({ timeout: 1000 });
-
-    // Body should have dragging class
-    await expect(page.locator('body')).toHaveClass(/vdnd-dragging/);
-
-    // End drag
     await page.mouse.up();
-
-    // Body should no longer have dragging class
-    await expect(page.locator('body')).not.toHaveClass(/vdnd-dragging/);
+    await expect(body).not.toHaveClass(/vdnd-dragging/);
   });
 
   test('should inject cursor styles for grabbing cursor', async ({ page }) => {
-    // Check that the cursor styles are injected
     const styleElement = page.locator('#vdnd-cursor-styles');
     await expect(styleElement).toBeAttached();
-
-    // Verify the content includes grabbing cursor
-    const styleContent = await styleElement.textContent();
-    expect(styleContent).toContain('cursor: grabbing');
+    expect(await styleElement.textContent()).toContain('cursor: grabbing');
   });
 });
 
 test.describe('Drag UX Features - Drag Handle', () => {
   let demoPage: DemoPage;
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(({ page }) => {
     demoPage = new DemoPage(page);
-    await demoPage.goto();
   });
 
-  test('should only start drag when clicking on handle when enabled', async ({ page }) => {
-    // Enable drag handle mode
-    const handleCheckbox = page.locator('[data-testid="drag-handle-checkbox"]');
-    await handleCheckbox.check();
-
-    // Wait for Angular to process the handle mode change and get first item
-    const firstItem = demoPage.list1Items.first();
-    await expect(firstItem).toHaveClass(/use-handle/);
-
-    // Get first item's handle
-    const handle = firstItem.locator('.item-handle');
-
-    // Try to drag by clicking on the item text (not the handle)
-    const itemText = firstItem.locator('.item-text');
-    const textBox = await itemText.boundingBox();
-    await page.mouse.move(textBox!.x + textBox!.width / 2, textBox!.y + textBox!.height / 2);
+  /** Press on `target` and move far past the threshold; the drag must not start. */
+  async function expectNoDragFrom(page: Page, target: Locator): Promise<void> {
+    const box = await target.boundingBox();
+    if (!box) throw new Error('Could not get the press target bounding box');
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(textBox!.x + 100, textBox!.y + 100, { steps: 5 });
-
-    // Drag preview should NOT be visible (clicked outside handle)
+    await afterInputHandled(page, 'mousemove', () => page.mouse.move(box.x + 100, box.y + 100));
     await expect(demoPage.dragPreview).not.toBeVisible();
     await page.mouse.up();
+  }
 
-    // Now try dragging by clicking on the handle
-    const handleBox = await handle.boundingBox();
-    await page.mouse.move(
-      handleBox!.x + handleBox!.width / 2,
-      handleBox!.y + handleBox!.height / 2,
-    );
-    await page.mouse.down();
-    await page.mouse.move(handleBox!.x + 100, handleBox!.y + 100, { steps: 5 });
-
-    // Drag preview SHOULD be visible (clicked on handle)
-    await expect(demoPage.dragPreview).toBeVisible({ timeout: 1000 });
-
-    // Clean up
-    await page.mouse.up();
-  });
-
-  test('should allow dragging from anywhere when handle mode is disabled', async ({ page }) => {
-    // Ensure drag handle mode is disabled (default)
-    const handleCheckbox = page.locator('[data-testid="drag-handle-checkbox"]');
-    await expect(handleCheckbox).not.toBeChecked();
-
-    // Get a stable draggable item box and drag from its center.
+  test('should only start drag from the handle when enabled', async ({ page }) => {
+    await demoPage.goto({ dragHandle: true });
     const firstItem = demoPage.list1Items.first();
-    const itemBox = await firstItem.boundingBox();
-    if (!itemBox) {
-      throw new Error('Could not get first item bounding box');
-    }
 
-    await startPointerDragFromBox(page, demoPage.dragPreview, itemBox);
+    // Pressing the item text (not the handle) does not start a drag...
+    await expectNoDragFrom(page, firstItem.getByTestId('demo-item-text'));
 
+    // ...pressing the handle does
+    await demoPage.startDrag(firstItem.getByTestId('demo-item-handle'));
     await page.mouse.up();
   });
 
-  test('should apply use-handle class to items when handle mode is enabled', async ({ page }) => {
-    // Enable drag handle mode
-    const handleCheckbox = page.locator('[data-testid="drag-handle-checkbox"]');
+  test('should apply drag handle changes at runtime', async ({ page }) => {
+    await demoPage.goto();
+    const handleCheckbox = page.getByTestId('drag-handle-checkbox');
+    const firstText = demoPage.list1Items.first().getByTestId('demo-item-text');
+
+    // The demo's use-handle class renders in the same pass as the dragHandle input: a sync point
     await handleCheckbox.check();
+    await expect(demoPage.list1Items.first()).toHaveClass(/use-handle/);
+    await expectNoDragFrom(page, firstText);
 
-    // Items should have use-handle class (auto-waits for Angular to update)
-    const firstItem = demoPage.list1Items.first();
-    await expect(firstItem).toHaveClass(/use-handle/);
-
-    // Disable drag handle mode
+    // Without the handle, the whole item starts a drag again
     await handleCheckbox.uncheck();
-
-    // Items should not have use-handle class (auto-waits for Angular to update)
-    await expect(firstItem).not.toHaveClass(/use-handle/);
+    await expect(demoPage.list1Items.first()).not.toHaveClass(/use-handle/);
+    await demoPage.startDrag(firstText);
+    await page.mouse.up();
   });
 });

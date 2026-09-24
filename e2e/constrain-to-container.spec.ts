@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, Page, test } from '@playwright/test';
 import { DemoPage } from './fixtures/demo.page';
+import { poll } from './fixtures/polling';
 
 interface DebugState {
   activeDroppable: string | null;
@@ -13,14 +14,13 @@ test.describe('Constrain to Container', () => {
 
   test.beforeEach(async ({ page }) => {
     demoPage = new DemoPage(page);
-    await demoPage.goto();
-    await demoPage.enableConstrainToContainer();
+    await demoPage.goto({ constrainToContainer: true });
     await demoPage.list1VirtualScroll.evaluate((el) =>
       el.scrollIntoView({ block: 'center', inline: 'nearest' }),
     );
   });
 
-  async function getDebugState(page: Parameters<typeof test>[0]['page']): Promise<DebugState> {
+  async function getDebugState(page: Page): Promise<DebugState> {
     const raw = await page.getByTestId('drag-state-debug').textContent();
     if (!raw) {
       throw new Error('Debug panel state is missing');
@@ -28,9 +28,7 @@ test.describe('Constrain to Container', () => {
     return JSON.parse(raw) as DebugState;
   }
 
-  async function expectBottomReorderDestination(
-    page: Parameters<typeof test>[0]['page'],
-  ): Promise<void> {
+  async function expectBottomReorderDestination(page: Page): Promise<void> {
     await expect(async () => {
       const debugState = await getDebugState(page);
       expect(debugState.activeDroppable).toBe('list-1');
@@ -41,7 +39,7 @@ test.describe('Constrain to Container', () => {
     }).toPass({ timeout: 3000 });
   }
 
-  async function expectActiveDroppable(page: Parameters<typeof test>[0]['page']): Promise<void> {
+  async function expectActiveDroppable(page: Page): Promise<void> {
     await expect(async () => {
       const debugState = await getDebugState(page);
       expect(debugState.activeDroppable).toBe('list-1');
@@ -49,29 +47,32 @@ test.describe('Constrain to Container', () => {
     }).toPass({ timeout: 3000 });
   }
 
-  test('bottom drag stays in droppable and drop succeeds', async ({ page }) => {
-    const initialCount = await demoPage.getItemCount('list1');
-    const expectedFirstText = await demoPage.getItemText('list1', 1);
-    const sourceItem = demoPage.list1Items.first();
-    await sourceItem.scrollIntoViewIfNeeded();
-    const sourceBox = await sourceItem.boundingBox();
-    const containerBox = await demoPage.list1VirtualScroll.boundingBox();
+  /**
+   * Clamp a pointer target into the viewport: Firefox drops a mouse.move to a point outside it,
+   * steps included, so the drag would never leave the container there.
+   */
+  function insideViewport(page: Page, y: number): number {
+    const height = page.viewportSize()?.height ?? 720;
+    return Math.min(Math.max(y, 2), height - 2);
+  }
 
-    if (!sourceBox || !containerBox) {
-      throw new Error('Could not get bounding boxes');
+  /** Top and bottom edge of the drag preview (viewport coordinates). */
+  async function previewEdges(): Promise<{ top: number; bottom: number }> {
+    const box = await demoPage.dragPreview.boundingBox();
+    if (!box) throw new Error('Could not get preview bounding box');
+    return { top: box.y, bottom: box.y + box.height };
+  }
+
+  test('bottom drag stays in droppable and drop succeeds', async ({ page }) => {
+    const expectedFirstId = await demoPage.getItemId('list1', 1);
+    const containerBox = await demoPage.list1VirtualScroll.boundingBox();
+    if (!containerBox) {
+      throw new Error('Could not get the container bounding box');
     }
 
-    await sourceItem.hover();
-    await page.mouse.down();
-    await page.mouse.move(
-      sourceBox.x + sourceBox.width / 2 + 10,
-      sourceBox.y + sourceBox.height / 2 + 10,
-      { steps: 2 },
-    );
+    await demoPage.startDrag(demoPage.list1Items.first());
 
-    await expect(demoPage.dragPreview).toBeVisible({ timeout: 2000 });
-
-    const belowContainerY = containerBox.y + containerBox.height + 200;
+    const belowContainerY = insideViewport(page, containerBox.y + containerBox.height + 200);
     const targetX = containerBox.x + containerBox.width / 2;
     await page.mouse.move(targetX, belowContainerY, { steps: 20 });
     await page.mouse.move(targetX, belowContainerY);
@@ -87,48 +88,30 @@ test.describe('Constrain to Container', () => {
     await page.mouse.up();
     await expect(demoPage.dragPreview).not.toBeVisible({ timeout: 2000 });
 
+    await expect(demoPage.countBadge('list1')).toHaveText('50');
     await expect(async () => {
       await demoPage.scrollList('list1', 0);
       expect(await demoPage.getScrollTop('list1')).toBe(0);
-      const finalCount = await demoPage.getItemCount('list1');
-      expect(finalCount).toBe(initialCount);
-      expect(await demoPage.getItemText('list1', 0)).toBe(expectedFirstText);
+      expect(await demoPage.getItemId('list1', 0)).toBe(expectedFirstId);
     }).toPass({ timeout: 3000 });
   });
 
-  test('preview stays inside container at top boundary', async ({ page }) => {
-    const sourceItem = demoPage.list1Items.nth(2);
-    await sourceItem.scrollIntoViewIfNeeded();
-    const sourceBox = await sourceItem.boundingBox();
+  test('preview is pinned inside the container at its top boundary', async ({ page }) => {
     const containerBox = await demoPage.list1VirtualScroll.boundingBox();
-
-    if (!sourceBox || !containerBox) {
-      throw new Error('Could not get bounding boxes');
+    if (!containerBox) {
+      throw new Error('Could not get the container bounding box');
     }
 
-    await sourceItem.hover();
-    await page.mouse.down();
-    await page.mouse.move(
-      sourceBox.x + sourceBox.width / 2 + 10,
-      sourceBox.y + sourceBox.height / 2 + 10,
-      { steps: 2 },
-    );
+    // Start from the third item so the preview has to travel up to reach the edge
+    await demoPage.startDrag(demoPage.list1Items.nth(2));
 
-    await expect(demoPage.dragPreview).toBeVisible({ timeout: 2000 });
-
-    const aboveContainerY = containerBox.y - 200;
+    const aboveContainerY = insideViewport(page, containerBox.y - 200);
     const targetX = containerBox.x + containerBox.width / 2;
     await page.mouse.move(targetX, aboveContainerY, { steps: 20 });
     await page.mouse.move(targetX, aboveContainerY);
 
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
-
-    const previewBox = await demoPage.dragPreview.boundingBox();
-    if (!previewBox) {
-      throw new Error('Could not get preview bounding box');
-    }
-
-    expect(previewBox.y).toBeGreaterThanOrEqual(containerBox.y + 1);
+    // Clamped to 1px inside the top edge (not merely "still inside": it must have moved there)
+    await poll(async () => (await previewEdges()).top - containerBox.y).toBeCloseTo(1, 0);
 
     await page.mouse.move(
       containerBox.x + containerBox.width / 2,
@@ -162,10 +145,7 @@ test.describe('Constrain to Container', () => {
     await page.mouse.move(grabX, bottomEdgeY);
 
     // Wait for scrollTop to increase substantially (proves downward autoscroll works)
-    await expect(async () => {
-      const scrollTop = await demoPage.getScrollTop('list1');
-      expect(scrollTop).toBeGreaterThan(100);
-    }).toPass({ timeout: 10000 });
+    await poll(() => demoPage.getScrollTop('list1'), { timeout: 10000 }).toBeGreaterThan(100);
 
     const scrollTopBeforeTopEdge = await demoPage.getScrollTop('list1');
 
@@ -174,13 +154,10 @@ test.describe('Constrain to Container', () => {
     await page.mouse.move(grabX, topEdgeY, { steps: 15 });
     await page.mouse.move(grabX, topEdgeY);
 
-    await expect(async () => {
-      const scrollTopNow = await demoPage.getScrollTop('list1');
-      expect(scrollTopNow).toBeLessThan(scrollTopBeforeTopEdge);
-    }).toPass({
+    await poll(() => demoPage.getScrollTop('list1'), {
       timeout: 5000,
       message: 'Autoscroll up should trigger at top edge with non-trivial grabOffset',
-    });
+    }).toBeLessThan(scrollTopBeforeTopEdge);
 
     // Clean up: drop inside the container
     await page.mouse.move(
@@ -191,42 +168,22 @@ test.describe('Constrain to Container', () => {
     await expect(demoPage.dragPreview).not.toBeVisible({ timeout: 2000 });
   });
 
-  test('preview stays inside container at bottom boundary', async ({ page }) => {
-    const sourceItem = demoPage.list1Items.first();
-    await sourceItem.scrollIntoViewIfNeeded();
-    const sourceBox = await sourceItem.boundingBox();
+  test('preview is pinned inside the container at its bottom boundary', async ({ page }) => {
     const containerBox = await demoPage.list1VirtualScroll.boundingBox();
-
-    if (!sourceBox || !containerBox) {
-      throw new Error('Could not get bounding boxes');
+    if (!containerBox) {
+      throw new Error('Could not get the container bounding box');
     }
 
-    await sourceItem.hover();
-    await page.mouse.down();
-    await page.mouse.move(
-      sourceBox.x + sourceBox.width / 2 + 10,
-      sourceBox.y + sourceBox.height / 2 + 10,
-      { steps: 2 },
-    );
+    await demoPage.startDrag(demoPage.list1Items.first());
 
-    await expect(demoPage.dragPreview).toBeVisible({ timeout: 2000 });
-
-    const belowContainerY = containerBox.y + containerBox.height + 200;
+    const belowContainerY = insideViewport(page, containerBox.y + containerBox.height + 200);
     const targetX = containerBox.x + containerBox.width / 2;
     await page.mouse.move(targetX, belowContainerY, { steps: 20 });
     await page.mouse.move(targetX, belowContainerY);
 
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
-
-    const previewBox = await demoPage.dragPreview.boundingBox();
-    if (!previewBox) {
-      throw new Error('Could not get preview bounding box');
-    }
-
-    const previewBottom = previewBox.y + previewBox.height;
+    // Clamped to 1px inside the bottom edge (not merely "still inside": it must have moved there)
     const containerBottom = containerBox.y + containerBox.height;
-
-    expect(previewBottom).toBeLessThanOrEqual(containerBottom - 1);
+    await poll(async () => containerBottom - (await previewEdges()).bottom).toBeCloseTo(1, 0);
 
     await page.mouse.move(
       containerBox.x + containerBox.width / 2,

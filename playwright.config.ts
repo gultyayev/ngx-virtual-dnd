@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { POLL_INTERVALS } from './e2e/fixtures/polling';
 
 // macOS 27 TCC-protects ~/Library/Application Support/Firefox, and Playwright's Firefox reads
 // its app-data dir at startup even with an explicit -profile, so launch exits with
@@ -26,6 +27,9 @@ export default defineConfig({
   // workers starve the time-based autoscroll tests of frames.
   workers: process.env.CI ? 2 : undefined,
   reporter: [['html', { open: 'never' }]],
+  // Poll toPass() about once a frame at first instead of Playwright's 100/250/500/1000 ms
+  // back-off, which overshoots frame-driven waits by up to a second (see e2e/fixtures/polling.ts).
+  expect: { toPass: { intervals: POLL_INTERVALS } },
   use: {
     baseURL: 'http://127.0.0.1:4200',
     trace: 'on-first-retry',

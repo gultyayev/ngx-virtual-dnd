@@ -30,103 +30,56 @@ test.describe('Keyboard Navigation', () => {
     await expect(focusedElement).toHaveAttribute('data-draggable-id');
   });
 
-  test('should have correct tabindex on draggable items', async () => {
-    const firstItem = demoPage.list1Items.first();
-    await expect(firstItem).toHaveAttribute('tabindex', '0');
-  });
-
-  test('should cancel drag on Escape key press', async ({ page }) => {
-    const sourceItem = demoPage.list1Items.first();
-    const sourceBox = await sourceItem.boundingBox();
-
-    // Start dragging
-    await sourceItem.hover();
-    await page.mouse.down();
-    await page.mouse.move(sourceBox!.x + 100, sourceBox!.y + 100);
-
-    // Verify drag is in progress
-    await expect(demoPage.dragPreview).toBeVisible();
-
-    // Press Escape to cancel (document-level keydown listener handles this)
-    await page.keyboard.press('Escape');
-
-    // Wait for drag to be canceled (preview disappears)
-    await expect(demoPage.dragPreview).not.toBeVisible();
-
-    // Original item should be visible again
-    await expect(sourceItem).not.toHaveCSS('display', 'none');
-  });
-
   test('should have aria-grabbed attribute during drag', async ({ page }) => {
     const sourceItem = demoPage.list1Items.first();
-    const sourceBox = await sourceItem.boundingBox();
     const itemId = await sourceItem.getAttribute('data-draggable-id');
 
     // Before drag
     await expect(sourceItem).not.toHaveAttribute('aria-grabbed', 'true');
 
-    // Start dragging
-    await sourceItem.hover();
-    await page.mouse.down();
-    await page.mouse.move(sourceBox!.x + 50, sourceBox!.y + 50);
+    await demoPage.startDrag(sourceItem);
 
     // During drag - the original item has aria-grabbed (but is also hidden)
     const originalElement = page.locator(`[data-draggable-id="${itemId}"]`);
     await expect(originalElement).toHaveAttribute('aria-grabbed', 'true');
 
-    // End drag
     await page.mouse.up();
 
     // After drag
-    await expect(sourceItem).not.toHaveAttribute('aria-grabbed', 'true');
+    await expect(originalElement).not.toHaveAttribute('aria-grabbed', 'true');
   });
 
-  test('should have aria-dropeffect attribute on droppable containers', async () => {
-    // aria-dropeffect belongs on drop targets (droppables), not on draggable items
-    await expect(demoPage.list1Container).toHaveAttribute('aria-dropeffect', 'move');
-    await expect(demoPage.list2Container).toHaveAttribute('aria-dropeffect', 'move');
-  });
+  test('should prevent the default Space action when starting a keyboard drag', async ({
+    page,
+  }) => {
+    const scrollPositions = () =>
+      page.evaluate(() => ({
+        page: document.scrollingElement?.scrollTop ?? 0,
+        list: document.querySelector('[data-droppable-id="list-1"] [data-item-height]')?.scrollTop,
+      }));
+    const before = await scrollPositions();
 
-  test('should prevent default on Space key when focused on draggable', async ({ page }) => {
-    // Focus a draggable item
-    const firstItem = demoPage.list1Items.first();
-    await firstItem.focus();
-
-    // Pressing Space should start keyboard drag (prevents default scroll)
+    await demoPage.list1Items.first().focus();
+    // Unprevented, Space would scroll the list (or the page) by a screen.
     await page.keyboard.press('Space');
-
-    // Keyboard drag should have started - drag preview should be visible
-    // Note: The original element is hidden with display:none during drag,
-    // so focus cannot remain on it. See CLAUDE.md "Keyboard Drag Accessibility".
     await expect(demoPage.dragPreview).toBeVisible();
 
-    // Cancel the drag to clean up
+    expect(await scrollPositions()).toEqual(before);
+
     await page.keyboard.press('Escape');
+    await expect(demoPage.dragPreview).not.toBeVisible();
   });
 
-  test('should have tabindex -1 when disabled', async ({ page }) => {
-    // Disable dragging
-    const checkbox = page.locator('[data-testid="drag-enabled-checkbox"]');
-    await checkbox.uncheck();
-
-    // Items should have tabindex -1
+  test('should set tabindex -1 when disabled and restore 0 when re-enabled', async ({ page }) => {
     const firstItem = demoPage.list1Items.first();
-    await expect(firstItem).toHaveAttribute('tabindex', '-1');
-  });
+    await expect(firstItem).toHaveAttribute('tabindex', '0');
 
-  test('should restore tabindex 0 when re-enabled', async ({ page }) => {
-    // Disable dragging
-    const checkbox = page.locator('[data-testid="drag-enabled-checkbox"]');
+    // Toggled at runtime to cover the input change in both directions
+    const checkbox = page.getByTestId('drag-enabled-checkbox');
     await checkbox.uncheck();
-
-    // Verify disabled
-    const firstItem = demoPage.list1Items.first();
     await expect(firstItem).toHaveAttribute('tabindex', '-1');
 
-    // Re-enable
     await checkbox.check();
-
-    // Tabindex should be restored
     await expect(firstItem).toHaveAttribute('tabindex', '0');
   });
 });

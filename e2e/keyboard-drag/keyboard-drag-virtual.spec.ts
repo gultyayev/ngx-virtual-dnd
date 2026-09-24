@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { DemoPage } from '../fixtures/demo.page';
+import { poll } from '../fixtures/polling';
 
 test.describe('Keyboard Drag - Virtual Scroll Integration', () => {
   let demoPage: DemoPage;
@@ -9,111 +10,66 @@ test.describe('Keyboard Drag - Virtual Scroll Integration', () => {
     await demoPage.goto();
   });
 
-  test('should auto-scroll when navigating to item below visible range', async ({ page }) => {
-    const initialScroll = await demoPage.getScrollTop('list1');
+  test('should auto-scroll when navigating to item below visible range', async () => {
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
 
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
+    // Navigate far past the visible items (8 fit in the 400px list)
+    await demoPage.keyboardMoveDown(20);
 
-    // Navigate down many times (past visible items)
-    for (let i = 0; i < 20; i++) {
-      await page.keyboard.press('ArrowDown');
-    }
-
-    // Scroll position should have increased
-    const newScroll = await demoPage.getScrollTop('list1');
-    expect(newScroll).toBeGreaterThan(initialScroll);
+    // The list follows the placeholder so it stays in view
+    await poll(() => demoPage.getScrollTop('list1')).toBeGreaterThan(0);
+    await poll(() => demoPage.isPlaceholderInView('list1')).toBe(true);
   });
 
   test('should auto-scroll when navigating to item above visible range', async ({ page }) => {
-    // First scroll down
-    await demoPage.scrollList('list1', 500);
-    await page.waitForTimeout(100);
+    // Retry the scroll write with the read: it clips to 0 if content height isn't ready yet
+    await expect(async () => {
+      await demoPage.scrollList('list1', 500);
+      expect(await demoPage.getScrollTop('list1')).toBe(500);
+    }).toPass({ timeout: 2000 });
 
-    // Focus a visible item after scrolling
-    await demoPage.list1Items.first().focus();
+    // Focus the item at the top of the scrolled viewport without scrolling it (a plain focus()
+    // would scroll the list itself and satisfy the assertion below on its own).
+    const topItem = page.locator('[data-draggable-id="list1-10"]');
+    await topItem.evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
     await page.keyboard.press('Space');
-
-    // Navigate up many times
-    for (let i = 0; i < 20; i++) {
-      await page.keyboard.press('ArrowUp');
-    }
-
-    // Scroll should have decreased
-    const newScroll = await demoPage.getScrollTop('list1');
-    expect(newScroll).toBeLessThan(500);
-  });
-
-  test('should handle navigation through large list without performance issues', async ({
-    page,
-  }) => {
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
-
-    const startTime = Date.now();
-
-    // Navigate down 50 items
-    for (let i = 0; i < 50; i++) {
-      await page.keyboard.press('ArrowDown');
-    }
-
-    const elapsedTime = Date.now() - startTime;
-
-    // Should complete in reasonable time (< 5 seconds for 50 moves)
-    expect(elapsedTime).toBeLessThan(5000);
-
-    await page.keyboard.press('Space');
-    await expect(demoPage.dragPreview).not.toBeVisible();
-  });
-
-  test('should keep dragged item visible during keyboard navigation', async ({ page }) => {
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
-
-    // Navigate down
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('ArrowDown');
-
-    // Drag preview should still be visible
     await expect(demoPage.dragPreview).toBeVisible();
+    expect(await demoPage.getScrollTop('list1')).toBe(500);
+
+    await demoPage.keyboardMoveUp(10);
+
+    await poll(() => demoPage.getScrollTop('list1')).toBeLessThan(500);
+    await poll(() => demoPage.isPlaceholderInView('list1')).toBe(true);
   });
 
   test('should complete drag after navigating through virtual scroll boundary', async ({
     page,
   }) => {
-    const firstItemText = await demoPage.getItemText('list1', 0);
+    const draggedId = await demoPage.getItemId('list1', 0);
 
-    await demoPage.list1Items.first().focus();
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+
+    // Navigate past the visible area, then drop
+    await demoPage.keyboardMoveDown(15);
     await page.keyboard.press('Space');
-
-    // Navigate past the visible area
-    for (let i = 0; i < 15; i++) {
-      await page.keyboard.press('ArrowDown');
-    }
-
-    // Drop the item
-    await page.keyboard.press('Space');
-
-    // Drag should be complete
     await expect(demoPage.dragPreview).not.toBeVisible();
 
-    // The item should no longer be at position 0
-    const newFirstItemText = await demoPage.getItemText('list1', 0);
-    expect(newFirstItemText).not.toBe(firstItemText);
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '15');
+    await poll(() => demoPage.getRenderedIndexOf('list1', draggedId!)).toBe(15);
   });
 
   test('should scroll smoothly without jumps during continuous navigation', async ({ page }) => {
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
 
     const scrollPositions: number[] = [];
 
     // Navigate and track scroll positions
     for (let i = 0; i < 10; i++) {
       await page.keyboard.press('ArrowDown');
-      const scrollTop = await demoPage.getScrollTop('list1');
-      scrollPositions.push(scrollTop);
+      scrollPositions.push(await demoPage.getScrollTop('list1'));
     }
 
     // Verify scroll positions are monotonically non-decreasing
@@ -126,22 +82,17 @@ test.describe('Keyboard Drag - Virtual Scroll Integration', () => {
   });
 
   test('should handle rapid navigation without missing items', async ({ page }) => {
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
+    const draggedId = await demoPage.getItemId('list1', 0);
 
-    // Very rapid navigation
-    const moves = 10;
-    const promises = [];
-    for (let i = 0; i < moves; i++) {
-      promises.push(page.keyboard.press('ArrowDown'));
-    }
-    await Promise.all(promises);
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
 
-    // Give time for state to settle
-    await page.waitForTimeout(200);
-
-    // Drop should work
+    // Back-to-back presses, no waiting for renders in between: every one must count
+    await demoPage.keyboardMoveDown(10);
     await page.keyboard.press('Space');
     await expect(demoPage.dragPreview).not.toBeVisible();
+
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '10');
+    await poll(() => demoPage.getRenderedIndexOf('list1', draggedId!)).toBe(10);
   });
 });

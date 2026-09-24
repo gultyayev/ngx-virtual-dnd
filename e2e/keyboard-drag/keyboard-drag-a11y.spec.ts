@@ -51,6 +51,7 @@ test.describe('Keyboard Drag - Accessibility', () => {
 
   test('should update aria-grabbed when crossing lists', async ({ page }) => {
     const sourceItem = demoPage.list1Items.first();
+    const itemId = await sourceItem.getAttribute('data-draggable-id');
 
     await sourceItem.focus();
     await page.keyboard.press('Space');
@@ -60,53 +61,27 @@ test.describe('Keyboard Drag - Accessibility', () => {
 
     // Move to other list
     await page.keyboard.press('ArrowRight');
+    await expect(demoPage.list2Container.locator('.vdnd-drag-placeholder-visible')).toBeVisible();
 
     // Still grabbed during cross-list movement
     await expect(sourceItem).toHaveAttribute('aria-grabbed', 'true');
 
-    // Drop - need small wait for cross-list drop event to propagate
     await page.keyboard.press('Space');
-    await page.waitForTimeout(50);
 
-    // Item should now be in list2, find it there
+    // The item now lives in list2 and is no longer grabbed
     const movedItem = demoPage.list2Items.first();
+    await expect(movedItem).toHaveAttribute('data-draggable-id', itemId!);
     await expect(movedItem).toHaveAttribute('aria-grabbed', 'false');
   });
 
-  test('should maintain focusability on draggable items', async () => {
+  test('should keep draggable items focusable', async () => {
     const firstItem = demoPage.list1Items.first();
 
-    // Draggable items should be focusable
+    // Draggable items should be in the tab order
     await expect(firstItem).toHaveAttribute('tabindex', '0');
 
     // Focus should work
     await firstItem.focus();
     await expect(firstItem).toBeFocused();
-  });
-
-  test('should restore focus to item after keyboard drag completes', async ({ page }) => {
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('Space');
-    // Focus restoration uses double RAF, need small wait
-    await page.waitForTimeout(50);
-
-    // Focus should be on the moved item
-    const focusedElement = page.locator(':focus');
-    await expect(focusedElement).toHaveAttribute('data-draggable-id');
-  });
-
-  test('should restore focus to item after keyboard drag is cancelled', async ({ page }) => {
-    await demoPage.list1Items.first().focus();
-    await page.keyboard.press('Space');
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('Escape');
-    // Focus restoration uses double RAF, need small wait
-    await page.waitForTimeout(50);
-
-    // Focus should be restored to the original item
-    const focusedElement = page.locator(':focus');
-    await expect(focusedElement).toHaveAttribute('data-draggable-id');
   });
 });

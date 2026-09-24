@@ -49,3 +49,51 @@ export async function waitForActiveDroppable(page: Page, droppableId: string): P
     expect(debugState.activeDroppable).toBe(droppableId);
   }).toPass({ timeout: 2000 });
 }
+
+/** Resolve after the page has rendered `count` more animation frames. */
+export async function waitForFrames(page: Page, count: number): Promise<void> {
+  await page.evaluate(
+    (frames) =>
+      new Promise<void>((resolve) => {
+        let remaining = frames;
+        const tick = () => {
+          remaining -= 1;
+          if (remaining > 0) {
+            requestAnimationFrame(tick);
+          } else {
+            resolve();
+          }
+        };
+        requestAnimationFrame(tick);
+      }),
+    count,
+  );
+}
+
+interface InputHandledWindow {
+  vdndInputHandled?: Promise<void>;
+}
+
+/**
+ * Run `sendInput` and resolve once the page has received the `eventType` event it causes and
+ * rendered two frames since (the library's drag start is synchronous; its render follows).
+ *
+ * This is the sync point for NEGATIVE assertions such as "no drag started": without it they
+ * run before the input has even reached the page and pass whatever the library does.
+ * `sendInput` must dispatch exactly one such event (e.g. an unstepped `mouse.move`).
+ */
+export async function afterInputHandled(
+  page: Page,
+  eventType: 'mousemove' | 'keyup',
+  sendInput: () => Promise<unknown>,
+): Promise<void> {
+  await page.evaluate((type) => {
+    (window as InputHandledWindow).vdndInputHandled = new Promise<void>((resolve) => {
+      const afterTwoFrames = () =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      document.addEventListener(type, afterTwoFrames, { capture: true, once: true });
+    });
+  }, eventType);
+  await sendInput();
+  await page.evaluate(() => (window as InputHandledWindow).vdndInputHandled);
+}

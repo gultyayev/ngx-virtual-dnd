@@ -1,21 +1,18 @@
 import { expect, test } from '@playwright/test';
 import { DemoPage } from '../fixtures/demo.page';
+import { afterInputHandled } from '../fixtures/drag-sync';
 
 test.describe('Keyboard Drag - Arrow Navigation', () => {
   let demoPage: DemoPage;
 
   test.beforeEach(async ({ page }) => {
     demoPage = new DemoPage(page);
-    await demoPage.goto();
     // Use simplified API for better built-in placeholder support
-    await demoPage.enableSimplifiedApi();
+    await demoPage.goto({ api: 'simplified' });
   });
 
   test('should move placeholder down with ArrowDown', async ({ page }) => {
-    const firstItem = demoPage.list1Items.first();
-    await firstItem.focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 0);
     await expect(demoPage.dragPreview).toBeVisible();
 
     // Get initial placeholder position
@@ -33,11 +30,7 @@ test.describe('Keyboard Drag - Arrow Navigation', () => {
   });
 
   test('should move placeholder up with ArrowUp', async ({ page }) => {
-    // Start from second item
-    const secondItem = demoPage.list1Items.nth(1);
-    await secondItem.focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 1);
     await expect(demoPage.dragPreview).toBeVisible();
 
     const placeholder = demoPage.placeholder;
@@ -54,130 +47,88 @@ test.describe('Keyboard Drag - Arrow Navigation', () => {
   });
 
   test('should not move past first item with ArrowUp', async ({ page }) => {
-    const firstItemText = await demoPage.getItemText('list1', 0);
+    const firstId = await demoPage.getItemId('list1', 0);
 
-    const firstItem = demoPage.list1Items.first();
-    await firstItem.focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 0);
     await expect(demoPage.dragPreview).toBeVisible();
-
-    // Press ArrowUp multiple times
-    await page.keyboard.press('ArrowUp');
-    await page.keyboard.press('ArrowUp');
-    await page.keyboard.press('ArrowUp');
-
-    // Drop and verify item is still at position 0
+    await demoPage.keyboardMoveUp(3);
     await page.keyboard.press('Space');
 
-    // First item should still be at position 0
-    const newFirstItemText = await demoPage.getItemText('list1', 0);
-    expect(newFirstItemText).toBe(firstItemText);
-  });
-
-  test('should not move past last item with ArrowDown', async ({ page }) => {
-    // Start from first item
-    const firstItem = demoPage.list1Items.first();
-    await firstItem.focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
-    await expect(demoPage.dragPreview).toBeVisible();
-
-    const itemCount = await demoPage.getItemCount('list1');
-
-    // Press ArrowDown many times (more than items in list)
-    for (let i = 0; i < itemCount + 10; i++) {
-      await page.keyboard.press('ArrowDown');
-    }
-
-    await page.keyboard.press('Space');
-
-    // Verify item is at last position (not beyond)
-    const newCount = await demoPage.getItemCount('list1');
-    expect(newCount).toBe(itemCount); // Count unchanged for same-list
+    // Dropped (not cancelled) at index 0
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '0');
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'false');
+    expect(await demoPage.getItemId('list1', 0)).toBe(firstId);
   });
 
   test('should handle rapid arrow key presses', async ({ page }) => {
-    const firstItem = demoPage.list1Items.first();
-    await firstItem.focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
+    const draggedId = await demoPage.getItemId('list1', 0);
+
+    await demoPage.startKeyboardDrag('list1', 0);
     await expect(demoPage.dragPreview).toBeVisible();
 
-    // Rapid fire arrow keys
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('ArrowDown');
-
-    // Should have moved 5 positions without errors
+    // Five presses back to back: none may be lost
+    await demoPage.keyboardMoveDown(5);
     await page.keyboard.press('Space');
 
-    // Verify drop completed successfully
     await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '5');
+    expect(await demoPage.getItemId('list1', 5)).toBe(draggedId);
   });
 
   test('should reorder item when moved down and dropped', async ({ page }) => {
-    const firstItemText = await demoPage.getItemText('list1', 0);
-    const secondItemText = await demoPage.getItemText('list1', 1);
+    const firstId = await demoPage.getItemId('list1', 0);
+    const secondId = await demoPage.getItemId('list1', 1);
 
-    const firstItem = demoPage.list1Items.first();
-    await firstItem.focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 0);
     await expect(demoPage.dragPreview).toBeVisible();
-    await page.waitForTimeout(50); // Let drag state fully initialize
     await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(50); // Let Angular process the move
     await page.keyboard.press('Space');
 
-    // Wait for reordering to complete (poll until items are reordered)
-    await expect(async () => {
-      const newFirst = await demoPage.getItemText('list1', 0);
-      expect(newFirst).toBe(secondItemText);
-    }).toPass({ timeout: 2000 });
-
-    expect(await demoPage.getItemText('list1', 1)).toBe(firstItemText);
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    expect((await demoPage.getItemIds('list1')).slice(0, 2)).toEqual([secondId, firstId]);
   });
 
   test('should reorder item when moved up and dropped', async ({ page }) => {
-    const firstItemText = await demoPage.getItemText('list1', 0);
-    const secondItemText = await demoPage.getItemText('list1', 1);
+    const firstId = await demoPage.getItemId('list1', 0);
+    const secondId = await demoPage.getItemId('list1', 1);
 
-    // Start with second item
-    const secondItem = demoPage.list1Items.nth(1);
-    await secondItem.focus();
-    await page.waitForTimeout(50); // Let focus settle
-    await page.keyboard.press('Space');
+    await demoPage.startKeyboardDrag('list1', 1);
     await expect(demoPage.dragPreview).toBeVisible();
-    await page.waitForTimeout(50); // Let drag state fully initialize
     await page.keyboard.press('ArrowUp');
-    await page.waitForTimeout(50); // Let Angular process the move
     await page.keyboard.press('Space');
 
-    // Wait for reordering to complete (poll until items are reordered)
-    await expect(async () => {
-      const newFirst = await demoPage.getItemText('list1', 0);
-      expect(newFirst).toBe(secondItemText);
-    }).toPass({ timeout: 2000 });
-
-    expect(await demoPage.getItemText('list1', 1)).toBe(firstItemText);
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    expect((await demoPage.getItemIds('list1')).slice(0, 2)).toEqual([secondId, firstId]);
   });
 
   test('should ignore arrow keys when not in drag mode', async ({ page }) => {
-    const placeholder = demoPage.placeholder;
+    // Focus an item but don't start a drag
+    await demoPage.list1Items.first().focus();
 
-    // Focus item but don't start drag
-    const firstItem = demoPage.list1Items.first();
-    await firstItem.focus();
-    await page.waitForTimeout(50); // Let focus settle
-
-    // Arrow keys should not show placeholder
     await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('ArrowUp');
+    await afterInputHandled(page, 'keyup', () => page.keyboard.press('ArrowUp'));
 
-    await expect(placeholder).not.toBeVisible();
+    await expect(demoPage.placeholder).not.toBeVisible();
     await expect(demoPage.dragPreview).not.toBeVisible();
+  });
+});
+
+test.describe('Keyboard Drag - Arrow Navigation (short list)', () => {
+  // Small lists (5 + 5 items) keep the key presses few; the clamp is the same logic.
+  test('should not move past last item with ArrowDown', async ({ page }) => {
+    const demoPage = new DemoPage(page);
+    await demoPage.goto({ api: 'simplified', itemCount: 10 });
+    const draggedId = await demoPage.getItemId('list1', 0);
+
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+    // More presses than there are items in the list
+    await demoPage.keyboardMoveDown(8);
+    await page.keyboard.press('Space');
+
+    // Dropped at the last index (4 of 5), not beyond it
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '4');
+    await expect(demoPage.countBadge('list1')).toHaveText('5');
+    expect(await demoPage.getItemId('list1', 4)).toBe(draggedId);
   });
 });

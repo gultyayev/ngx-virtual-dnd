@@ -1,34 +1,6 @@
-import { expect, Locator, Page, test } from '@playwright/test';
-import { DemoPage } from './fixtures/demo.page';
-
-interface DragStartBox {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-async function startPointerDragFromBox(
-  page: Page,
-  dragPreview: Locator,
-  box: DragStartBox,
-): Promise<void> {
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
-
-  await expect(async () => {
-    await page.mouse.up().catch(() => undefined);
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    await page.mouse.move(startX + 10, startY + 10, { steps: 3 });
-    await expect(dragPreview).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 5000 });
-}
-
-async function moveWithinSameList(page: Page, box: DragStartBox): Promise<void> {
-  await page.mouse.move(box.x + box.width / 2, box.y + 75, { steps: 5 });
-  await page.mouse.move(box.x + box.width / 2, box.y + 75);
-}
+import { expect, test } from '@playwright/test';
+import { DemoPage, ListName } from './fixtures/demo.page';
+import { waitForFrames } from './fixtures/drag-sync';
 
 /**
  * Tests for placeholder rendering integrity.
@@ -37,249 +9,85 @@ async function moveWithinSameList(page: Page, box: DragStartBox): Promise<void> 
 test.describe('Placeholder Rendering Integrity', () => {
   let demoPage: DemoPage;
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(({ page }) => {
     demoPage = new DemoPage(page);
-    await demoPage.goto();
   });
 
+  /**
+   * Drag the first item of `source` to 75px below the top of `target` and wait until that
+   * position is processed and rendered (exactly one placeholder, in `target`).
+   */
+  async function dragFirstItemOver(source: ListName, target: ListName): Promise<void> {
+    const targetBox = await demoPage.virtualScroll(target).boundingBox();
+    if (!targetBox) throw new Error('Could not get the target list bounding box');
+
+    await demoPage.startDrag(demoPage.items(source).first());
+    const x = targetBox.x + targetBox.width / 2;
+    const y = targetBox.y + 75;
+    await demoPage.page.mouse.move(x, y, { steps: 10 });
+    await demoPage.settleDragPosition(x, y);
+    await expect(demoPage.container(target).locator('.vdnd-drag-placeholder-visible')).toHaveCount(
+      1,
+    );
+    // Ghosts would come from this render; give it a frame to settle before inspecting the DOM
+    await waitForFrames(demoPage.page, 1);
+  }
+
+  async function expectNoGhosts(list: ListName): Promise<void> {
+    const items = await demoPage.getRenderedItemsWithContent(list);
+    const ghosts = items.filter((item) => !item.isPlaceholder && item.text === '');
+    expect(ghosts, `${list} should render no empty items`).toEqual([]);
+    expect(items.filter((item) => item.isPlaceholder).length).toBeLessThanOrEqual(1);
+  }
+
   test.describe('Ghost Element Detection', () => {
-    test('should not render ghost elements during same-list drag (verbose API)', async ({
-      page,
-    }) => {
-      // Verbose API is the default mode
-      const sourceItem = demoPage.list2Items.first();
-      const sourceBox = await sourceItem.boundingBox();
+    for (const api of ['verbose', 'simplified'] as const) {
+      test(`should not render ghost elements during same-list drag (${api} API)`, async ({
+        page,
+      }) => {
+        await demoPage.goto({ api });
+        await dragFirstItemOver('list2', 'list2');
 
-      if (!sourceBox) {
-        throw new Error('Could not get source item bounding box');
-      }
-      await startPointerDragFromBox(page, demoPage.dragPreview, sourceBox);
-      await moveWithinSameList(page, sourceBox);
-
-      // Count ghost elements (empty .item divs without text)
-      const ghostCount = await demoPage.countGhostElements('list2');
-      expect(ghostCount, 'Ghost elements should not exist during drag').toBe(0);
-
-      await page.mouse.up();
-    });
+        await expectNoGhosts('list2');
+        await page.mouse.up();
+      });
+    }
 
     test('should not render ghost elements during cross-list drag (verbose API)', async ({
       page,
     }) => {
-      const sourceItem = demoPage.list1Items.first();
-      const targetBox = await demoPage.list2VirtualScroll.boundingBox();
+      await demoPage.goto();
+      const draggedId = await demoPage.getItemId('list1', 0);
+      await dragFirstItemOver('list1', 'list2');
 
-      const sourceBox = await sourceItem.boundingBox();
-      if (!sourceBox || !targetBox) {
-        throw new Error('Could not get drag source/target bounding boxes');
-      }
-      await startPointerDragFromBox(page, demoPage.dragPreview, sourceBox);
-      await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 75, { steps: 10 });
-      await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 75);
-
-      // Check both lists for ghost elements
-      const ghostCountList1 = await demoPage.countGhostElements('list1');
-      const ghostCountList2 = await demoPage.countGhostElements('list2');
-      expect(ghostCountList1, 'List 1 should have no ghost elements').toBe(0);
-      expect(ghostCountList2, 'List 2 should have no ghost elements').toBe(0);
-
-      await page.mouse.up();
-    });
-
-    test('should not render ghost elements in simplified API mode', async ({ page }) => {
-      await demoPage.enableSimplifiedApi();
-
-      const sourceItem = demoPage.list2Items.first();
-      const sourceBox = await sourceItem.boundingBox();
-
-      if (!sourceBox) {
-        throw new Error('Could not get source item bounding box');
-      }
-      await startPointerDragFromBox(page, demoPage.dragPreview, sourceBox);
-      await moveWithinSameList(page, sourceBox);
-
-      const ghostCount = await demoPage.countGhostElements('list2');
-      expect(ghostCount, 'Ghost elements should not exist in simplified API').toBe(0);
-
-      await page.mouse.up();
-    });
-  });
-
-  test.describe('Placeholder Element Validation', () => {
-    test('placeholder should render as vdnd-drag-placeholder element, not as empty .item', async ({
-      page,
-    }) => {
-      const sourceItem = demoPage.list2Items.first();
-      const sourceBox = await sourceItem.boundingBox();
-
-      if (!sourceBox) {
-        throw new Error('Could not get source item bounding box');
-      }
-      await startPointerDragFromBox(page, demoPage.dragPreview, sourceBox);
-      await moveWithinSameList(page, sourceBox);
-
-      // Count visible placeholders — wrap in toPass since count() is one-shot and rAF-dependent
-      await expect(async () => {
-        const properPlaceholders = await demoPage.list2Container
-          .locator('.vdnd-drag-placeholder-visible')
-          .count();
-        expect(properPlaceholders, 'Should have exactly one proper placeholder').toBe(1);
-      }).toPass({ timeout: 2000 });
-
-      // Ensure no broken placeholder elements (items without text)
-      const items = await demoPage.getRenderedItemsWithContent('list2');
-      const brokenPlaceholders = items.filter((item) => !item.isPlaceholder && item.text === '');
-      expect(brokenPlaceholders.length, 'Should have no broken placeholder divs').toBe(0);
-
-      await page.mouse.up();
-    });
-
-    test('all visible items should have text content during drag', async ({ page }) => {
-      const sourceItem = demoPage.list2Items.first();
-      const sourceBox = await sourceItem.boundingBox();
-
-      if (!sourceBox) {
-        throw new Error('Could not get source item bounding box');
-      }
-      await startPointerDragFromBox(page, demoPage.dragPreview, sourceBox);
-      await moveWithinSameList(page, sourceBox);
-
-      // Get all rendered content
-      const items = await demoPage.getRenderedItemsWithContent('list2');
-
-      for (const item of items) {
-        if (item.isPlaceholder) {
-          // Placeholder elements are allowed to be empty
-          continue;
-        }
-        // Regular items must have text content
-        expect(item.text, `Item should have text content, got: ${JSON.stringify(item)}`).not.toBe(
-          '',
-        );
-      }
-
-      await page.mouse.up();
-    });
-  });
-
-  test.describe('Element Count Consistency', () => {
-    test('visible element count should include exactly one placeholder during drag', async ({
-      page,
-    }) => {
-      // During same-list drag, we should have:
-      // - Visible items (excluding hidden dragged item)
-      // - Exactly 1 placeholder
-      // The key assertion: no ghost elements (empty items)
-      const sourceItem = demoPage.list2Items.first();
-      const sourceBox = await sourceItem.boundingBox();
-
-      if (!sourceBox) {
-        throw new Error('Could not get source item bounding box');
-      }
-      await startPointerDragFromBox(page, demoPage.dragPreview, sourceBox);
-      await moveWithinSameList(page, sourceBox);
-
-      // Count visible placeholders — wrap in toPass since count() is one-shot and rAF-dependent
-      await expect(async () => {
-        const placeholderCount = await demoPage.list2Container
-          .locator('.vdnd-drag-placeholder-visible')
-          .count();
-        expect(placeholderCount, 'Should have exactly one placeholder').toBe(1);
-      }).toPass({ timeout: 2000 });
-
-      // Count ghost elements - should be 0
-      const ghostCount = await demoPage.countGhostElements('list2');
-      expect(ghostCount, 'No ghost elements should exist').toBe(0);
-
-      await page.mouse.up();
-    });
-
-    test('should not have duplicate placeholders', async ({ page }) => {
-      const sourceItem = demoPage.list1Items.first();
-      const targetBox = await demoPage.list2VirtualScroll.boundingBox();
-
-      const sourceBox = await sourceItem.boundingBox();
-      if (!sourceBox || !targetBox) {
-        throw new Error('Could not get drag source/target bounding boxes');
-      }
-      await startPointerDragFromBox(page, demoPage.dragPreview, sourceBox);
-      await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 100, { steps: 10 });
-      // Firefox/WebKit can miss the final stepped position; direct follow-up ensures arrival
-      await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 100);
-
-      // Check for any duplicate visible placeholder situations — wrap in toPass
-      await expect(async () => {
-        const placeholderCount = await demoPage.list2Container
-          .locator('.vdnd-drag-placeholder-visible')
-          .count();
-        expect(placeholderCount, 'Should have exactly one placeholder').toBe(1);
-      }).toPass({ timeout: 2000 });
-
-      // Also check that we don't have placeholder-like elements
-      // (elements that take up space but have no visible content)
-      const items = await demoPage.getRenderedItemsWithContent('list2');
-      const emptyDivs = items.filter((item) => !item.isPlaceholder && !item.text);
-      expect(emptyDivs.length, 'Should have no empty item divs acting as placeholders').toBe(0);
-
+      await expectNoGhosts('list1');
+      await expectNoGhosts('list2');
+      // The source list shows no placeholder once the target list took over, and the dragged
+      // item stays hidden there
+      await expect(demoPage.list1Container.locator('.vdnd-drag-placeholder-visible')).toHaveCount(
+        0,
+      );
+      await expect(page.locator(`[data-draggable-id="${draggedId}"]`)).toHaveCSS('display', 'none');
       await page.mouse.up();
     });
   });
 
   test.describe('Cross-API Consistency', () => {
-    test('verbose and simplified API should render placeholders identically', async ({ page }) => {
-      // Test verbose API first
-      const sourceItem = demoPage.list2Items.first();
-      const sourceBox = await sourceItem.boundingBox();
+    test('switching the API at runtime keeps placeholder rendering intact', async ({ page }) => {
+      await demoPage.goto();
 
-      if (!sourceBox) {
-        throw new Error('Could not get source item bounding box');
-      }
-      await startPointerDragFromBox(page, demoPage.dragPreview, sourceBox);
-      await moveWithinSameList(page, sourceBox);
-
-      // Wrap in toPass since count() is one-shot
-      let verbosePlaceholders = 0;
-      await expect(async () => {
-        verbosePlaceholders = await demoPage.list2Container
-          .locator('.vdnd-drag-placeholder-visible')
-          .count();
-        expect(verbosePlaceholders).toBe(1);
-      }).toPass({ timeout: 2000 });
-      const verboseGhosts = await demoPage.countGhostElements('list2');
-
+      await dragFirstItemOver('list2', 'list2');
+      await expectNoGhosts('list2');
       await page.mouse.up();
       await expect(demoPage.dragPreview).not.toBeVisible();
 
-      // Switch to simplified API
+      // Switch to the simplified API at runtime (the @if swap recreates both lists)
       await demoPage.enableSimplifiedApi();
 
-      const sourceItemSimplified = demoPage.list2Items.first();
-      // Wait for item to be fully rendered and have a bounding box
-      await expect(sourceItemSimplified).toBeVisible();
-      const sourceBoxSimplified = await sourceItemSimplified.boundingBox();
-      if (!sourceBoxSimplified) {
-        throw new Error('Could not get bounding box for simplified API item');
-      }
-
-      await startPointerDragFromBox(page, demoPage.dragPreview, sourceBoxSimplified);
-      await moveWithinSameList(page, sourceBoxSimplified);
-
-      let simplifiedPlaceholders = 0;
-      await expect(async () => {
-        simplifiedPlaceholders = await demoPage.list2Container
-          .locator('.vdnd-drag-placeholder-visible')
-          .count();
-        expect(simplifiedPlaceholders).toBe(1);
-      }).toPass({ timeout: 2000 });
-      const simplifiedGhosts = await demoPage.countGhostElements('list2');
-
+      await dragFirstItemOver('list2', 'list2');
+      await expectNoGhosts('list2');
       await page.mouse.up();
-
-      // Both APIs should produce the same result
-      expect(verbosePlaceholders).toBe(1);
-      expect(simplifiedPlaceholders).toBe(1);
-      expect(verboseGhosts).toBe(0);
-      expect(simplifiedGhosts).toBe(0);
+      await expect(demoPage.dragPreview).not.toBeVisible();
     });
   });
 });

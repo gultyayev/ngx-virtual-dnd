@@ -1,86 +1,66 @@
-import { expect, test } from '@playwright/test';
-import { DemoPage } from './fixtures/demo.page';
+import { expect, Page, test } from '@playwright/test';
+import { Box, DemoPage } from './fixtures/demo.page';
+import { afterInputHandled, waitForFrames } from './fixtures/drag-sync';
 
 test.describe('Axis Lock', () => {
   let demoPage: DemoPage;
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(({ page }) => {
     demoPage = new DemoPage(page);
-    await demoPage.goto();
   });
 
-  test('should allow free movement when axis lock is none', async ({ page }) => {
-    await demoPage.setLockAxis(null);
-
+  /**
+   * Start dragging the first list1 item and return the preview box once the starting move has
+   * been handled and rendered, plus the pointer position it was captured at.
+   */
+  async function startDragAndCapturePreview(
+    page: Page,
+  ): Promise<{ preview: Box; pointer: { x: number; y: number } }> {
     const sourceItem = demoPage.list1Items.first();
     const sourceBox = await sourceItem.boundingBox();
     if (!sourceBox) throw new Error('Could not get source item bounding box');
 
-    // Start dragging
     await sourceItem.hover();
     await page.mouse.down();
+    const pointer = { x: sourceBox.x + 10, y: sourceBox.y + 10 };
+    await afterInputHandled(page, 'mousemove', () => page.mouse.move(pointer.x, pointer.y));
+    await expect(demoPage.dragPreview).toBeVisible();
 
-    // Get initial preview position (wait for preview to be visible)
-    await page.mouse.move(sourceBox.x + 10, sourceBox.y + 10, { steps: 2 });
-    await expect(demoPage.dragPreview).toBeVisible({ timeout: 2000 });
-    // Wait one frame for rAF-throttled position update to apply the transform
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
-    const initialPreviewBox = await demoPage.dragPreview.boundingBox();
-    if (!initialPreviewBox) throw new Error('Could not get initial preview bounding box');
+    const preview = await demoPage.dragPreview.boundingBox();
+    if (!preview) throw new Error('Could not get initial preview bounding box');
+    return { preview, pointer };
+  }
 
-    // Move diagonally by a significant amount
-    const deltaX = 100;
-    const deltaY = 80;
-    await page.mouse.move(sourceBox.x + 10 + deltaX, sourceBox.y + 10 + deltaY, { steps: 5 });
-
-    // Verify preview moved using retrying assertion
+  /** Move diagonally by (dx, dy) and wait until the preview moved by the expected amounts. */
+  async function expectPreviewToFollow(
+    page: Page,
+    start: { preview: Box; pointer: { x: number; y: number } },
+    expected: { dx: number; dy: number },
+  ): Promise<void> {
+    await page.mouse.move(start.pointer.x + 100, start.pointer.y + 80, { steps: 5 });
     await expect(async () => {
-      const finalPreviewBox = await demoPage.dragPreview.boundingBox();
-      if (!finalPreviewBox) throw new Error('Could not get final preview bounding box');
-      const movedX = finalPreviewBox.x - initialPreviewBox.x;
-      const movedY = finalPreviewBox.y - initialPreviewBox.y;
-      expect(Math.abs(movedX - deltaX)).toBeLessThan(10);
-      expect(Math.abs(movedY - deltaY)).toBeLessThan(10);
+      const preview = await demoPage.dragPreview.boundingBox();
+      if (!preview) throw new Error('Could not get final preview bounding box');
+      expect(Math.abs(preview.x - start.preview.x - expected.dx)).toBeLessThan(10);
+      expect(Math.abs(preview.y - start.preview.y - expected.dy)).toBeLessThan(10);
     }).toPass({ timeout: 2000 });
+  }
+
+  test('should allow free movement when axis lock is none', async ({ page }) => {
+    await demoPage.goto();
+    const start = await startDragAndCapturePreview(page);
+
+    await expectPreviewToFollow(page, start, { dx: 100, dy: 80 });
 
     await page.mouse.up();
   });
 
   test('should lock horizontal movement when axis is set to X', async ({ page }) => {
-    await demoPage.setLockAxis('x');
+    await demoPage.goto({ lockAxis: 'x' });
+    const start = await startDragAndCapturePreview(page);
 
-    const sourceItem = demoPage.list1Items.first();
-    const sourceBox = await sourceItem.boundingBox();
-    if (!sourceBox) throw new Error('Could not get source item bounding box');
-
-    // Start dragging
-    await sourceItem.hover();
-    await page.mouse.down();
-
-    // Get initial preview position (wait for preview to be visible)
-    await page.mouse.move(sourceBox.x + 10, sourceBox.y + 10, { steps: 2 });
-    await expect(demoPage.dragPreview).toBeVisible({ timeout: 2000 });
-    // Wait one frame for rAF-throttled position update to apply the transform
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
-    const initialPreviewBox = await demoPage.dragPreview.boundingBox();
-    if (!initialPreviewBox) throw new Error('Could not get initial preview bounding box');
-
-    // Move diagonally by a significant amount
-    const deltaX = 100;
-    const deltaY = 80;
-    await page.mouse.move(sourceBox.x + 10 + deltaX, sourceBox.y + 10 + deltaY, { steps: 5 });
-
-    // Verify X is locked but Y moves using retrying assertion
-    await expect(async () => {
-      const finalPreviewBox = await demoPage.dragPreview.boundingBox();
-      if (!finalPreviewBox) throw new Error('Could not get final preview bounding box');
-      const movedX = finalPreviewBox.x - initialPreviewBox.x;
-      const movedY = finalPreviewBox.y - initialPreviewBox.y;
-      // X should stay approximately the same (locked)
-      expect(Math.abs(movedX)).toBeLessThan(10);
-      // Y should have moved with the cursor
-      expect(Math.abs(movedY - deltaY)).toBeLessThan(10);
-    }).toPass({ timeout: 2000 });
+    // X stays put (locked), Y follows the cursor
+    await expectPreviewToFollow(page, start, { dx: 0, dy: 80 });
 
     await page.mouse.up();
   });
@@ -88,7 +68,7 @@ test.describe('Axis Lock', () => {
   test('should not introduce horizontal offset when X axis is locked and drag starts off-axis', async ({
     page,
   }) => {
-    await demoPage.setLockAxis('x');
+    await demoPage.goto({ lockAxis: 'x' });
 
     const sourceItem = demoPage.list1Items.first();
     await sourceItem.scrollIntoViewIfNeeded();
@@ -103,8 +83,7 @@ test.describe('Axis Lock', () => {
 
     // Move sideways enough to exceed the default drag threshold (5px) in a single event.
     // The preview should keep its locked axis aligned to the original grab position.
-    const sidewaysDelta = 8;
-    await page.mouse.move(startX + sidewaysDelta, startY, { steps: 1 });
+    await page.mouse.move(startX + 8, startY, { steps: 1 });
 
     await expect(demoPage.dragPreview).toBeVisible({ timeout: 2000 });
 
@@ -118,50 +97,22 @@ test.describe('Axis Lock', () => {
     await page.mouse.up();
   });
 
-  test('should lock vertical movement when axis is set to Y', async ({ page }) => {
+  test('should lock vertical movement when axis is changed to Y at runtime', async ({ page }) => {
+    await demoPage.goto();
+    // Set through the settings panel: covers a lockAxis input change after init
     await demoPage.setLockAxis('y');
+    // The draggables receive the new input in the next render; nothing visible marks it
+    await waitForFrames(page, 2);
+    const start = await startDragAndCapturePreview(page);
 
-    const sourceItem = demoPage.list1Items.first();
-    const sourceBox = await sourceItem.boundingBox();
-    if (!sourceBox) throw new Error('Could not get source item bounding box');
-
-    // Start dragging
-    await sourceItem.hover();
-    await page.mouse.down();
-
-    // Get initial preview position (wait for preview to be visible)
-    await page.mouse.move(sourceBox.x + 10, sourceBox.y + 10, { steps: 2 });
-    await expect(demoPage.dragPreview).toBeVisible({ timeout: 2000 });
-    // Wait one frame for rAF-throttled position update to apply the transform
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
-    const initialPreviewBox = await demoPage.dragPreview.boundingBox();
-    if (!initialPreviewBox) throw new Error('Could not get initial preview bounding box');
-
-    // Move diagonally by a significant amount
-    const deltaX = 100;
-    const deltaY = 80;
-    await page.mouse.move(sourceBox.x + 10 + deltaX, sourceBox.y + 10 + deltaY, { steps: 5 });
-
-    // Verify Y is locked but X moves using retrying assertion
-    await expect(async () => {
-      const finalPreviewBox = await demoPage.dragPreview.boundingBox();
-      if (!finalPreviewBox) throw new Error('Could not get final preview bounding box');
-      const movedX = finalPreviewBox.x - initialPreviewBox.x;
-      const movedY = finalPreviewBox.y - initialPreviewBox.y;
-      // X should have moved with the cursor
-      expect(Math.abs(movedX - deltaX)).toBeLessThan(10);
-      // Y should stay approximately the same (locked)
-      expect(Math.abs(movedY)).toBeLessThan(10);
-    }).toPass({ timeout: 2000 });
+    // X follows the cursor, Y stays put (locked)
+    await expectPreviewToFollow(page, start, { dx: 100, dy: 0 });
 
     await page.mouse.up();
   });
 
   test('should constrain drop detection when X axis is locked', async ({ page }) => {
-    await demoPage.setLockAxis('x');
-
-    const initialList1Count = await demoPage.getItemCount('list1');
-    const initialList2Count = await demoPage.getItemCount('list2');
+    await demoPage.goto({ lockAxis: 'x' });
 
     const sourceItem = demoPage.list1Items.first();
     const sourceBox = await sourceItem.boundingBox();
@@ -179,22 +130,15 @@ test.describe('Axis Lock', () => {
     await page.mouse.up();
     await expect(demoPage.dragPreview).not.toBeVisible({ timeout: 2000 });
 
-    // Since X is locked, the item should stay in list1 (reordered within it)
-    await expect(async () => {
-      const finalList1Count = await demoPage.getItemCount('list1');
-      const finalList2Count = await demoPage.getItemCount('list2');
-      expect(finalList1Count).toBe(initialList1Count);
-      expect(finalList2Count).toBe(initialList2Count);
-    }).toPass({ timeout: 2000 });
+    // Since X is locked, the item stays in list1 (reordered within it)
+    await expect(demoPage.countBadge('list1')).toHaveText('50');
+    await expect(demoPage.countBadge('list2')).toHaveText('50');
   });
 
   test('should allow cross-list drag when Y axis is locked but lists are side by side', async ({
     page,
   }) => {
-    await demoPage.setLockAxis('y');
-
-    const initialList1Count = await demoPage.getItemCount('list1');
-    const initialList2Count = await demoPage.getItemCount('list2');
+    await demoPage.goto({ lockAxis: 'y' });
 
     await demoPage.list1VirtualScroll.scrollIntoViewIfNeeded();
     await demoPage.list2VirtualScroll.scrollIntoViewIfNeeded();
@@ -235,34 +179,12 @@ test.describe('Axis Lock', () => {
     // release cannot land back in list1 when the scheduler lags behind the pointer.
     await expect(demoPage.placeholder).toBeVisible({ timeout: 5000 });
     await demoPage.waitForActiveDroppable('list2');
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    await waitForFrames(page, 1);
     await page.mouse.up();
     await expect(demoPage.dragPreview).not.toBeVisible({ timeout: 5000 });
 
     // With Y locked but horizontal movement allowed, item should move to list2
-    await expect(async () => {
-      const finalList1Count = await demoPage.getItemCount('list1');
-      const finalList2Count = await demoPage.getItemCount('list2');
-      expect(finalList1Count).toBe(initialList1Count - 1);
-      expect(finalList2Count).toBe(initialList2Count + 1);
-    }).toPass({ timeout: 5000 });
-  });
-
-  test('should update axis lock setting dynamically', async () => {
-    // Start with no lock
-    await demoPage.setLockAxis(null);
-    await expect(demoPage.lockAxisSelect).toHaveValue('');
-
-    // Change to X lock
-    await demoPage.setLockAxis('x');
-    await expect(demoPage.lockAxisSelect).toHaveValue('x');
-
-    // Change to Y lock
-    await demoPage.setLockAxis('y');
-    await expect(demoPage.lockAxisSelect).toHaveValue('y');
-
-    // Change back to none
-    await demoPage.setLockAxis(null);
-    await expect(demoPage.lockAxisSelect).toHaveValue('');
+    await expect(demoPage.countBadge('list1')).toHaveText('49');
+    await expect(demoPage.countBadge('list2')).toHaveText('51');
   });
 });
