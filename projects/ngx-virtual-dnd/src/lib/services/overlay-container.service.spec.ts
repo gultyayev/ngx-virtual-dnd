@@ -9,10 +9,6 @@ describe('OverlayContainerService', () => {
     service = TestBed.inject(OverlayContainerService);
   });
 
-  it('should be created', () => {
-    expect(service).toBeTruthy();
-  });
-
   describe('hasTemplatePreview', () => {
     it('is false with no registered template previews', () => {
       expect(service.hasTemplatePreview()).toBe(false);

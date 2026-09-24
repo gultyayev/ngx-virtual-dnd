@@ -9,29 +9,13 @@ import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-con
 let lastResizeCallback: ResizeObserverCallback | null = null;
 
 class MockResizeObserver {
-  #callback: ResizeObserverCallback;
-
   constructor(callback: ResizeObserverCallback) {
-    this.#callback = callback;
     lastResizeCallback = callback;
   }
 
   observe = jest.fn();
   unobserve = jest.fn();
   disconnect = jest.fn();
-
-  /** Simulate a resize entry for the given element with the given blockSize */
-  trigger(element: HTMLElement, blockSize: number): void {
-    this.#callback(
-      [
-        {
-          target: element,
-          borderBoxSize: [{ blockSize, inlineSize: 0 }],
-        } as unknown as ResizeObserverEntry,
-      ],
-      this as unknown as ResizeObserver,
-    );
-  }
 }
 
 @Component({
@@ -79,9 +63,7 @@ class TestHostWithManualOffsetComponent implements VdndScrollContainer {
   scrollTop = signal(0);
   containerHeight = signal(500);
   nativeElement = document.createElement('div');
-
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  scrollTo(): void {}
+  scrollTo = jest.fn();
 }
 
 describe('VirtualContentComponent', () => {
@@ -156,6 +138,30 @@ describe('VirtualContentComponent', () => {
     it('should use contentOffset input when no header is projected', () => {
       const virtualContent = fixture.debugElement.query(By.directive(VirtualContentComponent));
       expect(virtualContent.nativeElement.getAttribute('data-content-offset')).toBe('42');
+    });
+
+    it('should report scrollTop relative to the start of the list', () => {
+      const virtualContent = fixture.debugElement.query(By.directive(VirtualContentComponent))
+        .componentInstance as VirtualContentComponent;
+
+      fixture.componentInstance.scrollTop.set(100);
+      expect(virtualContent.scrollTop()).toBe(58);
+
+      // Still inside the content above the list
+      fixture.componentInstance.scrollTop.set(30);
+      expect(virtualContent.scrollTop()).toBe(0);
+    });
+
+    it('should add the offset back when scrolling the parent container', () => {
+      const virtualContent = fixture.debugElement.query(By.directive(VirtualContentComponent))
+        .componentInstance as VirtualContentComponent;
+
+      virtualContent.scrollTo({ top: 100, behavior: 'smooth' });
+
+      expect(fixture.componentInstance.scrollTo).toHaveBeenCalledWith({
+        top: 142,
+        behavior: 'smooth',
+      });
     });
   });
 

@@ -44,9 +44,19 @@ describe('KeyboardDragService', () => {
     dragState.endDrag();
   });
 
-  it('should be created', () => {
-    expect(service).toBeTruthy();
-  });
+  /** A pointer (non-keyboard) drag, which keyboard-only operations must leave alone. */
+  const startPointerDrag = (): void => {
+    dragState.startDrag(
+      createMockItem(),
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      null,
+      'list-1',
+      null,
+      3,
+      2,
+    );
+  };
 
   describe('computed signals (initial state)', () => {
     it('should have isActive as false initially', () => {
@@ -140,8 +150,12 @@ describe('KeyboardDragService', () => {
   });
 
   describe('moveToIndex', () => {
-    it('should return the target index when not active', () => {
+    it('should return the target index unchanged and not touch a pointer drag', () => {
+      startPointerDrag();
+
       expect(service.moveToIndex(5)).toBe(5);
+      expect(dragState.placeholderIndex()).toBe(3);
+      expect(dragState.keyboardTargetIndex()).toBeNull();
     });
 
     it('should update targetIndex when active', () => {
@@ -188,15 +202,6 @@ describe('KeyboardDragService', () => {
       service.moveToDroppable('list-2', 0, 3);
 
       expect(service.moveToIndex(10)).toBe(3);
-    });
-
-    it('should return clamped index', () => {
-      const item = createMockItem();
-      service.startKeyboardDrag(item, 0, 5, 'list-1');
-
-      expect(service.moveToIndex(3)).toBe(3);
-      expect(service.moveToIndex(-1)).toBe(0);
-      expect(service.moveToIndex(100)).toBe(4);
     });
 
     it('should apply same-list +1 adjustment to placeholderIndex when target >= sourceIndex', () => {
@@ -307,10 +312,13 @@ describe('KeyboardDragService', () => {
   });
 
   describe('moveToDroppable', () => {
-    it('should do nothing when not active', () => {
+    it('should not move a pointer drag to another droppable', () => {
+      startPointerDrag();
+
       service.moveToDroppable('list-2', 0, 5);
 
-      expect(service.activeDroppableId()).toBeNull();
+      expect(service.activeDroppableId()).toBe('list-1');
+      expect(dragState.placeholderIndex()).toBe(3);
     });
 
     it('should update activeDroppableId', () => {
@@ -402,10 +410,12 @@ describe('KeyboardDragService', () => {
   });
 
   describe('completeKeyboardDrag', () => {
-    it('should do nothing when not active', () => {
+    it('should not end a pointer drag', () => {
+      startPointerDrag();
+
       service.completeKeyboardDrag();
 
-      expect(dragState.isDragging()).toBe(false);
+      expect(dragState.isDragging()).toBe(true);
     });
 
     it('should end the drag', () => {
@@ -429,10 +439,13 @@ describe('KeyboardDragService', () => {
   });
 
   describe('cancelKeyboardDrag', () => {
-    it('should do nothing when not active', () => {
+    it('should not cancel a pointer drag', () => {
+      startPointerDrag();
+
       service.cancelKeyboardDrag();
 
-      expect(dragState.isDragging()).toBe(false);
+      expect(dragState.isDragging()).toBe(true);
+      expect(dragState.wasCancelled()).toBe(false);
     });
 
     it('should cancel the drag', () => {
@@ -480,10 +493,6 @@ describe('KeyboardDragService', () => {
   });
 
   describe('isActive computed signal', () => {
-    it('should be false when isDragging is false', () => {
-      expect(service.isActive()).toBe(false);
-    });
-
     it('should be false when isDragging is true but not keyboard drag', () => {
       const item = createMockItem();
       // Start a regular (non-keyboard) drag
@@ -501,6 +510,67 @@ describe('KeyboardDragService', () => {
       expect(dragState.isDragging()).toBe(true);
       expect(dragState.isKeyboardDrag()).toBe(true);
       expect(service.isActive()).toBe(true);
+    });
+  });
+
+  describe('placeholder revealers', () => {
+    it('should reveal the active droppable on every keyboard move', () => {
+      const reveal = jest.fn();
+      service.registerRevealer('list-1', reveal);
+      service.startKeyboardDrag(createMockItem(), 2, 10, 'list-1');
+
+      service.moveDown();
+      service.moveToIndex(5);
+
+      expect(reveal).toHaveBeenCalledTimes(2);
+    });
+
+    it('should reveal only the droppable the drag moves into', () => {
+      const revealSource = jest.fn();
+      const revealTarget = jest.fn();
+      service.registerRevealer('list-1', revealSource);
+      service.registerRevealer('list-2', revealTarget);
+      service.startKeyboardDrag(createMockItem(), 2, 10, 'list-1');
+
+      service.moveToDroppable('list-2', 0, 5);
+
+      expect(revealTarget).toHaveBeenCalledTimes(1);
+      expect(revealSource).not.toHaveBeenCalled();
+    });
+
+    it('should not reveal during a pointer drag', () => {
+      const reveal = jest.fn();
+      service.registerRevealer('list-1', reveal);
+      startPointerDrag();
+
+      service.moveDown();
+
+      expect(reveal).not.toHaveBeenCalled();
+    });
+
+    it('should stop revealing after unregistering', () => {
+      const reveal = jest.fn();
+      service.registerRevealer('list-1', reveal);
+      service.unregisterRevealer('list-1', reveal);
+      service.startKeyboardDrag(createMockItem(), 2, 10, 'list-1');
+
+      service.moveDown();
+
+      expect(reveal).not.toHaveBeenCalled();
+    });
+
+    it('should keep a newer revealer when an older one unregisters', () => {
+      const older = jest.fn();
+      const newer = jest.fn();
+      service.registerRevealer('list-1', older);
+      service.registerRevealer('list-1', newer);
+      service.unregisterRevealer('list-1', older);
+      service.startKeyboardDrag(createMockItem(), 2, 10, 'list-1');
+
+      service.moveDown();
+
+      expect(newer).toHaveBeenCalledTimes(1);
+      expect(older).not.toHaveBeenCalled();
     });
   });
 

@@ -26,6 +26,7 @@ class DefaultTestHostComponent {
       <div class="custom-preview">
         <span class="preview-name">{{ data?.name }}</span>
         <span class="preview-id">{{ id }}</span>
+        <span class="preview-droppable-id">{{ droppableId }}</span>
       </div>
     </ng-template>
 
@@ -250,20 +251,8 @@ describe('DragPreviewComponent', () => {
       });
     });
 
-    describe('styling', () => {
-      it('should have vdnd-drag-preview class (provides position, pointer-events, z-index via CSS)', () => {
-        const item = createMockDraggedItem();
-        dragStateService.startDrag(item, { x: 100, y: 100 });
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        const preview = queryPreview('.vdnd-drag-preview');
-        expect(preview!.classList.contains('vdnd-drag-preview')).toBe(true);
-      });
-    });
-
     describe('cloned element', () => {
-      it('should use cloned element when no custom template', () => {
+      it('should render the dragged item clone when no custom template', () => {
         const item = createMockDraggedItem();
         dragStateService.startDrag(item, { x: 100, y: 100 });
         fixture.detectChanges();
@@ -271,6 +260,13 @@ describe('DragPreviewComponent', () => {
 
         const cloneContainer = queryPreview('.vdnd-drag-preview-clone');
         expect(cloneContainer).not.toBeNull();
+        // The prepared clone itself is inserted (not re-cloned)
+        expect(cloneContainer!.firstElementChild).toBe(item.clonedElement!);
+        expect(cloneContainer!.textContent).toBe('Cloned Element');
+      });
+
+      it('should not register as a template preview', () => {
+        expect(overlayContainerService.hasTemplatePreview()).toBe(false);
       });
     });
 
@@ -333,9 +329,27 @@ describe('DragPreviewComponent', () => {
 
       const previewName = queryPreview('.preview-name');
       const previewId = queryPreview('.preview-id');
+      const previewDroppableId = queryPreview('.preview-droppable-id');
 
       expect(previewName!.textContent).toBe('My Item');
       expect(previewId!.textContent).toBe('test-id');
+      expect(previewDroppableId!.textContent).toBe('list-1');
+    });
+
+    it('should register as a template preview while mounted', () => {
+      expect(overlayContainerService.hasTemplatePreview()).toBe(true);
+
+      fixture.destroy();
+
+      expect(overlayContainerService.hasTemplatePreview()).toBe(false);
+    });
+
+    it('should remove its host from the overlay container when destroyed', () => {
+      expect(document.querySelector('.vdnd-overlay-container vdnd-drag-preview')).not.toBeNull();
+
+      fixture.destroy();
+
+      expect(document.querySelector('.vdnd-overlay-container vdnd-drag-preview')).toBeNull();
     });
 
     it('should use custom template instead of cloned element', () => {

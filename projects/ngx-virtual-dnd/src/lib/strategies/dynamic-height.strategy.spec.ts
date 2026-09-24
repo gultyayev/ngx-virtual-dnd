@@ -9,41 +9,6 @@ describe('DynamicHeightStrategy', () => {
     strategy = new DynamicHeightStrategy(ESTIMATED_HEIGHT);
   });
 
-  // ---- Existing tests (preserved) ----
-
-  it('does not bump version when excluded index is unchanged', () => {
-    strategy.setItemKeys(['a', 'b', 'c']);
-
-    strategy.setExcludedIndex(1);
-    const versionAfterFirstSet = strategy.version();
-
-    strategy.setExcludedIndex(1);
-
-    expect(strategy.version()).toBe(versionAfterFirstSet);
-  });
-
-  it('does not bump version when item keys are unchanged', () => {
-    strategy.setItemKeys(['a', 'b', 'c']);
-    const versionAfterFirstSet = strategy.version();
-
-    strategy.setItemKeys(['a', 'b', 'c']);
-
-    expect(strategy.version()).toBe(versionAfterFirstSet);
-  });
-
-  it('forgets measured heights for removed keys', () => {
-    strategy.setItemKeys(['a']);
-    strategy.setMeasuredHeight('a', 80);
-    expect(strategy.getItemHeight(0)).toBe(80);
-
-    strategy.setItemKeys([]);
-    strategy.setItemKeys(['a']);
-
-    expect(strategy.getItemHeight(0)).toBe(ESTIMATED_HEIGHT);
-  });
-
-  // ---- New tests ----
-
   describe('getTotalHeight', () => {
     it('should return 0 for 0 items', () => {
       strategy.setItemKeys([]);
@@ -146,37 +111,26 @@ describe('DynamicHeightStrategy', () => {
 
     it('should count visible items with estimated heights', () => {
       strategy.setItemKeys(['a', 'b', 'c', 'd', 'e']);
-      // Each item is 50px, container is 120px
-      // Items a(50), b(50) fill 100px, c(50) exceeds 120px
-      // So 3 items needed to fill, plus 1 for partial = 3+1 = 4? Let's check:
-      // Actually: a=50 (acc=50, visible=1), b=50 (acc=100, visible=2), c=50 (acc=150 >= 120, visible=3, stop at i=2)
-      // hasMoreItems: stopIndex=2 < count-1=4 => true, return 3+1=4
+      // 120px container: a, b, c (150px) fill it, plus 1 for the partially visible next item
       expect(strategy.getVisibleCount(0, 120)).toBe(4);
     });
 
     it('should handle container taller than content', () => {
       strategy.setItemKeys(['a', 'b']);
-      // 2 items at 50px each = 100px, container = 500px
-      // a=50 (acc=50, vis=1), b=50 (acc=100 >= 500? No, < 500)
-      // Loop ends without break, visible=2, stopIndex=2 (count)
-      // hasMoreItems: 2 < 1 => false, return 2
+      // 2 items (100px) never fill the 500px container, and there is nothing after them
       expect(strategy.getVisibleCount(0, 500)).toBe(2);
     });
 
     it('should count from startIndex', () => {
       strategy.setItemKeys(['a', 'b', 'c', 'd', 'e']);
-      // Start at index 2 (c), container=80px
-      // c=50 (acc=50, vis=1), d=50 (acc=100 >= 80, vis=2, stop at i=3)
-      // hasMoreItems: 3 < 4 => true, return 2+1=3
+      // From c in an 80px container: c, d fill it, plus 1 partial (e)
       expect(strategy.getVisibleCount(2, 80)).toBe(3);
     });
 
     it('should skip excluded index', () => {
       strategy.setItemKeys(['a', 'b', 'c', 'd', 'e']);
       strategy.setExcludedIndex(1);
-      // Start at 0, container=120px
-      // a=50 (acc=50, vis=1), b=SKIP, c=50 (acc=100, vis=2), d=50 (acc=150 >= 120, vis=3, stop at i=3)
-      // hasMoreItems: 3 < 4 => true, return 3+1=4
+      // b is skipped: a, c, d fill the 120px container, plus 1 partial (e)
       expect(strategy.getVisibleCount(0, 120)).toBe(4);
     });
 
@@ -184,9 +138,7 @@ describe('DynamicHeightStrategy', () => {
       strategy.setItemKeys(['a', 'b', 'c']);
       strategy.setMeasuredHeight('a', 100);
       strategy.setMeasuredHeight('b', 20);
-      // Start at 0, container=110px
-      // a=100 (acc=100, vis=1), b=20 (acc=120 >= 110, vis=2, stop at i=1)
-      // hasMoreItems: 1 < 2 => true, return 2+1=3
+      // a (100) + b (20) fill the 110px container, plus 1 partial (c)
       expect(strategy.getVisibleCount(0, 110)).toBe(3);
     });
   });
@@ -238,16 +190,6 @@ describe('DynamicHeightStrategy', () => {
       expect(strategy.getOffsetForIndex(2)).toBe(40);
       // index 3 (after excluded) => raw offset 150 - 60 = 90
       expect(strategy.getOffsetForIndex(3)).toBe(90);
-    });
-
-    it('should not modify offsets when no exclusion', () => {
-      strategy.setItemKeys(['a', 'b', 'c']);
-      strategy.setMeasuredHeight('a', 40);
-      strategy.setMeasuredHeight('b', 60);
-      // Raw offsets: 0, 40, 100
-      expect(strategy.getOffsetForIndex(0)).toBe(0);
-      expect(strategy.getOffsetForIndex(1)).toBe(40);
-      expect(strategy.getOffsetForIndex(2)).toBe(100);
     });
   });
 
@@ -495,14 +437,26 @@ describe('DynamicHeightStrategy', () => {
       expect(strategy.version()).toBe(v + 1);
     });
 
-    it('should prune measured heights for removed keys', () => {
+    it('should not bump version when keys are unchanged', () => {
+      strategy.setItemKeys(['a', 'b', 'c']);
+      const v = strategy.version();
+
+      strategy.setItemKeys(['a', 'b', 'c']);
+
+      expect(strategy.version()).toBe(v);
+    });
+
+    it('should forget measured heights for removed keys and keep the rest', () => {
       strategy.setItemKeys(['a', 'b', 'c']);
       strategy.setMeasuredHeight('a', 80);
       strategy.setMeasuredHeight('b', 90);
 
       strategy.setItemKeys(['b']);
+      // 'a' comes back: its old measurement must not be reused
+      strategy.setItemKeys(['a', 'b']);
 
-      expect(strategy.getItemHeight(0)).toBe(90); // b retained
+      expect(strategy.getItemHeight(0)).toBe(ESTIMATED_HEIGHT);
+      expect(strategy.getItemHeight(1)).toBe(90);
     });
   });
 

@@ -9,10 +9,6 @@ describe('PositionCalculatorService', () => {
     service = TestBed.inject(PositionCalculatorService);
   });
 
-  it('should be created', () => {
-    expect(service).toBeTruthy();
-  });
-
   describe('calculateDropIndex', () => {
     it('should calculate index 0 when cursor is at top of container', () => {
       const index = service.calculateDropIndex(
@@ -335,8 +331,9 @@ describe('PositionCalculatorService', () => {
 
       // Simulate the container scrolling up by 100px (rect moves up).
       stubRect(drop, { top: 0, left: 100, right: 300, bottom: 300 });
-      // Without invalidation the cached rect (top:100) still matches y=250...
-      // After invalidation the fresh rect (top:0..bottom:300) is used.
+      // Without invalidation the cached rect (100..400) is still used...
+      expect(service.findDroppableAtPoint(200, 350, dragged, 'g')).toBe(drop);
+      // ...after invalidation the fresh rect (0..300) is.
       service.invalidateDroppableRects();
       expect(service.findDroppableAtPoint(200, 350, dragged, 'g')).toBeNull();
       expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBe(drop);
@@ -604,6 +601,32 @@ describe('PositionCalculatorService', () => {
     afterEach(() => {
       createdAdjacent.forEach((el) => el.remove());
       createdAdjacent.length = 0;
+    });
+
+    it('orders droppables by horizontal position, not DOM order', () => {
+      // DOM order: right, left, middle
+      const right = makeAdjacentDroppable('right', 'g', 400);
+      const left = makeAdjacentDroppable('left', 'g', 0);
+      makeAdjacentDroppable('middle', 'g', 200);
+
+      expect(service.findAdjacentDroppable('middle', 'right', 'g')?.element).toBe(right);
+      expect(service.findAdjacentDroppable('middle', 'left', 'g')?.element).toBe(left);
+    });
+
+    it('returns null past either end of the row', () => {
+      makeAdjacentDroppable('left', 'g', 0);
+      makeAdjacentDroppable('right', 'g', 200);
+
+      expect(service.findAdjacentDroppable('left', 'left', 'g')).toBeNull();
+      expect(service.findAdjacentDroppable('right', 'right', 'g')).toBeNull();
+    });
+
+    it('ignores droppables from other groups', () => {
+      makeAdjacentDroppable('left', 'g', 0);
+      makeAdjacentDroppable('foreign', 'other', 100);
+      const right = makeAdjacentDroppable('right', 'g', 200);
+
+      expect(service.findAdjacentDroppable('left', 'right', 'g')?.element).toBe(right);
     });
 
     it('finds adjacent droppables when the group contains selector-sensitive characters', () => {

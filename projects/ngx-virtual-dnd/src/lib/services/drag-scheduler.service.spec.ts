@@ -90,13 +90,28 @@ describe('DragSchedulerService', () => {
     it('should not call onTick after stop even if the RAF fires', () => {
       const onTick = jest.fn();
       service.start(onTick);
+      // Race: the browser already queued the frame before cancelAnimationFrame ran.
+      const [queuedFrame] = rafCallbacks.values();
       service.stop();
-      flushRAF(); // RAF was cancelled; simulate the callback firing anyway (race guard)
+
+      queuedFrame(performance.now());
+
       expect(onTick).not.toHaveBeenCalled();
+      expect(pendingRAFCount()).toBe(0);
     });
 
     it('should be safe to call when not running', () => {
       expect(() => service.stop()).not.toThrow();
+    });
+
+    it('should not reschedule when onTick stops the scheduler', () => {
+      const onTick = jest.fn(() => service.stop());
+      service.start(onTick);
+
+      flushRAF();
+
+      expect(onTick).toHaveBeenCalledTimes(1);
+      expect(pendingRAFCount()).toBe(0);
     });
 
     it('should allow restarting after stop', () => {

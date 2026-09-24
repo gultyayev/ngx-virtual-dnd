@@ -444,8 +444,8 @@ describe('DragIndexCalculatorService', () => {
   it('constrained mode gives same index as unconstrained for dynamic heights', () => {
     // Items: [150px, 60px, 60px, 60px, 60px]
     // Offsets: [0, 150, 210, 270, 330, 390]
-    // Bug: constrained mode uses previewTopY instead of capped center,
-    // and skips midpoint refinement — causing the placeholder to lag.
+    // Regression: constrained mode used to probe at the preview top instead of the capped
+    // center, so the placeholder lagged one item behind the unconstrained result.
     const offsets = [0, 150, 210, 270, 330, 390];
     const strategy = new MockStrategy(
       offsets,
@@ -463,18 +463,12 @@ describe('DragIndexCalculatorService', () => {
     );
 
     const grabOffset = { x: 20, y: 60 };
-    // Cursor at y=220: preview top = 160 (in item 1 range 150-210),
-    // capped center = min(220, 160+40) = 200 (in item 1 range too).
-    // Midpoint of item 1 = (150+210)/2 = 180. previewTop 160 < 180 → stays at 1.
-    //
-    // With bug: constrained uses previewTopY=160, findIndexAtOffset(160)=1,
-    // but without midpoint refinement, displacement may differ for other positions.
-    //
-    // At y=250: preview top = 190 (in item 1 range 150-210),
-    // capped center = min(250, 190+40) = 230 (in item 2 range 210-270) → index 2.
-    // Midpoint of item 2 = (210+270)/2 = 240. previewTop 190 < 240 → stays at 2.
-    //
-    // Bug: constrained probe at 190, findIndexAtOffset(190)=1 → index 1, not 2.
+    // The droppable declares no data-item-height, so the probe cap uses the dragged item
+    // height (120) — the strategy's own item height is not consulted.
+    // At y=250: preview top = 190 (in item 1, 150-210), center = 250,
+    // capped center = min(250, 190 + 120/2) = 250 (in item 2, 210-270) → index 2.
+    // Midpoint of item 2 = 240; preview top 190 < 240 → stays at 2.
+    // The old top-edge probe hit findIndexAtOffset(190) = 1 instead.
     const position = { x: 20, y: 250 };
 
     const unconstrainedIndex = calculateIndex({
@@ -502,6 +496,47 @@ describe('DragIndexCalculatorService', () => {
     // Both should give index 2 — cursor center is solidly in item 2's range
     expect(unconstrainedIndex).toBe(2);
     expect(constrainedIndex).toBe(2);
+  });
+
+  it('uses fixed-height math for a plain list without a registered strategy', () => {
+    // 5 rendered draggables, no strategy: the dragged item height (50) is the row height.
+    const droppable = createDroppable('plain-list', 5);
+    const args = {
+      droppableElement: droppable,
+      position: { x: 10, y: 100 }, // center = 125 -> visual index 2
+      previousPosition: null,
+      grabOffset: null,
+      draggedItemHeight: 50,
+      sourceIndex: 1,
+    };
+
+    // Same list: the hidden source item is still in the DOM, so indexes at/after it shift by 1
+    expect(
+      service.calculatePlaceholderIndex({ ...args, sourceDroppableId: 'plain-list' }).index,
+    ).toBe(3);
+    expect(
+      service.calculatePlaceholderIndex({ ...args, sourceDroppableId: 'other-list' }).index,
+    ).toBe(2);
+  });
+
+  it('snaps to the end of the list when the preview reaches the bottom edge', () => {
+    // 12 rows (600px) in a 500px box scrolled to its max (100px).
+    const droppable = createDroppable('plain-list', 12);
+    droppable.scrollTop = 100;
+
+    // Preview center 480 → content offset 580 → last row (11). The math alone can never
+    // reach 12 (max scroll), so being within one row of the bottom edge snaps to the end.
+    const result = service.calculatePlaceholderIndex({
+      droppableElement: droppable,
+      position: { x: 10, y: 455 },
+      previousPosition: null,
+      grabOffset: null,
+      draggedItemHeight: 50,
+      sourceDroppableId: null,
+      sourceIndex: null,
+    });
+
+    expect(result.index).toBe(12);
   });
 
   it('uses registered strategy item count for direct virtualized lists', () => {

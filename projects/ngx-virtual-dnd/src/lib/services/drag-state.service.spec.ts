@@ -30,62 +30,27 @@ describe('DragStateService', () => {
     service.endDrag();
   });
 
-  it('should be created', () => {
-    expect(service).toBeTruthy();
-  });
+  /** Every public signal reads its idle value. */
+  const expectIdle = (): void => {
+    expect(service.getStateSnapshot()).toEqual(INITIAL_DRAG_STATE);
+    expect(service.isDragging()).toBe(false);
+    expect(service.draggedItem()).toBeNull();
+    expect(service.draggedItemId()).toBeNull();
+    expect(service.sourceDroppableId()).toBeNull();
+    expect(service.sourceIndex()).toBeNull();
+    expect(service.activeDroppableId()).toBeNull();
+    expect(service.placeholderId()).toBeNull();
+    expect(service.placeholderIndex()).toBeNull();
+    expect(service.cursorPosition()).toBeNull();
+    expect(service.grabOffset()).toBeNull();
+    expect(service.initialPosition()).toBeNull();
+    expect(service.lockAxis()).toBeNull();
+    expect(service.isKeyboardDrag()).toBe(false);
+    expect(service.keyboardTargetIndex()).toBeNull();
+  };
 
-  describe('initial state', () => {
-    it('should have isDragging as false initially', () => {
-      expect(service.isDragging()).toBe(false);
-    });
-
-    it('should have draggedItem as null initially', () => {
-      expect(service.draggedItem()).toBeNull();
-    });
-
-    it('should have draggedItemId as null initially', () => {
-      expect(service.draggedItemId()).toBeNull();
-    });
-
-    it('should have sourceDroppableId as null initially', () => {
-      expect(service.sourceDroppableId()).toBeNull();
-    });
-
-    it('should have sourceIndex as null initially', () => {
-      expect(service.sourceIndex()).toBeNull();
-    });
-
-    it('should have activeDroppableId as null initially', () => {
-      expect(service.activeDroppableId()).toBeNull();
-    });
-
-    it('should have placeholderId as null initially', () => {
-      expect(service.placeholderId()).toBeNull();
-    });
-
-    it('should have placeholderIndex as null initially', () => {
-      expect(service.placeholderIndex()).toBeNull();
-    });
-
-    it('should have cursorPosition as null initially', () => {
-      expect(service.cursorPosition()).toBeNull();
-    });
-
-    it('should have grabOffset as null initially', () => {
-      expect(service.grabOffset()).toBeNull();
-    });
-
-    it('should have initialPosition as null initially', () => {
-      expect(service.initialPosition()).toBeNull();
-    });
-
-    it('should have lockAxis as null initially', () => {
-      expect(service.lockAxis()).toBeNull();
-    });
-
-    it('should match INITIAL_DRAG_STATE', () => {
-      expect(service.getStateSnapshot()).toEqual(INITIAL_DRAG_STATE);
-    });
+  it('should start idle', () => {
+    expectIdle();
   });
 
   describe('startDrag', () => {
@@ -156,6 +121,33 @@ describe('DragStateService', () => {
       const item = createMockDraggedItem();
       service.startDrag(item, undefined, undefined, null, null, null, null, 3);
       expect(service.sourceIndex()).toBe(3);
+    });
+
+    it('should use axisLockPosition as initialPosition when provided', () => {
+      const item = createMockDraggedItem();
+      service.startDrag(item, { x: 100, y: 200 }, undefined, 'x', null, null, null, null, false, {
+        x: 90,
+        y: 190,
+      });
+
+      expect(service.initialPosition()).toEqual({ x: 90, y: 190 });
+      expect(service.cursorPosition()).toEqual({ x: 100, y: 200 });
+    });
+
+    it('should start a keyboard drag with the target index at the source index', () => {
+      const item = createMockDraggedItem();
+      service.startDrag(item, undefined, undefined, null, 'list-1', null, 4, 3, true);
+
+      expect(service.isKeyboardDrag()).toBe(true);
+      expect(service.keyboardTargetIndex()).toBe(3);
+    });
+
+    it('should not set a keyboard target index for a pointer drag', () => {
+      const item = createMockDraggedItem();
+      service.startDrag(item, undefined, undefined, null, 'list-1', null, 4, 3);
+
+      expect(service.isKeyboardDrag()).toBe(false);
+      expect(service.keyboardTargetIndex()).toBeNull();
     });
 
     it('should set all optional parameters at once', () => {
@@ -318,61 +310,84 @@ describe('DragStateService', () => {
   });
 
   describe('endDrag', () => {
-    it('should reset state to initial values', () => {
+    it('should reset every signal to its idle value', () => {
       const item = createMockDraggedItem();
       service.startDrag(item, { x: 100, y: 200 }, { x: 10, y: 20 }, 'x', 'list-1', 'item-5', 5, 2);
 
       service.endDrag();
 
-      expect(service.getStateSnapshot()).toEqual(INITIAL_DRAG_STATE);
+      expectIdle();
     });
 
-    it('should set isDragging to false', () => {
+    it('should capture the final state in endedDragState and mark it as not cancelled', () => {
       const item = createMockDraggedItem();
-      service.startDrag(item);
+      service.startDrag(item, { x: 100, y: 200 }, undefined, null, 'list-1', 'item-5', 5, 2);
+      service.updateDragPosition({
+        cursorPosition: { x: 110, y: 260 },
+        activeDroppableId: 'list-2',
+        placeholderId: 'item-7',
+        placeholderIndex: 7,
+      });
 
       service.endDrag();
 
-      expect(service.isDragging()).toBe(false);
-    });
-
-    it('should set all properties to null', () => {
-      const item = createMockDraggedItem();
-      service.startDrag(item, { x: 100, y: 200 });
-
-      service.endDrag();
-
-      expect(service.draggedItem()).toBeNull();
-      expect(service.draggedItemId()).toBeNull();
-      expect(service.sourceDroppableId()).toBeNull();
-      expect(service.sourceIndex()).toBeNull();
-      expect(service.activeDroppableId()).toBeNull();
-      expect(service.placeholderId()).toBeNull();
-      expect(service.placeholderIndex()).toBeNull();
-      expect(service.cursorPosition()).toBeNull();
-      expect(service.grabOffset()).toBeNull();
-      expect(service.initialPosition()).toBeNull();
-      expect(service.lockAxis()).toBeNull();
+      expect(service.wasCancelled()).toBe(false);
+      expect(service.endedDragState()).toEqual(
+        expect.objectContaining({
+          isDragging: true,
+          draggedItem: item,
+          sourceIndex: 2,
+          activeDroppableId: 'list-2',
+          placeholderId: 'item-7',
+          placeholderIndex: 7,
+          cursorPosition: { x: 110, y: 260 },
+        }),
+      );
     });
   });
 
   describe('cancelDrag', () => {
-    it('should reset state to initial values (same as endDrag)', () => {
+    it('should reset every signal to its idle value', () => {
       const item = createMockDraggedItem();
-      service.startDrag(item, { x: 100, y: 200 });
+      service.startDrag(item, { x: 100, y: 200 }, { x: 10, y: 20 }, 'x', 'list-1', 'item-5', 5, 2);
 
       service.cancelDrag();
 
-      expect(service.getStateSnapshot()).toEqual(INITIAL_DRAG_STATE);
+      expectIdle();
     });
 
-    it('should set isDragging to false', () => {
+    it('should mark the drag as cancelled and keep its final state', () => {
       const item = createMockDraggedItem();
-      service.startDrag(item);
+      service.startDrag(item, undefined, undefined, null, 'list-1', null, 3);
 
       service.cancelDrag();
 
-      expect(service.isDragging()).toBe(false);
+      expect(service.wasCancelled()).toBe(true);
+      expect(service.endedDragState()).toEqual(
+        expect.objectContaining({ draggedItem: item, placeholderIndex: 3 }),
+      );
+    });
+
+    it('should clear the ended state and cancelled flag when the next drag starts', () => {
+      service.startDrag(createMockDraggedItem());
+      service.cancelDrag();
+
+      service.startDrag(createMockDraggedItem({ draggableId: 'item-2' }));
+
+      expect(service.wasCancelled()).toBe(false);
+      expect(service.endedDragState()).toBeNull();
+    });
+  });
+
+  describe('body dragging class', () => {
+    it('should add vdnd-dragging to body only while a drag is active', () => {
+      service.startDrag(createMockDraggedItem());
+      TestBed.tick();
+      expect(document.body.classList.contains('vdnd-dragging')).toBe(true);
+
+      service.endDrag();
+      TestBed.tick();
+      expect(document.body.classList.contains('vdnd-dragging')).toBe(false);
     });
   });
 
@@ -440,10 +455,6 @@ describe('DragStateService', () => {
   });
 
   describe('getStateSnapshot', () => {
-    it('should return current state', () => {
-      expect(service.getStateSnapshot()).toEqual(INITIAL_DRAG_STATE);
-    });
-
     it('should return complete state when dragging', () => {
       const item = createMockDraggedItem();
       const position: CursorPosition = { x: 100, y: 200 };
@@ -465,26 +476,70 @@ describe('DragStateService', () => {
       expect(snapshot.initialPosition).toEqual(position);
       expect(snapshot.lockAxis).toBe('y');
     });
-
-    it('should return an equivalent state snapshot each call', () => {
-      const snapshot1 = service.getStateSnapshot();
-      const snapshot2 = service.getStateSnapshot();
-      expect(snapshot1).toEqual(snapshot2);
-    });
   });
 
-  describe('computed signals', () => {
-    it('should update draggedItemId when draggedItem changes', () => {
-      expect(service.draggedItemId()).toBeNull();
+  describe('keyboard target index', () => {
+    const startKeyboardDrag = (sourceIndex: number): void => {
+      service.startDrag(
+        createMockDraggedItem({ droppableId: 'list-1' }),
+        undefined,
+        undefined,
+        null,
+        'list-1',
+        null,
+        sourceIndex + 1,
+        sourceIndex,
+        true,
+      );
+    };
 
-      const item = createMockDraggedItem({ draggableId: 'unique-id' });
-      service.startDrag(item);
+    it('should add the hidden-source offset to the placeholder at or after the source', () => {
+      startKeyboardDrag(2);
 
-      expect(service.draggedItemId()).toBe('unique-id');
+      service.setKeyboardTargetIndex(2);
+      expect(service.placeholderIndex()).toBe(3);
 
-      service.endDrag();
+      service.setKeyboardTargetIndex(5);
+      expect(service.keyboardTargetIndex()).toBe(5);
+      expect(service.placeholderIndex()).toBe(6);
+    });
 
-      expect(service.draggedItemId()).toBeNull();
+    it('should not offset the placeholder above the source', () => {
+      startKeyboardDrag(2);
+
+      service.setKeyboardTargetIndex(1);
+
+      expect(service.placeholderIndex()).toBe(1);
+    });
+
+    it('should ignore keyboard target updates during a pointer drag', () => {
+      service.startDrag(createMockDraggedItem(), undefined, undefined, null, 'list-1', null, 4, 3);
+
+      service.setKeyboardTargetIndex(1);
+      service.setKeyboardActiveDroppable('list-2', 1);
+
+      expect(service.keyboardTargetIndex()).toBeNull();
+      expect(service.placeholderIndex()).toBe(4);
+      expect(service.activeDroppableId()).toBe('list-1');
+    });
+
+    it('should not offset the placeholder in another list', () => {
+      startKeyboardDrag(2);
+
+      service.setKeyboardActiveDroppable('list-2', 4);
+
+      expect(service.activeDroppableId()).toBe('list-2');
+      expect(service.keyboardTargetIndex()).toBe(4);
+      expect(service.placeholderIndex()).toBe(4);
+    });
+
+    it('should offset the placeholder again on returning to the source list', () => {
+      startKeyboardDrag(2);
+      service.setKeyboardActiveDroppable('list-2', 4);
+
+      service.setKeyboardActiveDroppable('list-1', 4);
+
+      expect(service.placeholderIndex()).toBe(5);
     });
   });
 });
