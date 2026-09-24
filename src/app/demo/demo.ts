@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { JsonPipe } from '@angular/common';
+import { ActivatedRoute, ParamMap } from '@angular/router';
 import {
   applyMove,
   DraggableDirective,
@@ -21,6 +22,18 @@ import { DEMO_SHIFT_DURATION, DemoAnimationSettings } from '../demo-animation-se
 interface Item {
   id: string;
   name: string;
+}
+
+/** Initial values of the settings panel. */
+interface DemoSettings {
+  itemCount: number;
+  lockAxis: 'x' | 'y' | null;
+  dragEnabled: boolean;
+  dragDelay: number;
+  useDragHandle: boolean;
+  useSimplifiedApi: boolean;
+  constrainToContainer: boolean;
+  list2DroppableDisabled: boolean;
 }
 
 /**
@@ -54,6 +67,13 @@ export class DemoComponent {
   readonly #dragState = inject(DragStateService);
   readonly #animationSettings = inject(DemoAnimationSettings);
 
+  /**
+   * Initial settings from the URL (e.g. `/?api=simplified&dragDelay=500`), so E2E tests and
+   * shared links open the demo pre-configured instead of clicking through the panel.
+   * `shiftAnimation` is read separately by DemoAnimationSettings.
+   */
+  readonly #initial = readDemoSettings(inject(ActivatedRoute).snapshot.queryParamMap);
+
   /** Whether displaced items slide (VDND_ANIMATION_CONFIG shift animation) */
   readonly shiftAnimation = computed(() => this.#animationSettings.shiftDuration() > 0);
 
@@ -61,28 +81,28 @@ export class DemoComponent {
   readonly isDragging = this.#dragState.isDragging;
 
   /** Number of items to generate */
-  readonly itemCount = signal(100);
+  readonly itemCount = signal(this.#initial.itemCount);
 
   /** Axis lock setting for drag operations */
-  readonly lockAxis = signal<'x' | 'y' | null>(null);
+  readonly lockAxis = signal<'x' | 'y' | null>(this.#initial.lockAxis);
 
   /** Whether drag-and-drop is enabled */
-  readonly dragEnabled = signal(true);
+  readonly dragEnabled = signal(this.#initial.dragEnabled);
 
   /** Delay in milliseconds before drag starts */
-  readonly dragDelay = signal(0);
+  readonly dragDelay = signal(this.#initial.dragDelay);
 
   /** Whether to use drag handle (only handle initiates drag) */
-  readonly useDragHandle = signal(false);
+  readonly useDragHandle = signal(this.#initial.useDragHandle);
 
   /** Whether to use the simplified API (VirtualSortableListComponent + moveItem) */
-  readonly useSimplifiedApi = signal(false);
+  readonly useSimplifiedApi = signal(this.#initial.useSimplifiedApi);
 
   /** Constrain drag preview and placeholder to container boundaries */
-  readonly constrainToContainer = signal(false);
+  readonly constrainToContainer = signal(this.#initial.constrainToContainer);
 
   /** Whether the List 2 droppable is disabled (rejects drops / keyboard navigation) */
-  readonly list2DroppableDisabled = signal(false);
+  readonly list2DroppableDisabled = signal(this.#initial.list2DroppableDisabled);
 
   /** Whether settings panel is expanded */
   readonly settingsExpanded = signal(true);
@@ -286,5 +306,28 @@ export class DemoComponent {
   /** Get item ID */
   readonly getItemId = (item: Item): string => {
     return item.id;
+  };
+}
+
+function readDemoSettings(params: ParamMap): DemoSettings {
+  const count = (name: string, fallback: number): number => {
+    const value = Number(params.get(name) ?? Number.NaN);
+    return Number.isInteger(value) && value >= 0 ? value : fallback;
+  };
+  const flag = (name: string, fallback: boolean): boolean => {
+    const value = params.get(name);
+    return value === 'true' || (value !== 'false' && fallback);
+  };
+  const lockAxis = params.get('lockAxis');
+
+  return {
+    itemCount: count('itemCount', 100),
+    lockAxis: lockAxis === 'x' || lockAxis === 'y' ? lockAxis : null,
+    dragEnabled: flag('dragEnabled', true),
+    dragDelay: count('dragDelay', 0),
+    useDragHandle: flag('dragHandle', false),
+    useSimplifiedApi: params.get('api') === 'simplified',
+    constrainToContainer: flag('constrainToContainer', false),
+    list2DroppableDisabled: flag('list2Disabled', false),
   };
 }
