@@ -18,7 +18,7 @@
  * 6. Run commit-and-tag-version (bumps version, updates changelog, commits, tags)
  * 7. Rebuild the library (with new version)
  * 8. Push commit and tag to origin
- * 9. npm login (tokens are short-lived)
+ * 9. npm login, unless `npm whoami` shows a valid session (tokens are short-lived)
  * 10. Publish to npm from dist/ngx-virtual-dnd
  */
 
@@ -39,6 +39,19 @@ function run(command, options = {}) {
 
 function runWithOutput(command) {
   return execSync(command, { encoding: 'utf-8' }).trim();
+}
+
+function isLoggedInToNpm() {
+  try {
+    const user = execSync('npm whoami', {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    console.log(`Logged in to npm as ${user}`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function validateGitState(preRelease) {
@@ -154,9 +167,13 @@ function main() {
   const branch = runWithOutput('git branch --show-current');
   run(`git push --follow-tags origin ${branch}`);
 
-  // Step 9: npm login (tokens are short-lived)
-  console.log('\n=== Logging in to npm ===');
-  run('npm login');
+  // Step 9: npm login, unless the current session is still valid (tokens are short-lived)
+  console.log('\n=== Checking npm auth ===');
+  if (isLoggedInToNpm()) {
+    console.log('Already logged in to npm, skipping login');
+  } else {
+    run('npm login');
+  }
 
   // Step 10: Publish to npm
   console.log('\n=== Publishing to npm ===');
