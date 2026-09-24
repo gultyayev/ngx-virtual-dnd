@@ -192,6 +192,10 @@ a:hover {
 .collapse {
   display: grid;
   grid-template-rows: 0fr;
+}
+/* Only user toggles animate. The router inserts the view before its bindings apply, so an
+   always-on transition would play 0fr → 1fr on every load of an initially open panel. */
+.panels-animated .collapse {
   transition: grid-template-rows 0.28s cubic-bezier(0.3, 0.7, 0.4, 1);
 }
 .collapse.is-open {

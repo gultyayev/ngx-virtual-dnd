@@ -8,6 +8,9 @@
   display: grid;
   place-items: center;
   color: var(--ink-3);
+}
+/* Like .collapse (styles.scss), rotate only on user toggles, not on the first render. */
+.panels-animated .chev {
   transition: transform 0.2s cubic-bezier(0.3, 0.7, 0.4, 1);
 }
 .chev.up {
