@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.2.0-alpha.1](https://github.com/gultyayev/angular-vdnd/compare/v3.2.0-alpha.0...v3.2.0-alpha.1) (2026-09-24)
+
+### Features
+
+- **docs:** add Rspress documentation site and upgrade npm to 12 ([#69](https://github.com/gultyayev/angular-vdnd/issues/69)) ([723fab1](https://github.com/gultyayev/angular-vdnd/commit/723fab1306253688b15d11c5dac8ab2001b7cf0e))
+
+### Bug Fixes
+
+- **lib:** end same-list keyboard navigation at the list's last slot ([a5191de](https://github.com/gultyayev/angular-vdnd/commit/a5191de55952f14fd05dd9c434cc25d1d3208c4f))
+- **lib:** keep the placeholder in view during keyboard drag autoscroll ([29c0c42](https://github.com/gultyayev/angular-vdnd/commit/29c0c426f1e9d7355455b8669418284158d82a51))
+- **lib:** scroll to the drop position on each keyboard move and fix the focus fallback ([abd1760](https://github.com/gultyayev/angular-vdnd/commit/abd1760ddc3811b67f5ae1ab87430f397be687a9))
+
 ## [3.2.0-alpha.0](https://github.com/gultyayev/angular-vdnd/compare/v3.1.3...v3.2.0-alpha.0) (2026-09-24)
 
 ### Features
