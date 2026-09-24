@@ -1,4 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// macOS 27 TCC-protects ~/Library/Application Support/Firefox, and Playwright's Firefox reads
+// its app-data dir at startup even with an explicit -profile, so launch exits with
+// "Could not find profile folder". Point CoreFoundation's home at a scratch dir instead.
+// See https://github.com/microsoft/playwright/issues/42768
+const firefoxEnv =
+  process.platform === 'darwin'
+    ? (() => {
+        const cfHome = join(tmpdir(), 'playwright-firefox-cf-home');
+        mkdirSync(cfHome, { recursive: true });
+        return { env: { ...process.env, CFFIXED_USER_HOME: cfHome } };
+      })()
+    : {};
 
 export default defineConfig({
   testDir: './e2e',
@@ -32,7 +48,7 @@ export default defineConfig({
         // environments (e.g. Claude Code on the web). Chromium/WebKit honor the bypass and
         // are unaffected. E2E only ever hits the local dev server, so force a direct
         // connection (network.proxy.type = 0 = no proxy) for Firefox.
-        launchOptions: { firefoxUserPrefs: { 'network.proxy.type': 0 } },
+        launchOptions: { firefoxUserPrefs: { 'network.proxy.type': 0 }, ...firefoxEnv },
       },
       testIgnore: /.*\.mobile\.spec\.ts/,
     },
