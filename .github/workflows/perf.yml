@@ -72,13 +72,22 @@ jobs:
           npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
           npm ci
 
+      # Measure both sides with the head's Playwright. Another version means another browser
+      # build, which perf:compare rightly refuses to compare, so a PR that upgrades Playwright
+      # could never pass the gate. The base keeps its own harness code (perf/).
+      - name: Align base Playwright with head
+        working-directory: base
+        run: |
+          head_version="$(node -p "require('../head/node_modules/@playwright/test/package.json').version")"
+          base_version="$(node -p "require('./node_modules/@playwright/test/package.json').version")"
+          if [ "$head_version" != "$base_version" ]; then
+            echo "Base pins Playwright $base_version; measuring it with $head_version"
+            npm install --no-save "@playwright/test@$head_version"
+          fi
+
+      # One browser install serves both sides now that they share a Playwright version.
       - name: Install Playwright browsers
         working-directory: head
-        run: npx playwright install --with-deps chromium
-
-      # Base may pin a different Playwright; its install is a no-op when equal.
-      - name: Install Playwright browsers (base)
-        working-directory: base
         run: npx playwright install --with-deps chromium
 
       - name: Build library (base)
