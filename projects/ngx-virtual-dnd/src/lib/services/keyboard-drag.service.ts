@@ -76,8 +76,8 @@ export class KeyboardDragService {
       return targetIndex;
     }
 
-    const totalItems = this.#totalItemCount();
-    const clampedIndex = Math.max(0, Math.min(targetIndex, totalItems));
+    const maxIndex = this.#maxTargetIndex(this.activeDroppableId());
+    const clampedIndex = Math.max(0, Math.min(targetIndex, maxIndex));
 
     this.#dragState.setKeyboardTargetIndex(clampedIndex);
 
@@ -112,7 +112,7 @@ export class KeyboardDragService {
     }
 
     this.#totalItemCount.set(totalItemCount);
-    const clampedIndex = Math.max(0, Math.min(targetIndex, totalItemCount));
+    const clampedIndex = Math.max(0, Math.min(targetIndex, this.#maxTargetIndex(droppableId)));
     this.#dragState.setKeyboardActiveDroppable(droppableId, clampedIndex);
   }
 
@@ -143,5 +143,17 @@ export class KeyboardDragService {
    */
   setTotalItemCount(count: number): void {
     this.#totalItemCount.set(count);
+  }
+
+  /**
+   * Last valid target index in the given droppable. Targets use the drop convention (the item's
+   * final index after it leaves its source), so the source list ends at `totalItemCount - 1`,
+   * while any other list can be appended to at `totalItemCount`.
+   */
+  #maxTargetIndex(droppableId: string | null): number {
+    const totalItems = this.#totalItemCount();
+    const isSourceList =
+      droppableId !== null && droppableId === this.#dragState.sourceDroppableId();
+    return isSourceList ? Math.max(0, totalItems - 1) : totalItems;
   }
 }
