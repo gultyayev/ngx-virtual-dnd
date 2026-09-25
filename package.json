@@ -14,6 +14,7 @@
     "site:build": "npm run build:lib && npm run build:demo:pages && npm run docs:build && node scripts/assemble-site.js",
     "watch": "ng build --watch --configuration development",
     "lint": "ng lint",
+    "typecheck": "tsc -p tsconfig.e2e.json --noEmit && tsc -p tsconfig.spec.json --noEmit && tsc -p projects/ngx-virtual-dnd/tsconfig.spec.json --noEmit",
     "test": "jest",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",

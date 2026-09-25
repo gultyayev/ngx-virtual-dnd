@@ -26,7 +26,7 @@ test('zero-baseline metric is not gated on a below-floor absolute change', () =>
 
 test('zero-baseline metric IS gated once it clears the absolute floor', () => {
   // longTaskCount floor is 2, so 0 -> 3 is a real regression.
-  assert.equal(MIN_ABS_DELTA.longTaskCount, 2);
+  assert.equal(MIN_ABS_DELTA['longTaskCount'], 2);
   const result = evaluateMetric(
     'longTaskCount',
     aggregate([0, 0, 0, 0, 0]),
@@ -90,8 +90,8 @@ test('layout/style-recalc floors sit below the smallest committed baseline media
   // With a floor of 25 a drag-within-list layoutCount doubling (24 -> 48,
   // delta 24) was suppressed as noise. These counts are near-deterministic, so
   // the floor only needs to guard tiny baselines.
-  assert.equal(MIN_ABS_DELTA.layoutCount, 10);
-  assert.equal(MIN_ABS_DELTA.recalcStyleCount, 10);
+  assert.equal(MIN_ABS_DELTA['layoutCount'], 10);
+  assert.equal(MIN_ABS_DELTA['recalcStyleCount'], 10);
   const result = evaluateMetric(
     'layoutCount',
     aggregate([24, 24, 24, 24, 24]),
