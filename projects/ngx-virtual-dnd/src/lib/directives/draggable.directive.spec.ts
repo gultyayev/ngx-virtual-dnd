@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DraggableDirective } from './draggable.directive';
 import { DroppableDirective } from './droppable.directive';
+import { VirtualViewportComponent } from '../components/virtual-viewport.component';
 import { DragStateService } from '../services/drag-state.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
 import { AutoScrollService } from '../services/auto-scroll.service';
@@ -85,6 +86,30 @@ class TestHostComponent {
 })
 class BoundIdHostComponent {
   id = 'bound-item';
+}
+
+// A vdnd-virtual-viewport droppable with plain rows (no *vdndVirtualFor, so no strategy)
+@Component({
+  template: `
+    <vdnd-virtual-viewport
+      vdndDroppable="viewport-list"
+      vdndDroppableGroup="test-group"
+      [itemHeight]="50"
+      style="height: 400px"
+    >
+      <div data-draggable-id="viewport-row-1"></div>
+      <div data-draggable-id="viewport-row-2"></div>
+      <div
+        vdndDraggable="viewport-row-3"
+        vdndDraggableGroup="test-group"
+        (dragStart)="dragStartEvents.push($event)"
+      ></div>
+    </vdnd-virtual-viewport>
+  `,
+  imports: [VirtualViewportComponent, DroppableDirective, DraggableDirective],
+})
+class ViewportRowsHostComponent {
+  dragStartEvents: DragStartEvent[] = [];
 }
 
 // A consumer directive that extends the draggable and runs its own setup after the draggable's
@@ -470,8 +495,11 @@ describe('DraggableDirective', () => {
       } as DOMRect);
     }
 
-    function startPointerDrag(position: { x: number; y: number }): void {
-      draggableNative.dispatchEvent(
+    function startPointerDrag(
+      position: { x: number; y: number },
+      target: HTMLElement = draggableNative,
+    ): void {
+      target.dispatchEvent(
         new MouseEvent('mousedown', {
           clientX: 100,
           clientY: 145,
@@ -519,6 +547,28 @@ describe('DraggableDirective', () => {
       startPointerDrag({ x: 100, y: 155 });
 
       expect(component.dragStartEvents[0].sourceIndex).toBe(2);
+    });
+
+    it('should count preceding items in a vdnd-virtual-viewport without *vdndVirtualFor', () => {
+      const viewportHost = TestBed.createComponent(ViewportRowsHostComponent);
+      viewportHost.detectChanges();
+      const viewport = viewportHost.nativeElement.querySelector(
+        '[data-droppable-id="viewport-list"]',
+      ) as HTMLElement;
+      const row = viewportHost.nativeElement.querySelector(
+        '[data-draggable-id="viewport-row-3"]',
+      ) as HTMLElement;
+      // Rows with gaps: the third row starts 140px down, which reads as index 3 by position
+      mockRect(row, 140, 50);
+      mockRect(viewport, 0, 400);
+      jest
+        .spyOn(TestBed.inject(PositionCalculatorService), 'findDroppableAtPoint')
+        .mockReturnValue(viewport);
+
+      startPointerDrag({ x: 100, y: 155 }, row);
+
+      expect(viewportHost.componentInstance.dragStartEvents[0].sourceIndex).toBe(2);
+      viewportHost.destroy();
     });
   });
 
