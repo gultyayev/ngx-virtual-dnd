@@ -11,6 +11,16 @@ import {
 export type { LongTask };
 export { METRICS_SCHEMA_VERSION };
 
+/** Page globals shared between injectObservers() and collectObserverResults(). */
+interface PerfWindow extends Window {
+  __perfObserver?: PerformanceObserver;
+  __perfLongTasks?: LongTask[];
+  __perfFrames?: number[];
+  __perfLastFrameTime?: number;
+  __perfTrackingActive?: boolean;
+  __perfScenarioStart?: number;
+}
+
 export interface PerfSnapshot {
   timestamp: number;
   layoutCount: number;
@@ -73,10 +83,9 @@ export class MetricsCollector {
    */
   async injectObservers(): Promise<void> {
     await this.#page.evaluate(() => {
-      const w = window as Window & Record<string, unknown>;
+      const w = window as PerfWindow;
 
-      const previous = w.__perfObserver as PerformanceObserver | undefined;
-      if (previous) previous.disconnect();
+      w.__perfObserver?.disconnect();
 
       w.__perfLongTasks = [];
       w.__perfFrames = [];
@@ -86,10 +95,7 @@ export class MetricsCollector {
 
       const observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          (w.__perfLongTasks as { startTime: number; duration: number }[]).push({
-            startTime: entry.startTime,
-            duration: entry.duration,
-          });
+          w.__perfLongTasks?.push({ startTime: entry.startTime, duration: entry.duration });
         }
       });
       observer.observe({ type: 'longtask' });
@@ -97,8 +103,9 @@ export class MetricsCollector {
 
       const trackFrame = () => {
         const now = performance.now();
-        if ((w.__perfLastFrameTime as number) > 0) {
-          (w.__perfFrames as number[]).push(now - (w.__perfLastFrameTime as number));
+        const lastFrameTime = w.__perfLastFrameTime ?? 0;
+        if (lastFrameTime > 0) {
+          w.__perfFrames?.push(now - lastFrameTime);
         }
         w.__perfLastFrameTime = now;
         if (w.__perfTrackingActive) {
@@ -115,25 +122,23 @@ export class MetricsCollector {
     scenarioStart: number;
   }> {
     return this.#page.evaluate(() => {
-      const w = window as Window & Record<string, unknown>;
+      const w = window as PerfWindow;
       w.__perfTrackingActive = false;
-      const observer = w.__perfObserver as PerformanceObserver | undefined;
+      const longTasks = w.__perfLongTasks ?? [];
+      const observer = w.__perfObserver;
       if (observer) {
         // Flush any records not yet delivered to the callback, then disconnect
         // so this observer can never fire into a later iteration's array.
         for (const entry of observer.takeRecords()) {
-          (w.__perfLongTasks as { startTime: number; duration: number }[]).push({
-            startTime: entry.startTime,
-            duration: entry.duration,
-          });
+          longTasks.push({ startTime: entry.startTime, duration: entry.duration });
         }
         observer.disconnect();
         w.__perfObserver = undefined;
       }
       return {
-        longTasks: (w.__perfLongTasks as LongTask[]) ?? [],
-        frameTimes: (w.__perfFrames as number[]) ?? [],
-        scenarioStart: (w.__perfScenarioStart as number) ?? 0,
+        longTasks,
+        frameTimes: w.__perfFrames ?? [],
+        scenarioStart: w.__perfScenarioStart ?? 0,
       };
     });
   }

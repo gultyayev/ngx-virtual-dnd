@@ -2,7 +2,9 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "./out-tsc/e2e",
+    "noEmit": true,
+    // perf/ runs under node --experimental-strip-types, which needs .ts extensions in imports
+    "allowImportingTsExtensions": true,
     "types": ["node"]
   },
   "include": ["e2e/**/*.ts", "perf/**/*.ts"]
