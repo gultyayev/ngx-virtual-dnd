@@ -23,6 +23,8 @@ Make the handle a non-interactive element such as a `<span>`. Presses inside but
 
 Presses inside a `button`, `input`, `textarea`, `select` or `[contenteditable]` element never start a drag, so controls inside rows keep working. To exclude another element, add the `no-drag` class. It applies only to the exact element that is pressed, not to its children. Only the primary mouse button starts a drag.
 
+The same goes for the keyboard: <kbd>Space</kbd> pressed in one of these controls (or on a `no-drag` element) inside a row types a space or clicks the button instead of picking the row up.
+
 ## Threshold and delay
 
 ```angular-html

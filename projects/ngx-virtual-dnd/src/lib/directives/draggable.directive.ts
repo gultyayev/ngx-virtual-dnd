@@ -30,6 +30,7 @@ import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
+import { INTERACTIVE_ELEMENT_SELECTOR, NO_DRAG_CLASS } from '../utils/interactive-elements';
 
 /**
  * Makes an element draggable within the virtual scroll drag-and-drop system.
@@ -258,6 +259,12 @@ export class DraggableDirective implements OnInit, OnDestroy {
       return;
     }
 
+    // Space on a control inside the item types into it or clicks it, just as a press on
+    // one never starts a pointer drag.
+    if (this.#isFromNestedControl(event)) {
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation(); // Prevent document listener from receiving this event
 
@@ -274,6 +281,26 @@ export class DraggableDirective implements OnInit, OnDestroy {
 
     // Start keyboard drag
     this.#keyboardHandler.activate();
+  }
+
+  /**
+   * Whether the event comes from a control (or a `no-drag` element) nested inside this
+   * draggable. Neither the draggable itself nor a control around it counts, so a
+   * `<button vdndDraggable>` still picks up with Space.
+   */
+  #isFromNestedControl(event: Event): boolean {
+    const host = this.#elementRef.nativeElement;
+    const target = event.target;
+    if (!(target instanceof Element) || target === host) {
+      return false;
+    }
+
+    if (target.classList.contains(NO_DRAG_CLASS)) {
+      return true;
+    }
+
+    const control = target.closest(INTERACTIVE_ELEMENT_SELECTOR);
+    return control !== null && control !== host && host.contains(control);
   }
 
   /**

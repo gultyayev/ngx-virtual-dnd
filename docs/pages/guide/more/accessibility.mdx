@@ -18,6 +18,8 @@ Every draggable can be moved with the keyboard. There is nothing to enable.
 | <kbd>←</kbd> <kbd>→</kbd> | —                              | Moves to the neighbouring list in the same group, by on-screen position (disabled lists are skipped) |
 | <kbd>Escape</kbd>         | —                              | Cancels. Also cancels pointer drags.                                                                 |
 
+Pressing <kbd>Space</kbd> in a control inside an item, such as a text field or a button, types into or clicks that control and does not pick the item up (see [Interactive children](/guide/features/drag-behavior#interactive-children)).
+
 In `<vdnd-sortable-list>` and `<vdnd-virtual-scroll>`, moving past the edge of the visible area scrolls the list, so the keyboard reaches every item, not just the rendered ones. `<vdnd-virtual-content>` and `<vdnd-virtual-viewport>` do not scroll to follow the keyboard target.
 
 ## Managed for you

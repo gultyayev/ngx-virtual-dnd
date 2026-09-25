@@ -456,6 +456,73 @@ describe('DraggableDirective', () => {
       expect(space.defaultPrevented).toBe(false);
     });
 
+    it('should let Space reach an input inside the draggable instead of starting a drag', () => {
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      const input = draggableNative.querySelector('input') as HTMLInputElement;
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+      });
+      input.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(false);
+      expect(keyboardDrag.isActive()).toBe(false);
+      expect(component.dragStartEvents).toEqual([]);
+    });
+
+    it('should let Space activate a button inside the draggable instead of starting a drag', () => {
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      const button = draggableNative.querySelector('button') as HTMLButtonElement;
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+      });
+      button.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(false);
+      expect(keyboardDrag.isActive()).toBe(false);
+      expect(component.dragStartEvents).toEqual([]);
+    });
+
+    it('should let Space reach a no-drag element inside the draggable instead of starting a drag', () => {
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      const customControl = draggableNative.querySelector('.content') as HTMLElement;
+      customControl.tabIndex = 0;
+      customControl.classList.add('no-drag');
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+      });
+      customControl.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(false);
+      expect(keyboardDrag.isActive()).toBe(false);
+      expect(component.dragStartEvents).toEqual([]);
+    });
+
+    it('should still start a keyboard drag from a focusable non-control child such as a handle', () => {
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      const handle = draggableNative.querySelector('.handle') as HTMLElement;
+      handle.tabIndex = 0;
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+      });
+      handle.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(true);
+      expect(keyboardDrag.isActive()).toBe(true);
+      expect(component.dragStartEvents.length).toBe(1);
+    });
+
     it('should leave escape alone when not dragging', () => {
       const escape = new KeyboardEvent('keydown', {
         key: 'Escape',
