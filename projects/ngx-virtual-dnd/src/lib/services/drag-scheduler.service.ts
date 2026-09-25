@@ -127,8 +127,15 @@ export class DragSchedulerService {
       participant();
     }
 
+    // A participant can end the drag (the autoscroll callback may cancel it), which stops
+    // the scheduler and clears onTick.
+    const onTick = this.#onTick;
+    if (!onTick) {
+      return;
+    }
+
     // Phase 2 — main compute (cursor-based hit-test + signal write)
-    this.#onTick(this.#pendingCursor, cursorDirty);
+    onTick(this.#pendingCursor, cursorDirty);
 
     // Reschedule only if still active (stop() may have been called by onTick).
     if (this.#onTick !== null) {
