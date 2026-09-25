@@ -25,7 +25,11 @@ export interface DroppableScrollGeometry {
    * above the rows (`contentOffset`) is already subtracted.
    */
   scrollTop: number;
-  /** Whether the rows are virtualized, so not all of them are in the DOM */
+  /**
+   * Whether the container virtualizes its rows itself (`vdnd-virtual-scroll`,
+   * `vdnd-virtual-content`), so a row's index can't be counted from the rows before it. A
+   * viewport's rows are virtualized by `*vdndVirtualFor`, which registers a strategy.
+   */
   isVirtual: boolean;
 }
 
@@ -285,7 +289,7 @@ export class DragIndexCalculatorService {
   #getScrollGeometry(cache: DroppableCache): DroppableScrollGeometry {
     const { containerType, scrollContainer } = cache;
     const rect = scrollContainer.getBoundingClientRect();
-    const isVirtual = containerType !== 'fallback';
+    const isVirtual = containerType === 'virtualScroll' || containerType === 'virtualContent';
 
     switch (containerType) {
       case 'viewport':

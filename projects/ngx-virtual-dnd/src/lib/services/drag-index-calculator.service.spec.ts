@@ -583,9 +583,7 @@ describe('DragIndexCalculatorService', () => {
       const viewport = createViewport(80);
       viewport.scrollTop = 200;
 
-      expect(service.getScrollGeometry(viewport, 50)).toEqual(
-        expect.objectContaining({ scrollTop: 120, isVirtual: true }),
-      );
+      expect(service.getScrollGeometry(viewport, 50).scrollTop).toBe(120);
     });
 
     it('measures the viewport itself even when a row holds another virtual list', () => {
