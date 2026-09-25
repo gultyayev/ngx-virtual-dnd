@@ -69,7 +69,7 @@ Light and dark via `[data-theme="light|dark"]` on a root element (the docs site 
 - No images, illustrations, textures, or patterns.
 
 ### Top bar
-60px, sticky, translucent `--topbar-bg` with `backdrop-filter: blur(16px) saturate(150%)` and a 1px bottom border. Brand tile 32px / 9px radius on `--accent-soft`, 15px/700 wordmark, 13px nav tabs (active = accent-soft), 36px icon button for the theme toggle (auto / light / dark).
+60px (plus the top safe-area inset in the docs), sticky, translucent `--topbar-bg` with `backdrop-filter: blur(16px) saturate(150%)` and a 1px bottom border. Brand tile 32px / 9px radius on `--accent-soft`, 15px/700 wordmark, 13px nav tabs (active = accent-soft), 36px icon button for the theme toggle (auto / light / dark).
 
 ### Docs site
 Uses the same top bar treatment. Sidebar on `--field-bg` with 11px uppercase group labels and accent-soft active items (7px radius). Content on `--surface`. Code blocks are dark (`#0e131e`) in both themes. Page titles 30px / 700 / -0.025em.
