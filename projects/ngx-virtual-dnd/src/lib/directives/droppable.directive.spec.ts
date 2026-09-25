@@ -2,6 +2,7 @@ import { Component, DebugElement, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DroppableDirective } from './droppable.directive';
+import { DroppableGroupDirective } from './droppable-group.directive';
 import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
@@ -58,6 +59,15 @@ class TestHostComponent {
   onPlaceholderMove(event: PlaceholderMoveEvent): void {
     this.placeholderMoveEvents.push(event);
   }
+}
+
+// Droppable that inherits a bound group, which has no value before the first render
+@Component({
+  template: `<div [vdndGroup]="group"><div vdndDroppable="grouped-list"></div></div>`,
+  imports: [DroppableDirective, DroppableGroupDirective],
+})
+class BoundGroupHostComponent {
+  group = 'test-group';
 }
 
 describe('DroppableDirective', () => {
@@ -723,6 +733,18 @@ describe('DroppableDirective', () => {
   });
 
   describe('cleanup on destroy', () => {
+    it('should destroy cleanly before its first change detection with a bound ID', () => {
+      const unrendered = TestBed.createComponent(TestHostComponent);
+
+      expect(() => unrendered.destroy()).not.toThrow();
+    });
+
+    it('should destroy cleanly before its first change detection inside a bound group', () => {
+      const unrendered = TestBed.createComponent(BoundGroupHostComponent);
+
+      expect(() => unrendered.destroy()).not.toThrow();
+    });
+
     it('should clear active droppable if destroyed while active', () => {
       const item = createMockDraggedItem();
       dragStateService.startDrag(item);

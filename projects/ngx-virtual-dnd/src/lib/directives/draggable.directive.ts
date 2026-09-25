@@ -7,7 +7,6 @@ import {
   input,
   NgZone,
   OnDestroy,
-  OnInit,
   output,
   signal,
 } from '@angular/core';
@@ -75,7 +74,7 @@ import { INTERACTIVE_ELEMENT_SELECTOR, NO_DRAG_CLASS } from '../utils/interactiv
     '(keydown.escape)': 'onEscape()',
   },
 })
-export class DraggableDirective implements OnInit, OnDestroy {
+export class DraggableDirective implements OnDestroy {
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #dragState = inject(DragStateService);
   readonly #positionCalculator = inject(PositionCalculatorService);
@@ -152,8 +151,54 @@ export class DraggableDirective implements OnInit, OnDestroy {
     return draggedItem?.draggableId === this.vdndDraggable();
   });
 
-  #keyboardHandler!: KeyboardDragHandler;
-  #pointerHandler!: PointerDragHandler;
+  // Created eagerly: they read inputs only when used, and ngOnDestroy runs even for a
+  // draggable destroyed before its first change detection.
+  readonly #keyboardHandler = new KeyboardDragHandler({
+    dragState: this.#dragState,
+    keyboardDrag: this.#keyboardDrag,
+    positionCalculator: this.#positionCalculator,
+    dragIndexCalculator: this.#dragIndexCalculator,
+    elementClone: this.#elementClone,
+    overlayContainer: this.#overlayContainer,
+    ngZone: this.#ngZone,
+    envInjector: this.#envInjector,
+    callbacks: {
+      onDragStart: (event) => this.dragStart.emit(event),
+      onDragEnd: (event) => this.dragEnd.emit(event),
+      getParentDroppableId: () => this.#getParentDroppableId(),
+      calculateSourceIndex: (el, droppable) => this.#calculateSourceIndex(el, droppable),
+    },
+    getContext: () => ({
+      element: this.#elementRef.nativeElement,
+      draggableId: this.vdndDraggable(),
+      groupName: this.#effectiveGroup(),
+      data: this.vdndDraggableData(),
+    }),
+  });
+
+  readonly #pointerHandler = new PointerDragHandler({
+    ngZone: this.#ngZone,
+    callbacks: {
+      onDragStart: (position) => this.#startDrag(position),
+      onDragMove: (position) => {
+        // Record raw position synchronously (needed for autoscroll cursor override)
+        // then queue into the scheduler's RAF loop for coalesced frame-rate processing.
+        this.#lastRawPosition = position;
+        this.#scheduler.queueCursorUpdate(position);
+      },
+      onDragEnd: (cancelled) => this.#endDrag(cancelled),
+      onPendingChange: (pending) => this.#setPending(pending),
+      isDragging: () => this.isDragging(),
+    },
+    getContext: () => ({
+      element: this.#elementRef.nativeElement,
+      groupName: this.#effectiveGroup(),
+      disabled: this.disabled(),
+      dragHandle: this.dragHandle(),
+      dragThreshold: this.dragThreshold(),
+      dragDelay: this.dragDelay(),
+    }),
+  });
 
   /** Cached constraint flag from source droppable */
   #constrainToContainer = false;
@@ -185,58 +230,11 @@ export class DraggableDirective implements OnInit, OnDestroy {
     return (scrollable as HTMLElement) ?? droppableElement;
   }
 
-  ngOnInit(): void {
-    this.#keyboardHandler = new KeyboardDragHandler({
-      dragState: this.#dragState,
-      keyboardDrag: this.#keyboardDrag,
-      positionCalculator: this.#positionCalculator,
-      dragIndexCalculator: this.#dragIndexCalculator,
-      elementClone: this.#elementClone,
-      overlayContainer: this.#overlayContainer,
-      ngZone: this.#ngZone,
-      envInjector: this.#envInjector,
-      callbacks: {
-        onDragStart: (event) => this.dragStart.emit(event),
-        onDragEnd: (event) => this.dragEnd.emit(event),
-        getParentDroppableId: () => this.#getParentDroppableId(),
-        calculateSourceIndex: (el, droppable) => this.#calculateSourceIndex(el, droppable),
-      },
-      getContext: () => ({
-        element: this.#elementRef.nativeElement,
-        draggableId: this.vdndDraggable(),
-        groupName: this.#effectiveGroup(),
-        data: this.vdndDraggableData(),
-      }),
-    });
-
-    this.#pointerHandler = new PointerDragHandler({
-      ngZone: this.#ngZone,
-      callbacks: {
-        onDragStart: (position) => this.#startDrag(position),
-        onDragMove: (position) => {
-          // Record raw position synchronously (needed for autoscroll cursor override)
-          // then queue into the scheduler's RAF loop for coalesced frame-rate processing.
-          this.#lastRawPosition = position;
-          this.#scheduler.queueCursorUpdate(position);
-        },
-        onDragEnd: (cancelled) => this.#endDrag(cancelled),
-        onPendingChange: (pending) => this.#setPending(pending),
-        isDragging: () => this.isDragging(),
-      },
-      getContext: () => ({
-        element: this.#elementRef.nativeElement,
-        groupName: this.#effectiveGroup(),
-        disabled: this.disabled(),
-        dragHandle: this.dragHandle(),
-        dragThreshold: this.dragThreshold(),
-        dragDelay: this.dragDelay(),
-      }),
-    });
-  }
-
   ngOnDestroy(): void {
     // If destroyed mid-drag, cancel to avoid stale global state / ongoing RAF loops.
-    if (this.isDragging()) {
+    // Compare elements rather than IDs: before the first change detection a bound ID input
+    // has no value yet, and reading it would throw.
+    if (this.#dragState.draggedItem()?.element === this.#elementRef.nativeElement) {
       this.#endDrag(true);
     }
     this.#pointerHandler.destroy();

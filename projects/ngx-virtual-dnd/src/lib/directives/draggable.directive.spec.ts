@@ -67,6 +67,15 @@ class TestHostComponent {
   }
 }
 
+// Draggable whose required ID input is bound, so it has no value before the first render
+@Component({
+  template: `<div [vdndDraggable]="id" vdndDraggableGroup="test-group"></div>`,
+  imports: [DraggableDirective],
+})
+class BoundIdHostComponent {
+  id = 'bound-item';
+}
+
 describe('DraggableDirective', () => {
   let fixture: ComponentFixture<TestHostComponent>;
   let component: TestHostComponent;
@@ -596,6 +605,18 @@ describe('DraggableDirective', () => {
       expect(dragStateService.isDragging()).toBe(false);
       expect(dragStateService.wasCancelled()).toBe(true);
       expect(component.dragEndEvents.at(-1)?.cancelled).toBe(true);
+    });
+
+    it('should destroy cleanly before its first change detection', () => {
+      const unrendered = TestBed.createComponent(TestHostComponent);
+
+      expect(() => unrendered.destroy()).not.toThrow();
+    });
+
+    it('should destroy cleanly before its first change detection with a bound ID', () => {
+      const unrendered = TestBed.createComponent(BoundIdHostComponent);
+
+      expect(() => unrendered.destroy()).not.toThrow();
     });
   });
 });

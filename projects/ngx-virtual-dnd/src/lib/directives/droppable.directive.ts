@@ -7,6 +7,7 @@ import {
   inject,
   input,
   OnDestroy,
+  OnInit,
   output,
   untracked,
 } from '@angular/core';
@@ -60,7 +61,7 @@ import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization
     '[class.vdnd-droppable-disabled]': 'disabled()',
   },
 })
-export class DroppableDirective implements OnDestroy {
+export class DroppableDirective implements OnInit, OnDestroy {
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #dragState = inject(DragStateService);
   readonly #autoScroll = inject(AutoScrollService);
@@ -160,6 +161,9 @@ export class DroppableDirective implements OnDestroy {
    */
   #handledEndedState: DragState | null = null;
 
+  /** Whether ngOnInit ran, i.e. the inputs have values */
+  #initialized = false;
+
   constructor() {
     createAutoScrollRegistration({
       autoScrollService: this.#autoScroll,
@@ -227,14 +231,23 @@ export class DroppableDirective implements OnDestroy {
     });
   }
 
+  ngOnInit(): void {
+    this.#initialized = true;
+  }
+
   ngOnDestroy(): void {
+    // Destroyed before its first change detection: its inputs have no values yet, and it was
+    // never registered for auto-scroll, targeted or announced to the calculator.
+    if (!this.#initialized) {
+      return;
+    }
+
     // Clean up if this droppable is destroyed while being active
     if (this.isActive()) {
       this.#dragState.setActiveDroppable(null);
     }
 
-    // Unregister from auto-scroll
-    this.#autoScroll.unregisterContainer(this.vdndDroppable());
+    // Auto-scroll unregisters itself on destroy (see createAutoScrollRegistration).
 
     // If this droppable unmounts mid-drag, tell the calculator so it drops it from the
     // frozen candidate list (deferred re-query runs once the element has left the DOM).
