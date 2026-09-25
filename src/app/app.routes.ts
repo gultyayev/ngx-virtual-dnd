@@ -29,6 +29,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'virtual-viewport',
+    loadComponent: () =>
+      import('./virtual-viewport-demo/virtual-viewport-demo').then(
+        (m) => m.VirtualViewportDemoComponent,
+      ),
+  },
+  {
     path: 'examples',
     loadComponent: () => import('./examples/examples-shell').then((m) => m.ExamplesShellComponent),
     loadChildren: () => import('./examples/examples.routes').then((m) => m.EXAMPLE_ROUTES),
