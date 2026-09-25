@@ -109,9 +109,156 @@ html:root.rp-dark {
 /* Mirrors the demo's top bar: 60px, translucent, blurred, 1px bottom border. */
 html .rp-nav {
   border-bottom: 1px solid var(--border);
+}
+
+/* The translucent, blurred background is drawn by ::before, not the nav itself. Safari 26+
+   fills the status bar with the solid background-color of a sticky header at the top edge,
+   and falls back to white (transparent header) or the page color (header with backdrop-filter).
+   So the nav carries --vdnd-nav-solid, the bar's look at rest, clipped to its text so it
+   never paints (opaque glyphs cover it). */
+html:root {
+  --vdnd-page-bg: var(--rp-c-bg);
+  /* --topbar-bg (tokens.css) composited over the page. */
+  --vdnd-nav-solid: color-mix(in srgb, #fff 80%, var(--vdnd-page-bg));
+}
+
+html.dark:root {
+  --vdnd-nav-solid: color-mix(in srgb, #10151f 78%, var(--vdnd-page-bg));
+}
+
+html:root:has(.rp-home-background) {
+  --vdnd-page-bg: var(--rp-home-background-bg);
+}
+
+html .rp-nav {
+  background: var(--vdnd-nav-solid);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html .rp-nav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background: var(--topbar-bg);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
   backdrop-filter: blur(16px) saturate(150%);
+}
+
+/* Home page at the top: Rspress makes the nav transparent over the hero. */
+html:root:has(.rp-home-background) body:not(.notTopArrived) .rp-nav {
+  background-color: var(--vdnd-page-bg) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+
+html:root:has(.rp-home-background) body:not(.notTopArrived) .rp-nav::before {
+  background: transparent;
+}
+
+/* ══════════ EDGE-TO-EDGE (viewport-fit=cover, set in index.tsx) ══════════ */
+/* The nav grows by the top safe area and pads its content below it. Every Rspress offset
+   (sticky menu, sidebar, nav screen, scroll-padding) is based on --rp-nav-height, so they follow. */
+html:root {
+  --rp-nav-height: calc(60px + env(safe-area-inset-top, 0px));
+  /* How far the nav's blurred background reaches above the top edge of the viewport. */
+  --vdnd-nav-bleed: 50vh;
+}
+
+/* In-app browsers (Telegram) lay the page out below their floating toolbar but still paint it
+   underneath, and iOS paints above the page on overscroll. The nav bleeds upward (negative
+   margin, taller box, sticky at a negative top) so that area shows the blurred bar, not content. */
+html .rp-nav {
+  top: calc(-1 * var(--vdnd-nav-bleed));
+  height: calc(var(--rp-nav-height) + var(--vdnd-nav-bleed));
+  width: auto;
+  margin: calc(-1 * var(--vdnd-nav-bleed)) calc(-1 * env(safe-area-inset-right, 0px)) 0
+    calc(-1 * env(safe-area-inset-left, 0px));
+  padding: calc(var(--vdnd-nav-bleed) + env(safe-area-inset-top, 0px))
+    calc(var(--rp-nav-padding-x) + env(safe-area-inset-right, 0px)) 0
+    calc(var(--rp-nav-padding-x) + env(safe-area-inset-left, 0px));
+}
+
+/* Landscape notch and home indicator: keep page content inside the safe area. The nav
+   cancels the side padding with negative margins so its background still spans the screen. */
+html body {
+  padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px);
+}
+
+html .rp-nav-screen {
+  padding-inline: max(48px, env(safe-area-inset-left, 0px))
+    max(48px, env(safe-area-inset-right, 0px));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+
+html .rp-doc-layout__outline {
+  inset-inline-end: env(safe-area-inset-right, 0px);
+}
+
+/* Touch screens get the icon-only search button: the ⌘K hint is useless there, and in landscape
+   the notch insets leave too little room for the full button next to the nav tabs. */
+@media (hover: none) {
+  html .rp-search-button {
+    display: none;
+  }
+
+  html .rp-search-button--mobile {
+    display: flex;
+  }
+}
+
+/* Rspress places the hamburger's dropdown at 80% of the nav's height and flush with its right
+   edge. The nav box now includes the bleed and the side insets, so anchor it to the button. */
+html .rp-nav-hamburger__md {
+  position: relative;
+}
+
+html .rp-nav-hamburger__md > .rp-hover-group {
+  top: calc(100% + 8px);
+}
+
+/* Rspress borders dropdowns with the (dark) code-block border. */
+html .rp-hover-group {
+  border: 1px solid var(--border);
+}
+
+/* Phones in landscape are wider than Rspress's 768px breakpoint, but a fixed 320px sidebar
+   leaves little room for content, so they keep the phone drawer (opened from "Menu"). These
+   rules mirror Rspress's own `width <= 768px` sidebar rules. Tablets are taller than 500px. */
+@media (hover: none) and (pointer: coarse) and (width > 768px) and (height <= 500px) {
+  html .rp-doc-layout__sidebar {
+    position: fixed;
+    top: calc(var(--rp-nav-height) + var(--rp-banner-height, 0px));
+    height: calc(100vh - var(--rp-nav-height));
+    max-height: none;
+    margin-top: 0;
+    padding: var(--rp-sidebar-padding) var(--rp-sidebar-padding)
+      calc(var(--rp-sidebar-padding) + 100px)
+      calc(var(--rp-sidebar-padding) + env(safe-area-inset-left, 0px));
+    width: calc(var(--rp-sidebar-width) + env(safe-area-inset-left, 0px));
+    max-width: none;
+    opacity: 0;
+    transform: translate3d(-100%, 0, 0);
+    transition:
+      opacity 0.25s,
+      transform 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  }
+
+  html .rp-doc-layout__sidebar--open {
+    opacity: 1;
+    visibility: visible;
+    left: 0;
+    transform: translate3d(0, 0, 0);
+  }
+
+  html .rp-sidebar-menu__mask {
+    display: block;
+  }
 }
 
 html .rp-nav__title__link {
