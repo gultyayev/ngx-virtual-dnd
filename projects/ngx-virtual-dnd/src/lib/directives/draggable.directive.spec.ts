@@ -10,6 +10,17 @@ import { ElementCloneService } from '../services/element-clone.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
 import { DragStartEvent, DragEndEvent } from '../models/drag-drop.models';
 
+// A web component whose input lives in its shadow DOM, like the form controls of many UI libraries
+class ShadowInputElement extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' }).innerHTML = '<input type="text" />';
+  }
+}
+if (!customElements.get('test-shadow-input')) {
+  customElements.define('test-shadow-input', ShadowInputElement);
+}
+
 // Test host component
 @Component({
   template: `
@@ -236,6 +247,56 @@ describe('DraggableDirective', () => {
       draggableNative.dispatchEvent(mousedown);
 
       expect(mousedown.defaultPrevented).toBe(true);
+    });
+  });
+
+  describe('web component marked no-drag', () => {
+    // Events from inside its shadow DOM reach the draggable retargeted to the component element
+    let shadowHost: HTMLElement;
+    let shadowInput: HTMLInputElement;
+    let targetsSeen: EventTarget[];
+
+    beforeEach(() => {
+      shadowHost = document.createElement('test-shadow-input');
+      shadowHost.classList.add('no-drag');
+      draggableNative.append(shadowHost);
+      shadowInput = shadowHost.shadowRoot!.querySelector('input')!;
+      targetsSeen = [];
+      for (const type of ['mousedown', 'keydown']) {
+        draggableNative.addEventListener(type, (event) => targetsSeen.push(event.target!));
+      }
+    });
+
+    it('should not start a pointer drag from a press inside it', () => {
+      shadowInput.dispatchEvent(
+        new MouseEvent('mousedown', {
+          clientX: 100,
+          clientY: 100,
+          button: 0,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }),
+      );
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 120 }));
+
+      expect(targetsSeen).toEqual([shadowHost]);
+      expect(dragStateService.isDragging()).toBe(false);
+    });
+
+    it('should let Space reach its input instead of starting a keyboard drag', () => {
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
+      shadowInput.dispatchEvent(space);
+
+      expect(targetsSeen).toEqual([shadowHost]);
+      expect(space.defaultPrevented).toBe(false);
+      expect(TestBed.inject(KeyboardDragService).isActive()).toBe(false);
     });
   });
 
@@ -534,6 +595,42 @@ describe('DraggableDirective', () => {
         cancelable: true,
       });
       customControl.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(false);
+      expect(keyboardDrag.isActive()).toBe(false);
+      expect(component.dragStartEvents).toEqual([]);
+    });
+
+    it('should pick the item up with Space on a button that is the drag handle', () => {
+      component.dragHandle.set('button');
+      fixture.detectChanges();
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      const handle = draggableNative.querySelector('button') as HTMLButtonElement;
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+      });
+      handle.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(true);
+      expect(keyboardDrag.isActive()).toBe(true);
+      expect(component.dragStartEvents.length).toBe(1);
+    });
+
+    it('should let Space reach a control outside the drag handle', () => {
+      component.dragHandle.set('button');
+      fixture.detectChanges();
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      const input = draggableNative.querySelector('input') as HTMLInputElement;
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+      });
+      input.dispatchEvent(space);
 
       expect(space.defaultPrevented).toBe(false);
       expect(keyboardDrag.isActive()).toBe(false);

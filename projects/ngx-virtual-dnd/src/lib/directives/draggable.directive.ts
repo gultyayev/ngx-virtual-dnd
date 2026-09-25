@@ -297,7 +297,8 @@ export class DraggableDirective implements OnInit, OnDestroy {
   /**
    * Whether the event comes from a control (or a `no-drag` element) nested inside this
    * draggable. Neither the draggable itself nor a control around it counts, so a
-   * `<button vdndDraggable>` still picks up with Space.
+   * `<button vdndDraggable>` still picks up with Space, and neither does the drag handle,
+   * even when it is a button.
    */
   #isFromNestedControl(event: Event): boolean {
     const host = this.#elementRef.nativeElement;
@@ -311,7 +312,13 @@ export class DraggableDirective implements OnInit, OnDestroy {
     }
 
     const control = target.closest(INTERACTIVE_ELEMENT_SELECTOR);
-    return control !== null && control !== host && host.contains(control);
+    if (control === null || control === host || !host.contains(control)) {
+      return false;
+    }
+
+    const handleSelector = this.dragHandle();
+    const handle = handleSelector ? control.closest(handleSelector) : null;
+    return handle === null || handle === host || !host.contains(handle);
   }
 
   /**
