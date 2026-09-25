@@ -539,6 +539,66 @@ describe('DragIndexCalculatorService', () => {
     expect(result.index).toBe(12);
   });
 
+  describe('vdnd-virtual-viewport droppable', () => {
+    /** A viewport droppable (300px tall, at the top of the page) with 30 rows of 50px. */
+    function createViewport(contentOffset: number): HTMLElement {
+      const viewport = document.createElement('vdnd-virtual-viewport');
+      viewport.setAttribute('data-droppable-id', 'viewport');
+      viewport.setAttribute('data-droppable-group', 'test-group');
+      viewport.setAttribute('data-content-offset', String(contentOffset));
+      jest.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 300,
+        top: 0,
+        right: 300,
+        bottom: 300,
+        left: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+      service.registerStrategy(
+        'viewport',
+        new MockStrategy([0, 50, 100, 150, 200], (offset) => Math.floor(offset / 50), 30),
+      );
+      return viewport;
+    }
+
+    it('measures rows from below the content offset', () => {
+      // 80px reserved above the rows: the second row spans 130-180 and the preview covers it
+      const result = service.calculatePlaceholderIndex({
+        droppableElement: createViewport(80),
+        position: { x: 10, y: 155 },
+        previousPosition: null,
+        grabOffset: { x: 10, y: 25 },
+        draggedItemHeight: 50,
+        sourceDroppableId: 'other-list',
+        sourceIndex: 0,
+      });
+
+      expect(result.index).toBe(1);
+    });
+
+    it('reports the scroll offset of the rows below the content offset', () => {
+      const viewport = createViewport(80);
+      viewport.scrollTop = 200;
+
+      expect(service.getScrollGeometry(viewport, 50)).toEqual(
+        expect.objectContaining({ scrollTop: 120, isVirtual: true }),
+      );
+    });
+
+    it('measures the viewport itself even when a row holds another virtual list', () => {
+      const viewport = createViewport(0);
+      viewport.scrollTop = 200;
+      const nested = document.createElement('vdnd-virtual-scroll');
+      nested.scrollTop = 30;
+      viewport.appendChild(nested);
+
+      expect(service.getScrollGeometry(viewport, 50).scrollTop).toBe(200);
+    });
+  });
+
   it('uses registered strategy item count for direct virtualized lists', () => {
     const droppable = createDroppable('list-direct', 3);
     const strategy = new MockStrategy([0, 50, 100, 150], (offset) => Math.floor(offset / 50), 100);

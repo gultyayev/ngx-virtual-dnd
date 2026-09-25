@@ -63,6 +63,8 @@ import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
   ],
   host: {
     class: 'vdnd-virtual-viewport',
+    // Read by the drag index calculator: rows start this far below the top of the scroll area
+    '[attr.data-content-offset]': 'contentOffset()',
   },
   styles: `
     :host {

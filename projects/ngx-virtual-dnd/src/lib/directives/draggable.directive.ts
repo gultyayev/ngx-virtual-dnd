@@ -477,52 +477,23 @@ export class DraggableDirective implements OnDestroy {
     }
 
     const rect = element.getBoundingClientRect();
-    const virtualScroll = droppableElement.querySelector('vdnd-virtual-scroll');
-    const virtualContent = droppableElement.matches('vdnd-virtual-content')
-      ? droppableElement
-      : droppableElement.closest('vdnd-virtual-content');
-
-    let containerRect: DOMRect;
-    let scrollTop: number;
-
-    if (virtualScroll) {
-      containerRect = (virtualScroll as HTMLElement).getBoundingClientRect();
-      scrollTop = (virtualScroll as HTMLElement).scrollTop;
-    } else if (virtualContent) {
-      // Page-level scroll: use scrollable parent rect + content offset so that
-      // relativeY is measured from the start of the virtual items, not the header.
-      const scrollableParent = virtualContent.closest('.vdnd-scrollable') as HTMLElement | null;
-      if (scrollableParent) {
-        containerRect = scrollableParent.getBoundingClientRect();
-        const contentOffsetAttr = (virtualContent as HTMLElement).getAttribute(
-          'data-content-offset',
-        );
-        const contentOffset = contentOffsetAttr ? parseFloat(contentOffsetAttr) : 0;
-        scrollTop =
-          scrollableParent.scrollTop - (Number.isFinite(contentOffset) ? contentOffset : 0);
-      } else {
-        containerRect = (virtualContent as HTMLElement).getBoundingClientRect();
-        scrollTop = 0;
-      }
-    } else {
-      containerRect = droppableElement.getBoundingClientRect();
-      scrollTop = droppableElement.scrollTop;
-    }
+    // The same measurement that places the placeholder: it knows each container's scroll
+    // element and subtracts space reserved above the rows (contentOffset, page headers).
+    const geometry = this.#dragIndexCalculator.getScrollGeometry(droppableElement, rect.height);
+    const relativeY = rect.top - geometry.rect.top + geometry.scrollTop;
 
     // Try to use registered strategy for accurate offset-based lookup
     const droppableId = this.#positionCalculator.getDroppableId(droppableElement);
     if (droppableId) {
       const strategy = this.#dragIndexCalculator.getStrategyForDroppable(droppableId);
       if (strategy) {
-        const relativeY = rect.top - containerRect.top + scrollTop;
         return strategy.findIndexAtOffset(relativeY);
       }
     }
 
     // Preserve the geometry fallback for a virtual container whose strategy is unavailable.
-    if (virtualScroll || virtualContent) {
+    if (geometry.isVirtual) {
       const itemHeight = rect.height || 50;
-      const relativeY = rect.top - containerRect.top + scrollTop;
       return Math.round(relativeY / itemHeight);
     }
 
