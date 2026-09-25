@@ -160,6 +160,9 @@ export class DroppableDirective implements OnDestroy {
    */
   #handledEndedState: DragState | null = null;
 
+  /** Whether this droppable has rendered, so its inputs have values */
+  #rendered = false;
+
   constructor() {
     createAutoScrollRegistration({
       autoScrollService: this.#autoScroll,
@@ -177,6 +180,7 @@ export class DroppableDirective implements OnDestroy {
     // Matters when it mounts DURING an active drag — the candidate snapshot was frozen at
     // drag start, so without this a conditionally rendered list would never become a target.
     afterNextRender(() => {
+      this.#rendered = true;
       const group = this.effectiveGroup();
       if (group) {
         this.#positionCalculator.notifyCandidatesChanged(group);
@@ -228,13 +232,19 @@ export class DroppableDirective implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // Destroyed before it rendered: its inputs may have no values yet, and it never became a
+    // drop target or a candidate the calculator knows about. (Not an ngOnInit flag: a subclass
+    // with its own ngOnInit would skip it.)
+    if (!this.#rendered) {
+      return;
+    }
+
     // Clean up if this droppable is destroyed while being active
     if (this.isActive()) {
       this.#dragState.setActiveDroppable(null);
     }
 
-    // Unregister from auto-scroll
-    this.#autoScroll.unregisterContainer(this.vdndDroppable());
+    // Auto-scroll unregisters itself on destroy (see createAutoScrollRegistration).
 
     // If this droppable unmounts mid-drag, tell the calculator so it drops it from the
     // frozen candidate list (deferred re-query runs once the element has left the DOM).
