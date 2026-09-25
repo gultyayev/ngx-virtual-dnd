@@ -167,8 +167,17 @@ test.describe('Shift animation', () => {
 
     await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '3');
     expect(await demoPage.getItemId('list1', 3)).toBe(firstId);
-    // Drag end cancels in-flight shifts so the committed order renders immediately.
-    expect(await activeAnimationCount(demoPage.list1Items.nth(2))).toBe(0);
+    // The committed order matches the drag layout, so an in-flight slide keeps running
+    // instead of snapping, and ends in the item's committed slot.
+    const displaced = demoPage.list1Items.nth(2);
+    expect(await activeAnimationCount(displaced)).toBe(1);
+    // Rows above it are still sliding too: finish them all before measuring
+    await demoPage.list1Container.evaluate((el) =>
+      el.getAnimations({ subtree: true }).forEach((animation) => animation.finish()),
+    );
+    const scroll = demoPage.list1VirtualScroll;
+    const firstTop = await contentTop(demoPage.list1Items.nth(0), scroll);
+    expect((await contentTop(displaced, scroll)) - firstTop).toBeCloseTo(100, 0);
   });
 
   test('a displaced item slides in a vdndVirtualFor list', async ({ page }) => {

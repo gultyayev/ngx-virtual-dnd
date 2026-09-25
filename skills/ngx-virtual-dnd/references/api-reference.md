@@ -141,7 +141,7 @@ Virtual content for external scroll containers (page-level scroll). Must be plac
 
 **Selector:** `vdnd-drag-preview`
 
-Renders the dragged item preview. Teleports its host into a body-level `div.vdnd-overlay-container` to escape ancestor CSS transforms (ancestor-dependent selectors stop matching). Without `previewTemplate` it shows a styled clone of the dragged element. The preview box is sized to the dragged element.
+Renders the dragged item preview. Teleports its host into a body-level `div.vdnd-overlay-container` to escape ancestor CSS transforms (ancestor-dependent selectors stop matching). Without `previewTemplate` it shows a styled clone of the dragged element. The preview box is sized to the dragged element. With `VDND_ANIMATION_CONFIG` it stays up after a drop or cancel to play the drop animation (class `vdnd-drag-preview-dropping`).
 
 **Required** — place once in your template.
 
@@ -718,10 +718,12 @@ const VDND_ANIMATION_CONFIG: InjectionToken<VdndAnimationConfig>;
 interface VdndAnimationConfig {
   shiftDuration?: number; // ms, default 200; 0 disables
   shiftEasing?: string;   // default 'cubic-bezier(0.2, 0, 0, 1)'
+  dropDuration?: number;  // ms, default 200; 0 disables
+  dropEasing?: string;    // default 'cubic-bezier(0.2, 0, 0, 1)'
 }
 ```
 
-Provided by: the consumer (opt-in). When present, items displaced by the placeholder slide via a `transform` animation (`composite: 'add'`, so item transforms are preserved) in `vdnd-virtual-scroll` / `vdnd-sortable-list` and `*vdndVirtualFor` lists. Resolved through the element injector — provide app-wide or per component subtree. Skipped under `prefers-reduced-motion: reduce`. Values are read each time an animation starts (getters can toggle it at runtime).
+Provided by: the consumer (opt-in). When present, items displaced by the placeholder slide via a `transform` animation (`composite: 'add'`, so item transforms are preserved) in `vdnd-virtual-scroll` / `vdnd-sortable-list` and `*vdndVirtualFor` lists, including into the committed order when the drag ends. On drop or cancel, `DragPreviewComponent` keeps the preview up (class `vdnd-drag-preview-dropping`) and glides it onto the item's rendered position after the `drop` handler ran (fading out in place if the item is not visible), hiding the real item until it lands; events are not delayed, and a new drag cancels it. Resolved through the element injector — provide app-wide or per component subtree. Skipped under `prefers-reduced-motion: reduce`. Values are read each time an animation starts (getters can toggle it at runtime).
 
 ---
 

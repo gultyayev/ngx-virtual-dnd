@@ -27,6 +27,8 @@ export interface DemoSettings {
   list2Disabled?: boolean;
   /** Shift animation duration in ms */
   shiftAnimation?: number;
+  /** Drop animation duration in ms */
+  dropAnimation?: number;
 }
 
 export class DemoPage {
@@ -36,6 +38,8 @@ export class DemoPage {
   readonly list1Items: Locator;
   readonly list2Items: Locator;
   readonly dragPreview: Locator;
+  /** The preview while it plays the drop animation (after the drag has ended) */
+  readonly dropGhost: Locator;
   readonly list1VirtualScroll: Locator;
   readonly list2VirtualScroll: Locator;
   readonly settingsCollapse: Locator;
@@ -54,6 +58,7 @@ export class DemoPage {
     this.list2Items = this.list2Container.locator('[data-draggable-id]');
     // Use data-testid for library components (stable selectors)
     this.dragPreview = page.getByTestId('vdnd-drag-preview');
+    this.dropGhost = page.getByTestId('vdnd-drag-preview-dropping');
     this.settingsCollapse = page.getByTestId('settings-collapse');
     this.lockAxisSelect = page.getByTestId('lock-axis-select');
     // Placeholder visible class is a documented public API for styling, making it a stable selector

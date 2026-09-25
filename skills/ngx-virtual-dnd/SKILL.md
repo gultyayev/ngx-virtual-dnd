@@ -374,16 +374,19 @@ The drop-position placeholder rendered inside lists is an empty element with hei
 
 `PlaceholderComponent` (`<vdnd-placeholder [template]>`) is a standalone indicator you can render yourself; the built-in lists do not use it.
 
-## Shift animations and haptics
+## Shift and drop animations, haptics
 
-Displaced items jump into place unless `VDND_ANIMATION_CONFIG` is provided (app config or a component's `providers`):
+Displaced items jump into place and the preview vanishes on drop unless `VDND_ANIMATION_CONFIG` is provided (app config or a component's `providers`):
 
 ```typescript
 providers: [{ provide: VDND_ANIMATION_CONFIG, useValue: { shiftDuration: 200 } }]
 // optional: shiftEasing (default 'cubic-bezier(0.2, 0, 0, 1)'); shiftDuration: 0 disables
+// optional: dropDuration (default 200; 0 disables), dropEasing (same default as shiftEasing)
 ```
 
-Items then slide into their new position (works with virtual scrolling and dynamic heights; skipped under reduced motion; a new move mid-slide continues from the current spot). Don't add your own CSS `transition` on item `transform`/`top` to get this — items are repositioned by layout (or inline `top` for a bare `*vdndVirtualFor`), and such a transition competes with the built-in slide. Consumer transforms on rows are kept (the slide uses `composite: 'add'`).
+Items then slide into their new position (works with virtual scrolling and dynamic heights; skipped under reduced motion; a new move mid-slide continues from the current spot). Don't add your own CSS `transition` on item `transform`/`top` to get this — items are repositioned by layout (or inline `top` for a bare `*vdndVirtualFor`), and such a transition competes with the built-in slide. Consumer transforms on rows are kept (the slide uses `composite: 'add'`). When the drag ends, rows slide into the committed order too (after a cancel they slide back).
+
+With the config present, the drop animation also plays: on drop or cancel the preview stays up (class `vdnd-drag-preview-dropping`) and glides from the release point onto the item's final position, while that item stays invisible (`opacity` animation) until it lands. `drop`/`dragEnd` still fire immediately — it is purely visual. It lands on the item as rendered after your `(drop)` handler, so commit the move synchronously (`moveItem()`/`reorderItems()`); if the item is not rendered or scrolled out of view, the preview fades out in place. A new drag cuts it short. Set `dropDuration: 0` to keep shift animations only.
 
 For haptics on every step, use `(placeholderMove)` on `vdndDroppable` / `vdnd-sortable-list` (`PlaceholderMoveEvent`: `previousIndex` → `currentIndex`, same index convention as `DropEvent.destination.index`; `previousIndex` is `null` when the placeholder entered the list). Not emitted for the initial pick-up or when the placeholder leaves.
 
@@ -472,6 +475,7 @@ export class TasksComponent {
 | `vdnd-droppable-disabled`                             | `[vdndDroppable]`                    | `disabled` is true                    |
 | `vdnd-drag-placeholder`, `vdnd-drag-placeholder-visible` | Drop-position placeholder         | Rendered only during drag, in the target list |
 | `vdnd-drag-preview`                                   | Preview box inside `vdnd-drag-preview` | During drag                         |
+| `vdnd-drag-preview-dropping`                          | Preview box                          | While it plays the drop animation (`VDND_ANIMATION_CONFIG`) |
 | `vdnd-overlay-container`                              | Body-level container for the preview | Once `<vdnd-drag-preview>` has rendered |
 | `vdnd-sortable-list`, `vdnd-virtual-scroll`, `vdnd-virtual-viewport`, `vdnd-virtual-content`, `vdnd-scrollable`, `vdnd-placeholder` | Their host elements | Always |
 

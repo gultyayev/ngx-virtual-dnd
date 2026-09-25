@@ -462,14 +462,17 @@ describe('VirtualForDirective (shift animation)', () => {
     expect(k1Animation.cancel).toHaveBeenCalled();
   });
 
-  it('cancels running animations when the drag ends', () => {
+  it('animates the drag end render instead of snapping rows into place', () => {
     movePlaceholder(3);
-    const running = [...animationsByKey.values()].flat();
-    expect(running.length).toBeGreaterThan(0);
+    const displaced = ['k1', 'k2'].map((key) => animationsByKey.get(key)![0]);
+    expect(animationsByKey.has('k3')).toBe(false);
 
-    dragState.endDrag();
+    // The placeholder (before k3) leaves: k3 moves up into its slot, k1/k2 stay put
+    dragState.cancelDrag();
     render();
 
-    expect(running.every((animation) => animation.cancel.mock.calls.length > 0)).toBe(true);
+    expect(animationsByKey.get('k3')?.length).toBe(1);
+    // In-flight slides whose target did not change keep running
+    expect(displaced.every((animation) => animation.cancel.mock.calls.length === 0)).toBe(true);
   });
 });
