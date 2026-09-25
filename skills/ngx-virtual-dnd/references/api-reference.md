@@ -420,8 +420,8 @@ function insertAt<T>(list: T[], item: T, index: number): T[];
 function removeAt<T>(list: T[], index: number): T[];
 ```
 
-- `moveItem` does nothing (dev-mode warning) if either droppable ID is missing from `lists`. Same-list drops delegate to `reorderItems`.
-- `reorderItems` handles same-list drops only.
+- `moveItem` does nothing (dev-mode warning) if either droppable ID is missing from `lists` or the source item doesn't exist. Same-list drops delegate to `reorderItems`.
+- `reorderItems` handles same-list drops only; it does nothing (dev-mode warning) if the source item doesn't exist.
 - `applyMove` returns a shallow copy of `lists` with new arrays for the source/destination entries; unchanged input if the source item doesn't exist.
 - `isNoOpDrop` is `true` when source and destination droppable and index are equal.
 
