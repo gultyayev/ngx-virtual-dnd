@@ -61,6 +61,13 @@ describe('VirtualViewportComponent', () => {
     fixture.destroy();
   });
 
+  it('should mark its host for the drag index calculator', () => {
+    const host = component.nativeElement;
+
+    expect(host.hasAttribute('data-virtual-viewport')).toBe(true);
+    expect(host.getAttribute('data-content-offset')).toBe('0');
+  });
+
   it('should update fixed-height content transform when excluded index changes', () => {
     component.setRenderStartIndex(10);
     fixture.detectChanges();

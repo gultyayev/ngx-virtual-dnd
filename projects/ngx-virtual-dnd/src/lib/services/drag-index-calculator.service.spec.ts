@@ -543,6 +543,7 @@ describe('DragIndexCalculatorService', () => {
     /** A viewport droppable (300px tall, at the top of the page) with 30 rows of 50px. */
     function createViewport(contentOffset: number): HTMLElement {
       const viewport = document.createElement('vdnd-virtual-viewport');
+      viewport.setAttribute('data-virtual-viewport', '');
       viewport.setAttribute('data-droppable-id', 'viewport');
       viewport.setAttribute('data-droppable-group', 'test-group');
       viewport.setAttribute('data-content-offset', String(contentOffset));

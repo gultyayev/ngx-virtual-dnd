@@ -76,7 +76,7 @@ export class DragIndexCalculatorService {
     const cached = this.#droppableCache.get(droppableElement);
     if (cached) return cached;
 
-    const isViewport = droppableElement.matches('vdnd-virtual-viewport');
+    const isViewport = droppableElement.hasAttribute('data-virtual-viewport');
     const virtualScrollElement = droppableElement.querySelector(
       'vdnd-virtual-scroll',
     ) as HTMLElement | null;
