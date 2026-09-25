@@ -114,6 +114,22 @@ describe('ElementCloneService', () => {
       expect(link.style.pointerEvents).toBe('none');
     });
 
+    it('should keep cloned radio buttons out of the source radio group', () => {
+      const source = attach(document.createElement('div'));
+      source.innerHTML =
+        '<input type="radio" name="priority" value="low">' +
+        '<input type="radio" name="priority" value="high" checked>';
+
+      const clone = attach(service.cloneElement(source));
+      // Browsers apply the radio group rule as soon as the checked clone is connected, which
+      // unchecks the source's radio. jsdom only applies it when checkedness is set, so set it.
+      clone.querySelectorAll('input')[1].checked = true;
+
+      const sourceRadios = source.querySelectorAll('input');
+      expect(sourceRadios[1].checked).toBe(true);
+      expect(sourceRadios[0].checked).toBe(false);
+    });
+
     it('should recursively copy styles to child elements', () => {
       addStyles('.card .label { color: rgb(0, 0, 255); }');
       const source = attach(document.createElement('div'));

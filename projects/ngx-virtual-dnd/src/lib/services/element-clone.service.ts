@@ -209,6 +209,12 @@ export class ElementCloneService {
       }
     });
 
+    // A checked radio joins its group as soon as the clone is connected, which unchecks the
+    // radio in the source item. Without a name the cloned radios belong to no group.
+    clone.querySelectorAll('input[type="radio"][name]').forEach((radio) => {
+      radio.removeAttribute('name');
+    });
+
     // Remove focus styling classes that might interfere
     clone.classList.remove('vdnd-draggable-dragging');
     clone.classList.remove('vdnd-draggable-disabled');
