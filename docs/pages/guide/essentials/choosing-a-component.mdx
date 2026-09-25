@@ -61,14 +61,21 @@ When the list scrolls together with the page, headers and footers, the scroll co
 
 ## Virtual viewport
 
-`<vdnd-virtual-viewport>` is a lower-level building block: a self-scrolling container for `*vdndVirtualFor` that positions all rows with a single transform. Children inherit `itemHeight` and `dynamicItemHeight` from it.
+`<vdnd-virtual-viewport>` is a lower-level building block: a self-scrolling container for `*vdndVirtualFor` that positions all rows with a single transform. Children inherit `itemHeight` and `dynamicItemHeight` from it. For drag and drop, put `vdndDroppable` on the viewport itself; `*vdndVirtualFor` inherits its ID.
 
 ```angular-html
-<vdnd-virtual-viewport class="viewport" [itemHeight]="48">
-  <ng-container *vdndVirtualFor="let task of tasks(); trackBy: trackById">
-    <div class="row">{{ task.title }}</div>
-  </ng-container>
-</vdnd-virtual-viewport>
+<div vdndGroup="tasks">
+  <vdnd-virtual-viewport
+    class="viewport"
+    vdndDroppable="tasks"
+    [itemHeight]="48"
+    (drop)="onDrop($event)"
+  >
+    <ng-container *vdndVirtualFor="let task of tasks(); trackBy: trackById">
+      <div class="row" [vdndDraggable]="task.id">{{ task.title }}</div>
+    </ng-container>
+  </vdnd-virtual-viewport>
+</div>
 ```
 
-Give the viewport a height with CSS (for example `.viewport { height: 400px; }`). For drag and drop, prefer `<vdnd-sortable-list>` or the low-level scroller. They are the tested paths, and they scroll to follow keyboard drags.
+Give the viewport a height with CSS (for example `.viewport { height: 400px; }`). Unlike `<vdnd-sortable-list>` and the low-level scroller, it does not scroll to follow a keyboard drag, so prefer those when keyboard users move items past the visible rows.

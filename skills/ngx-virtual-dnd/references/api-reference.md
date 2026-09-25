@@ -94,7 +94,7 @@ Low-level virtual scroll container. Use with `DroppableDirective` for custom lay
 
 **Selector:** `vdnd-virtual-viewport`
 
-Self-scrolling viewport for `*vdndVirtualFor` content, positioned with a single GPU-accelerated transform. Needs a height (CSS). Children using `*vdndVirtualFor` inherit its `itemHeight` and `dynamicItemHeight`. Provides `VDND_VIRTUAL_VIEWPORT` and `VDND_SCROLL_CONTAINER` tokens.
+Self-scrolling viewport for `*vdndVirtualFor` content, positioned with a single GPU-accelerated transform. Needs a height (CSS). Children using `*vdndVirtualFor` inherit its `itemHeight` and `dynamicItemHeight`. Provides `VDND_VIRTUAL_VIEWPORT` and `VDND_SCROLL_CONTAINER` tokens. For drag and drop, put `vdndDroppable` on the viewport element itself (not on a wrapper); it does not scroll to follow a keyboard drag.
 
 ```html
 <vdnd-virtual-viewport [itemHeight]="50" style="height: 400px">
