@@ -111,7 +111,7 @@ effect(() => { ... }, { allowSignalWrites: true }); // DO NOT USE
 
 ### Event Listener Cleanup
 
-Use `createBoundListener()` from `lib/utils/event-listener-bindings.ts` to bind/unbind event listeners with automatic cleanup. Call `.bindTo(element)` to attach and `.unbind()` in ngOnDestroy.
+Use `createBoundListener()` from `lib/utils/event-listener-bindings.ts` for programmatic listeners. It takes the target, event type, handler and `NgZone`. Call `.add()` to attach it outside Angular's zone and `.remove()` in `ngOnDestroy`; nothing is removed automatically.
 
 ### Templates
 
@@ -136,11 +136,11 @@ Use `createBoundListener()` from `lib/utils/event-listener-bindings.ts` to bind/
 
 2. **Same-list adjustment applied once**: When dragging within the same list, apply +1 adjustment when `visualIndex >= sourceIndex` to compensate for hidden item.
 
-3. **Virtual scroll integration**: During same-list drag, `scrollHeight` reflects N-1 items. The `getTotalItemCount()` method adds 1 back for true logical total.
+3. **Virtual scroll integration**: During same-list drag, the strategy excludes the dragged item's index (`setExcludedIndex`): offsets after it close up, but the total height (spacer) keeps all N items so content below the list does not shift. `getTotalItemCount()` returns the logical N.
 
 4. **No scroll compensation layers**: Uses raw `scrollTop` directly. Virtual scroll handles spacer adjustments internally.
 
-5. **Gap prevention**: Dragged item hidden with `display: none`. Virtual scroll's `totalHeight` subtracts 1 during drag.
+5. **Gap prevention**: Dragged item hidden with `display: none`; the placeholder fills the slot it leaves.
 
 6. **Overlay container for drag preview**: `DragPreviewComponent` teleports its host element into a body-level `<div class="vdnd-overlay-container">` via `afterNextRender`. This escapes ancestor CSS `transform`/`perspective`/`filter` that create new containing blocks for `position: fixed` (e.g. Ionic's `ion-page`). Angular change detection works on the logical component tree, so signals/effects/bindings keep working after the DOM move. Unit tests must use `document.querySelector()` instead of `fixture.debugElement.query()` to find the teleported preview.
 
