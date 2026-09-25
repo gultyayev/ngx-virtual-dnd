@@ -404,6 +404,7 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
     const stickyIds = this.#stickyIdsSet();
     const idFn = this.itemIdFn();
     const itemIndexMap = this.#itemIndexMap();
+    const draggedId = this.draggedItemId();
     const placeholderIdx = this.placeholderIndex();
 
     const result: {
@@ -411,6 +412,8 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
       data: T | null;
       index: number;
       isSticky: boolean;
+      // The template doesn't read it, but subclasses can: renderedItems is protected
+      isDragging: boolean;
     }[] = [];
     const renderedIds = new Set<string>();
     let hasPlaceholder = false;
@@ -424,6 +427,7 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
           data: null,
           index: placeholderIdx,
           isSticky: false,
+          isDragging: false,
         });
         hasPlaceholder = true;
       }
@@ -435,6 +439,7 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
         data: item,
         index: i,
         isSticky: stickyIds.has(id),
+        isDragging: id === draggedId,
       });
       renderedIds.add(id);
     }
@@ -446,23 +451,24 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
         data: null,
         index: placeholderIdx,
         isSticky: false,
+        isDragging: false,
       });
       hasPlaceholder = true;
     }
 
     // Add any sticky items that aren't already rendered
-    const missingStickyIndices: number[] = [];
+    const missingStickyIndices: { id: string; index: number }[] = [];
     for (const id of stickyIds) {
       if (renderedIds.has(id)) continue;
       const index = itemIndexMap.get(id);
       if (index === undefined) continue;
-      missingStickyIndices.push(index);
+      missingStickyIndices.push({ id, index });
     }
     if (missingStickyIndices.length > 1) {
-      missingStickyIndices.sort((a, b) => a - b);
+      missingStickyIndices.sort((a, b) => a.index - b.index);
     }
 
-    for (const index of missingStickyIndices) {
+    for (const { id, index } of missingStickyIndices) {
       const item = items[index];
       if (item === undefined) continue;
       result.push({
@@ -470,6 +476,7 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
         data: item,
         index,
         isSticky: true,
+        isDragging: id === draggedId,
       });
     }
 

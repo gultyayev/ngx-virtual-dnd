@@ -7,7 +7,6 @@ import {
   inject,
   input,
   OnDestroy,
-  OnInit,
   output,
   untracked,
 } from '@angular/core';
@@ -61,7 +60,7 @@ import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization
     '[class.vdnd-droppable-disabled]': 'disabled()',
   },
 })
-export class DroppableDirective implements OnInit, OnDestroy {
+export class DroppableDirective implements OnDestroy {
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #dragState = inject(DragStateService);
   readonly #autoScroll = inject(AutoScrollService);
@@ -161,8 +160,8 @@ export class DroppableDirective implements OnInit, OnDestroy {
    */
   #handledEndedState: DragState | null = null;
 
-  /** Whether ngOnInit ran, i.e. the inputs have values */
-  #initialized = false;
+  /** Whether this droppable has rendered, so its inputs have values */
+  #rendered = false;
 
   constructor() {
     createAutoScrollRegistration({
@@ -181,6 +180,7 @@ export class DroppableDirective implements OnInit, OnDestroy {
     // Matters when it mounts DURING an active drag — the candidate snapshot was frozen at
     // drag start, so without this a conditionally rendered list would never become a target.
     afterNextRender(() => {
+      this.#rendered = true;
       const group = this.effectiveGroup();
       if (group) {
         this.#positionCalculator.notifyCandidatesChanged(group);
@@ -231,14 +231,11 @@ export class DroppableDirective implements OnInit, OnDestroy {
     });
   }
 
-  ngOnInit(): void {
-    this.#initialized = true;
-  }
-
   ngOnDestroy(): void {
-    // Destroyed before its first change detection: its inputs have no values yet, and it was
-    // never registered for auto-scroll, targeted or announced to the calculator.
-    if (!this.#initialized) {
+    // Destroyed before it rendered: its inputs may have no values yet, and it never became a
+    // drop target or a candidate the calculator knows about. (Not an ngOnInit flag: a subclass
+    // with its own ngOnInit would skip it.)
+    if (!this.#rendered) {
       return;
     }
 

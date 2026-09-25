@@ -1,4 +1,4 @@
-import { Component, DebugElement, signal } from '@angular/core';
+import { Component, DebugElement, Directive, OnInit, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DroppableDirective } from './droppable.directive';
@@ -69,6 +69,26 @@ class TestHostComponent {
 class BoundGroupHostComponent {
   group = 'test-group';
 }
+
+// A consumer directive that extends the droppable with an ngOnInit of its own
+@Directive({ selector: '[vdndTestExtendedDroppable]' })
+class ExtendedDroppableDirective extends DroppableDirective implements OnInit {
+  initCalls = 0;
+
+  ngOnInit(): void {
+    this.initCalls++;
+  }
+}
+
+@Component({
+  template: `<div
+    vdndTestExtendedDroppable
+    vdndDroppable="extended-list"
+    vdndDroppableGroup="test-group"
+  ></div>`,
+  imports: [ExtendedDroppableDirective],
+})
+class ExtendedDroppableHostComponent {}
 
 describe('DroppableDirective', () => {
   let fixture: ComponentFixture<TestHostComponent>;
@@ -743,6 +763,27 @@ describe('DroppableDirective', () => {
       const unrendered = TestBed.createComponent(BoundGroupHostComponent);
 
       expect(() => unrendered.destroy()).not.toThrow();
+    });
+
+    it('should clean up a subclass with its own ngOnInit when destroyed while active', () => {
+      const extended = TestBed.createComponent(ExtendedDroppableHostComponent);
+      extended.detectChanges();
+      dragStateService.startDrag(createMockDraggedItem());
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 100, y: 100 },
+        activeDroppableId: 'extended-list',
+        placeholderId: null,
+        placeholderIndex: null,
+      });
+      extended.detectChanges();
+      const extendedDirective = extended.debugElement
+        .query(By.directive(ExtendedDroppableDirective))
+        .injector.get(ExtendedDroppableDirective);
+
+      extended.destroy();
+
+      expect(extendedDirective.initCalls).toBe(1);
+      expect(dragStateService.activeDroppableId()).toBeNull();
     });
 
     it('should clear active droppable if destroyed while active', () => {

@@ -1,4 +1,4 @@
-import { Component, DebugElement, signal } from '@angular/core';
+import { Component, DebugElement, Directive, OnInit, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DraggableDirective } from './draggable.directive';
@@ -75,6 +75,31 @@ class TestHostComponent {
 class BoundIdHostComponent {
   id = 'bound-item';
 }
+
+// A consumer directive that extends the draggable and runs its own setup after the draggable's
+@Directive({ selector: '[vdndTestExtendedDraggable]' })
+class ExtendedDraggableDirective extends DraggableDirective implements OnInit {
+  setUp = false;
+
+  override ngOnInit(): void {
+    super.ngOnInit();
+    this.setUp = true;
+  }
+}
+
+@Component({
+  template: `
+    <div vdndDroppable="extended-list" vdndDroppableGroup="test-group">
+      <div
+        vdndTestExtendedDraggable
+        vdndDraggable="extended-item"
+        vdndDraggableGroup="test-group"
+      ></div>
+    </div>
+  `,
+  imports: [ExtendedDraggableDirective, DroppableDirective],
+})
+class ExtendedDraggableHostComponent {}
 
 describe('DraggableDirective', () => {
   let fixture: ComponentFixture<TestHostComponent>;
@@ -617,6 +642,23 @@ describe('DraggableDirective', () => {
       const unrendered = TestBed.createComponent(BoundIdHostComponent);
 
       expect(() => unrendered.destroy()).not.toThrow();
+    });
+  });
+
+  describe('subclassing', () => {
+    it('should run the draggable setup for a subclass that extends ngOnInit', () => {
+      const extended = TestBed.createComponent(ExtendedDraggableHostComponent);
+      extended.detectChanges();
+      const extendedEl = extended.debugElement.query(By.directive(ExtendedDraggableDirective));
+
+      expect(extendedEl.injector.get(ExtendedDraggableDirective).setUp).toBe(true);
+      // The draggable's own setup ran as well: Space picks the item up
+      extendedEl.nativeElement.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      expect(TestBed.inject(KeyboardDragService).isActive()).toBe(true);
+
+      extended.destroy();
     });
   });
 });
