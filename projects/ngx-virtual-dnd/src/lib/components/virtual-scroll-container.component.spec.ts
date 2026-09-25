@@ -286,6 +286,28 @@ describe('VirtualScrollContainerComponent', () => {
         expect(virtualScrollEl.scrollTop).toBe(500);
         expect(virtualScrollComponent.getScrollTop()).toBe(500);
       });
+
+      it('should render the rows in view when asked to scroll past the end', () => {
+        // Browsers clamp scrollTop to the scrollable range (and fire no scroll event when that
+        // leaves it unchanged); jsdom stores any value, so emulate the browser.
+        const maxScroll = 5000 - 300; // totalHeight - containerHeight
+        let scrollTop = 0;
+        Object.defineProperty(virtualScrollEl, 'scrollTop', {
+          configurable: true,
+          get: () => scrollTop,
+          set: (value: number) => {
+            scrollTop = Math.max(0, Math.min(value, maxScroll));
+          },
+        });
+
+        virtualScrollComponent.scrollTo(maxScroll);
+        virtualScrollComponent.scrollToIndex(99); // offset 4950, past the end
+        fixture.detectChanges();
+
+        expect(virtualScrollComponent.getScrollTop()).toBe(maxScroll);
+        // Rows 94-99 fill the viewport at the bottom
+        expect(renderedIndices()).toEqual(expect.arrayContaining([94, 95, 96, 97, 98, 99]));
+      });
     });
 
     describe('scrollToIndex', () => {

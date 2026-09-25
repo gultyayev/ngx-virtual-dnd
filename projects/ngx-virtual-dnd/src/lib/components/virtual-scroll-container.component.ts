@@ -812,8 +812,11 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
    * Scroll to a specific position.
    */
   scrollTo(position: number): void {
-    this.#elementRef.nativeElement.scrollTop = position;
-    this.#scrollTop.set(position);
+    const element = this.#elementRef.nativeElement;
+    element.scrollTop = position;
+    // Store where the browser actually scrolled. It clamps to the scrollable range, and if that
+    // leaves the element where it was, no scroll event arrives to correct an out-of-range value.
+    this.#scrollTop.set(element.scrollTop);
   }
 
   /**
