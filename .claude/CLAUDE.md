@@ -111,7 +111,7 @@ effect(() => { ... }, { allowSignalWrites: true }); // DO NOT USE
 
 ### Event Listener Cleanup
 
-Use `createBoundListener()` from `lib/utils/event-listener-bindings.ts` for programmatic listeners. It takes the target, event type, handler and `NgZone`. Call `.add()` to attach it outside Angular's zone and `.remove()` in `ngOnDestroy`; nothing is removed automatically.
+Keep a bound handler in a field so the same reference can be removed, attach programmatic listeners inside `runOutsideAngular`, and remove each one on the teardown path (`ngOnDestroy`, or a handler's `cleanup()`), as `PointerDragHandler` does. Helpers that attach listeners return a cleanup function to call there (see `lib/utils/dom-signal-bindings.ts`).
 
 ### Templates
 
