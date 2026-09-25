@@ -17,15 +17,17 @@ Set `dragHandle` to a CSS selector, and only presses inside a matching element s
 
 ```
 
-Make the handle a non-interactive element such as a `<span>`. Presses inside buttons never start a drag, as the next section explains. Keyboard dragging is unaffected: the whole row stays focusable.
+The handle can be any element, including a button or a web component such as `ion-button`: pressing it always starts a drag. Controls inside the handle keep their presses, like controls anywhere else in the row. Keyboard dragging is unaffected: the whole row stays focusable.
 
 ## Interactive children
 
-Presses inside a `button`, `input`, `textarea`, `select` or `[contenteditable]` element never start a drag, so controls inside rows keep working. To exclude another element, add the `no-drag` class. It applies only to the exact element that is pressed, not to its children. Only the primary mouse button starts a drag.
+Presses inside a control never start a drag, so controls inside rows keep working. Controls are `button`, `input`, `textarea`, `select`, `summary` and `[contenteditable]` elements, and elements with one of the ARIA roles `button`, `checkbox`, `combobox`, `radio`, `searchbox`, `slider`, `spinbutton`, `switch` or `textbox`. Controls inside a web component's shadow DOM count too, such as an Ionic toggle, checkbox or select, or a Shoelace input. The row itself never counts, so a `<button vdndDraggable>` still drags. Neither does anything a web component row renders in its own shadow DOM, or an element around the row. Only the primary mouse button starts a drag.
 
-Other interactive elements are not recognized, for example a web component whose input is inside its shadow DOM, or an element with `role="switch"`. Add `no-drag` to them. For a web component, add it to the component element itself: presses inside its shadow DOM reach the row as presses on that element.
+To exclude another element, add the `no-drag` class. It applies only to the exact element that is pressed, not to its children. Use it for controls that can't be recognized: a clickable element without a role, or a web component whose shadow root is closed. For a web component, add it to the component element itself: presses inside its shadow DOM reach the row as presses on that element.
 
-The same goes for the keyboard: <kbd>Space</kbd> pressed in one of these controls (or on a `no-drag` element) inside a row types a space or clicks the button instead of picking the row up. The drag handle is the exception: <kbd>Space</kbd> on it picks the row up, even when it is a button.
+A row whose content is itself a control doesn't start drags from it either, for example an `ion-item` with the `button` attribute, which wraps its content in a button. Put `vdndDraggable` on that element itself, or add a drag handle.
+
+The same goes for the keyboard: <kbd>Space</kbd> pressed in one of these controls (or on a `no-drag` element) inside a row types a space, clicks the button or toggles the switch instead of picking the row up. The drag handle is the exception: <kbd>Space</kbd> on it picks the row up, even when it is a control.
 
 ## Threshold and delay
 
