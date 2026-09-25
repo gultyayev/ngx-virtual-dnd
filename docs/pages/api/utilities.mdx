@@ -13,7 +13,7 @@ See [Handling drops](/guide/essentials/handling-drops) for how to choose between
 function moveItem<T>(event: DropEvent, lists: Record<string, WritableSignal<T[]>>): void;
 ```
 
-Moves the item between (or within) signal-based lists, keyed by droppable ID. Same-list drops are delegated to `reorderItems`. If either droppable ID is missing from `lists`, nothing happens and a warning is logged in dev mode.
+Moves the item between (or within) signal-based lists, keyed by droppable ID. Same-list drops are delegated to `reorderItems`. If either droppable ID is missing from `lists`, or the source item does not exist, nothing happens and a warning is logged in dev mode.
 
 ## reorderItems
 
@@ -21,7 +21,7 @@ Moves the item between (or within) signal-based lists, keyed by droppable ID. Sa
 function reorderItems<T>(event: DropEvent, list: WritableSignal<T[]>): void;
 ```
 
-Reorders a single signal-based list. Use it for same-list drops only.
+Reorders a single signal-based list. Use it for same-list drops only. If the source item does not exist (for example, the list changed during the drag), nothing happens and a warning is logged in dev mode.
 
 ## applyMove
 

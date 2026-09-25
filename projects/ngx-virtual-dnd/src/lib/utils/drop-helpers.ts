@@ -94,6 +94,14 @@ export function reorderItems<T>(event: DropEvent, list: WritableSignal<T[]>): vo
     return;
   }
 
+  // The list may have changed during the drag; never splice in a missing item as undefined
+  if (list()[sourceIndex] === undefined) {
+    if (isDevMode()) {
+      console.warn(`[ngx-virtual-dnd] [reorderItems] Could not find item at index ${sourceIndex}`);
+    }
+    return;
+  }
+
   list.update((items) => {
     const newItems = [...items];
     const [removed] = newItems.splice(sourceIndex, 1);
