@@ -244,6 +244,17 @@ describe('DragSchedulerService', () => {
       expect(participant).toHaveBeenCalledTimes(1);
     });
 
+    it('should end the frame without calling onTick when a participant stops the scheduler', () => {
+      // e.g. the autoscroll participant's placeholder recalculation ends the drag
+      const onTick = jest.fn();
+      service.addParticipant(() => service.stop());
+      service.start(onTick);
+
+      expect(() => flushRAF()).not.toThrow();
+      expect(onTick).not.toHaveBeenCalled();
+      expect(pendingRAFCount()).toBe(0);
+    });
+
     it('should allow removing participants mid-flight', () => {
       const participant = jest.fn();
       service.addParticipant(participant);
