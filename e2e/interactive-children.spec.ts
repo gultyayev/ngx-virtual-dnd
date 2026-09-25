@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect, Page, test } from '@playwright/test';
+import { afterInputHandled } from './fixtures/drag-sync';
 
 /**
  * Controls inside a draggable keep their own behavior, and the default drag preview (a clone of
@@ -61,3 +62,80 @@ test.describe('Interactive children', () => {
     await expect(row.getByTestId('row-priority-low')).not.toBeChecked();
   });
 });
+
+/**
+ * Controls the draggable only finds by following the event into shadow DOM or by their ARIA
+ * role. Fixture: /interactive-children, second list ("More controls"): each row holds a text field
+ * inside a web component's open shadow root, an ARIA switch and a summary.
+ */
+test.describe('Interactive children in shadow DOM and ARIA widgets', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/interactive-children', { waitUntil: 'domcontentloaded' });
+    await expect(moreRow(page)).toBeVisible();
+  });
+
+  test('Space typed into a field inside a web component goes into the field', async ({ page }) => {
+    const row = moreRow(page);
+    const field = row.getByTestId('shadow-field-input');
+
+    await field.click();
+    await page.keyboard.type('a b');
+
+    await expect(field).toHaveValue('a b');
+    await expect(row).toHaveAttribute('aria-grabbed', 'false');
+    await expect(dragPreview(page)).toBeHidden();
+  });
+
+  test('Space on an ARIA switch inside a row toggles it', async ({ page }) => {
+    const row = moreRow(page);
+    const toggle = row.getByTestId('row-switch');
+
+    await toggle.focus();
+    await page.keyboard.press('Space');
+
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect(row).toHaveAttribute('aria-grabbed', 'false');
+    await expect(dragPreview(page)).toBeHidden();
+  });
+
+  test('Space on a summary inside a row opens its details', async ({ page }) => {
+    const row = moreRow(page);
+
+    await row.getByTestId('row-summary').focus();
+    await page.keyboard.press('Space');
+
+    await expect(row.getByTestId('row-details')).toHaveAttribute('open', '');
+    await expect(row).toHaveAttribute('aria-grabbed', 'false');
+    await expect(dragPreview(page)).toBeHidden();
+  });
+
+  for (const [name, testId] of [
+    ['a field inside a web component', 'shadow-field-input'],
+    ['an ARIA switch', 'row-switch'],
+    ['a summary', 'row-summary'],
+  ]) {
+    test(`pressing ${name} and moving does not start a drag`, async ({ page }) => {
+      const box = await moreRow(page).getByTestId(testId).boundingBox();
+      if (!box) throw new Error(`${name} has no bounding box`);
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await afterInputHandled(page, 'mousemove', () =>
+        page.mouse.move(x + 10, y + 10, { steps: 2 }),
+      );
+
+      await expect(dragPreview(page)).not.toBeVisible();
+      await page.mouse.up();
+    });
+  }
+});
+
+function moreRow(page: Page) {
+  return page.locator('[data-draggable-id="more-1"]');
+}
+
+function dragPreview(page: Page) {
+  return page.getByTestId('vdnd-drag-preview');
+}
