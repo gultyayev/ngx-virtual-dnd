@@ -1,4 +1,4 @@
-import { isDevMode, type WritableSignal } from '@angular/core';
+import { isDevMode, untracked, type WritableSignal } from '@angular/core';
 import { DropEvent } from '../models/drag-drop.models';
 
 /**
@@ -44,9 +44,9 @@ export function moveItem<T>(event: DropEvent, lists: Record<string, WritableSign
     return;
   }
 
-  // Cross-list move
-  const sourceItems = sourceList();
-  const item = sourceItems[sourceIndex];
+  // Cross-list move. Read untracked, as in reorderItems: an effect that applies the drop must
+  // not depend on the lists it changes.
+  const item = untracked(sourceList)[sourceIndex];
 
   if (item === undefined) {
     if (isDevMode()) {
@@ -94,8 +94,9 @@ export function reorderItems<T>(event: DropEvent, list: WritableSignal<T[]>): vo
     return;
   }
 
-  // The list may have changed during the drag; never splice in a missing item as undefined
-  if (list()[sourceIndex] === undefined) {
+  // The list may have changed during the drag; never splice in a missing item as undefined.
+  // Read untracked: from an effect, a tracked read would make the effect re-run on this reorder.
+  if (untracked(list)[sourceIndex] === undefined) {
     if (isDevMode()) {
       console.warn(`[ngx-virtual-dnd] [reorderItems] Could not find item at index ${sourceIndex}`);
     }

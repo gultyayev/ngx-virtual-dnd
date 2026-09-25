@@ -1,11 +1,42 @@
-import { signal } from '@angular/core';
+import { effect, Injector, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { DropEvent, END_OF_LIST } from '../models/drag-drop.models';
 import { moveItem, reorderItems } from './drop-helpers';
 
-const dropEvent = (sourceIndex: number, destinationIndex: number): DropEvent => ({
+const dropEvent = (
+  sourceIndex: number,
+  destinationIndex: number,
+  destinationList = 'list',
+): DropEvent => ({
   source: { draggableId: 'dragged', droppableId: 'list', index: sourceIndex },
-  destination: { droppableId: 'list', placeholderId: END_OF_LIST, index: destinationIndex },
+  destination: {
+    droppableId: destinationList,
+    placeholderId: END_OF_LIST,
+    index: destinationIndex,
+  },
 });
+
+/**
+ * Runs `apply` from an effect, as an app does when it applies a drop once a signal allows it
+ * (for example after a confirmation). Returns how many times the effect ran.
+ */
+function applyFromEffect(apply: () => void): number {
+  const ready = signal(false);
+  let runs = 0;
+  effect(
+    () => {
+      if (!ready()) return;
+      runs++;
+      // Stop an effect that keeps re-triggering itself, so a failure can't hang the test
+      if (runs > 5) return;
+      apply();
+    },
+    { injector: TestBed.inject(Injector) },
+  );
+  ready.set(true);
+  TestBed.tick();
+  return runs;
+}
 
 describe('drop helpers', () => {
   let warnSpy: jest.SpyInstance;
@@ -37,6 +68,15 @@ describe('drop helpers', () => {
       expect(list()).toBe(before);
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('index 5'));
     });
+
+    it('should not make an effect that applies the drop depend on the list', () => {
+      const list = signal(['a', 'b', 'c', 'd']);
+
+      const runs = applyFromEffect(() => reorderItems(dropEvent(0, 2), list));
+
+      expect(runs).toBe(1);
+      expect(list()).toEqual(['b', 'c', 'a', 'd']);
+    });
   });
 
   describe('moveItem', () => {
@@ -47,6 +87,17 @@ describe('drop helpers', () => {
       moveItem(dropEvent(5, 0), { list });
 
       expect(list()).toBe(before);
+    });
+
+    it('should not make an effect that applies a move between lists depend on the lists', () => {
+      const list = signal(['a', 'b', 'c']);
+      const other = signal(['x']);
+
+      const runs = applyFromEffect(() => moveItem(dropEvent(0, 1, 'other'), { list, other }));
+
+      expect(runs).toBe(1);
+      expect(list()).toEqual(['b', 'c']);
+      expect(other()).toEqual(['x', 'a']);
     });
   });
 });
