@@ -412,6 +412,7 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
       data: T | null;
       index: number;
       isSticky: boolean;
+      // The template doesn't read it, but subclasses can: renderedItems is protected
       isDragging: boolean;
     }[] = [];
     const renderedIds = new Set<string>();

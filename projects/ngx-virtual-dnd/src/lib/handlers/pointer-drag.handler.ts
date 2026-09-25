@@ -183,7 +183,7 @@ export class PointerDragHandler {
   }
 
   /**
-   * Full teardown — cleanup + null references.
+   * Teardown when the directive is destroyed: removes listeners and cancels timers.
    */
   destroy(): void {
     this.cleanup();
