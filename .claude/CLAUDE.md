@@ -204,7 +204,8 @@ Lazy-load when: specialized (one subsystem), debugging/troubleshooting, or histo
 # Unit tests (minimal output)
 npm test -- --silent
 
-# Type-check specs, E2E tests and perf tooling (no build covers them; CI runs it)
+# Type-check specs, E2E tests and perf tooling (no build covers them; CI runs it).
+# Needs the built library: the demo's specs import ngx-virtual-dnd from dist.
 npm run typecheck
 
 # E2E - Chromium only (fast iteration)

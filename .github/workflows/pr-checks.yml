@@ -64,13 +64,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # Specs, E2E tests and the perf tooling are not part of any build, so nothing else
-      # type-checks them.
-      - name: Type-check tests
-        run: npm run typecheck
-
       - name: Build Angular Library
         run: npm run build:lib
+
+      # Specs, E2E tests and the perf tooling are not part of any build, so nothing else
+      # type-checks them. After the library build: the app specs import ngx-virtual-dnd from dist.
+      - name: Type-check tests
+        run: npm run typecheck
 
       # Built with the GitHub Pages base href so the assemble step below can reuse it. The E2E
       # jobs serve this same production build (scripts/serve-dist.js swaps the base href).
