@@ -8,6 +8,7 @@ import {
   reorderItems,
 } from 'ngx-virtual-dnd';
 import { DragStateDebugComponent } from '../drag-state-debug/drag-state-debug';
+import { ShadowFieldComponent } from './shadow-field';
 
 interface Row {
   id: string;
@@ -17,7 +18,9 @@ interface Row {
 /**
  * E2E fixture: rows that contain form controls. The controls keep their own mouse and keyboard
  * behavior (Space types a space, clicks the button), and the default drag preview, a clone of
- * the row, must not change their state.
+ * the row, must not change their state. The second list holds controls the draggable only finds
+ * by looking into shadow DOM or at ARIA roles: a text field inside a web component, an ARIA
+ * switch, and a summary.
  */
 @Component({
   selector: 'app-interactive-children-demo',
@@ -28,13 +31,15 @@ interface Row {
     DroppableGroupDirective,
     DragPreviewComponent,
     DragStateDebugComponent,
+    ShadowFieldComponent,
   ],
   template: `
     <main class="icd">
       <h1 class="icd-title">Interactive children</h1>
       <p class="icd-hint">
         Each row holds a text field, a radio group and a button. They work as usual, and dragging a
-        row leaves them unchanged.
+        row leaves them unchanged. So do the controls in the second list: a text field inside a web
+        component's shadow DOM, a switch built with ARIA, and a disclosure.
       </p>
 
       <div class="listcard" vdndGroup="interactive">
@@ -85,6 +90,40 @@ interface Row {
                 >
                   Clicked <span data-testid="row-clicks">{{ clicks()[row.id] ?? 0 }}</span>
                 </button>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="listcard icd-more" vdndGroup="interactive-more">
+        <div class="list-hd">
+          <span class="list-title">More controls</span>
+        </div>
+        <div class="list icd-list" vdndDroppable="more-rows" (drop)="onMoreDrop($event)">
+          @for (row of moreRows(); track row.id) {
+            <div class="item" [vdndDraggable]="row.id">
+              <div class="item-inner">
+                <span class="item-text icd-name">{{ row.name }}</span>
+                <app-shadow-field
+                  class="icd-note"
+                  data-testid="row-shadow-field"
+                  [label]="row.name + ' note'"
+                />
+                <span
+                  class="icd-switch"
+                  role="switch"
+                  tabindex="0"
+                  data-testid="row-switch"
+                  [attr.aria-checked]="switchedOn()[row.id] ?? false"
+                  [attr.aria-label]="row.name + ' enabled'"
+                  (click)="toggle(row.id)"
+                  (keydown.space)="onSwitchSpace($event, row.id)"
+                ></span>
+                <details class="icd-details" data-testid="row-details">
+                  <summary data-testid="row-summary">Details</summary>
+                  Notes for {{ row.name }}
+                </details>
               </div>
             </div>
           }
@@ -152,6 +191,57 @@ interface Row {
       flex: 0 0 auto;
       height: 32px;
     }
+
+    .icd-more {
+      margin-top: 24px;
+    }
+
+    .icd-switch {
+      position: relative;
+      flex: 0 0 auto;
+      width: 36px;
+      height: 20px;
+      border-radius: 999px;
+      background: var(--border-2);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .icd-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.15s;
+    }
+
+    .icd-switch[aria-checked='true'] {
+      background: var(--accent);
+    }
+
+    .icd-switch[aria-checked='true']::after {
+      transform: translateX(16px);
+    }
+
+    .icd-switch:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px var(--accent-ring);
+    }
+
+    .icd-details {
+      flex: 0 0 auto;
+      font-size: 13px;
+      color: var(--ink-2);
+    }
+
+    .icd-details summary {
+      cursor: pointer;
+    }
   `,
 })
 export class InteractiveChildrenDemoComponent {
@@ -164,11 +254,33 @@ export class InteractiveChildrenDemoComponent {
   /** Button clicks per row (rows not clicked yet are missing). */
   readonly clicks = signal<Partial<Record<string, number>>>({});
 
+  readonly moreRows = signal<Row[]>([
+    { id: 'more-1', name: 'Row 4' },
+    { id: 'more-2', name: 'Row 5' },
+  ]);
+
+  /** Switches turned on, per row (rows never switched are missing). */
+  readonly switchedOn = signal<Partial<Record<string, boolean>>>({});
+
   count(rowId: string): void {
     this.clicks.update((clicks) => ({ ...clicks, [rowId]: (clicks[rowId] ?? 0) + 1 }));
   }
 
+  toggle(rowId: string): void {
+    this.switchedOn.update((switchedOn) => ({ ...switchedOn, [rowId]: !switchedOn[rowId] }));
+  }
+
+  /** Space toggles a switch, and must not scroll the page. */
+  onSwitchSpace(event: Event, rowId: string): void {
+    event.preventDefault();
+    this.toggle(rowId);
+  }
+
   onDrop(event: DropEvent): void {
     reorderItems(event, this.rows);
+  }
+
+  onMoreDrop(event: DropEvent): void {
+    reorderItems(event, this.moreRows);
   }
 }

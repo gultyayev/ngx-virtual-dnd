@@ -22,6 +22,30 @@ if (!customElements.get('test-shadow-input')) {
   customElements.define('test-shadow-input', ShadowInputElement);
 }
 
+// A web component button: its label is slotted into a <button> in its shadow DOM
+class ShadowButtonElement extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' }).innerHTML = '<button><slot></slot></button>';
+  }
+}
+if (!customElements.get('test-shadow-button')) {
+  customElements.define('test-shadow-button', ShadowButtonElement);
+}
+
+// Its input sits in a closed shadow root, which the draggable cannot look into
+class ClosedShadowInputElement extends HTMLElement {
+  readonly input = document.createElement('input');
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'closed' }).append(this.input);
+  }
+}
+if (!customElements.get('test-closed-shadow-input')) {
+  customElements.define('test-closed-shadow-input', ClosedShadowInputElement);
+}
+
 // Test host component
 @Component({
   template: `
@@ -183,6 +207,8 @@ describe('DraggableDirective', () => {
         button,
         bubbles: true,
         cancelable: true,
+        // As the browser's own: a press inside a shadow root reaches the draggable
+        composed: true,
       }),
     );
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 120 }));
@@ -276,16 +302,17 @@ describe('DraggableDirective', () => {
   });
 
   describe('web component marked no-drag', () => {
-    // Events from inside its shadow DOM reach the draggable retargeted to the component element
-    let shadowHost: HTMLElement;
+    // Events from inside its shadow DOM reach the draggable retargeted to the component element.
+    // Its shadow root is closed, so the draggable can't see the input: only no-drag keeps presses.
+    let shadowHost: ClosedShadowInputElement;
     let shadowInput: HTMLInputElement;
     let targetsSeen: EventTarget[];
 
     beforeEach(() => {
-      shadowHost = document.createElement('test-shadow-input');
+      shadowHost = document.createElement('test-closed-shadow-input') as ClosedShadowInputElement;
       shadowHost.classList.add('no-drag');
       draggableNative.append(shadowHost);
-      shadowInput = shadowHost.shadowRoot!.querySelector('input')!;
+      shadowInput = shadowHost.input;
       targetsSeen = [];
       for (const type of ['mousedown', 'keydown']) {
         draggableNative.addEventListener(type, (event) => targetsSeen.push(event.target!));
@@ -325,10 +352,98 @@ describe('DraggableDirective', () => {
     });
   });
 
+  describe('controls in web components, ARIA widgets and summary', () => {
+    let shadowInput: HTMLInputElement;
+    let ariaSwitch: HTMLElement;
+    let summary: HTMLElement;
+
+    beforeEach(() => {
+      const shadowHost = document.createElement('test-shadow-input');
+      shadowInput = shadowHost.shadowRoot!.querySelector('input')!;
+      ariaSwitch = document.createElement('span');
+      ariaSwitch.setAttribute('role', 'switch');
+      ariaSwitch.tabIndex = 0;
+      const details = document.createElement('details');
+      summary = document.createElement('summary');
+      details.append(summary);
+      draggableNative.append(shadowHost, ariaSwitch, details);
+    });
+
+    const controls: [string, () => Element][] = [
+      ['an input inside a web component', () => shadowInput],
+      ['an ARIA switch', () => ariaSwitch],
+      ['a summary', () => summary],
+    ];
+
+    it.each(controls)('should not start a pointer drag from a press on %s', (_name, control) => {
+      attemptPointerDrag(control());
+
+      expect(dragStateService.isDragging()).toBe(false);
+    });
+
+    it.each(controls)('should let Space reach %s instead of starting a drag', (_name, control) => {
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
+      control().dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(false);
+      expect(TestBed.inject(KeyboardDragService).isActive()).toBe(false);
+      expect(component.dragStartEvents).toEqual([]);
+    });
+
+    describe('in a web component that is the drag handle', () => {
+      let handleButton: HTMLButtonElement;
+
+      beforeEach(() => {
+        const handle = document.createElement('test-shadow-button');
+        handle.classList.add('wc-handle');
+        handle.textContent = 'Drag';
+        draggableNative.append(handle);
+        handleButton = handle.shadowRoot!.querySelector('button')!;
+        component.dragHandle.set('.wc-handle');
+        fixture.detectChanges();
+      });
+
+      it('should start a pointer drag from a press on its button', () => {
+        attemptPointerDrag(handleButton);
+
+        expect(dragStateService.isDragging()).toBe(true);
+      });
+
+      it('should pick the item up with Space on its button', () => {
+        const space = new KeyboardEvent('keydown', {
+          key: ' ',
+          code: 'Space',
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        });
+        handleButton.dispatchEvent(space);
+
+        expect(space.defaultPrevented).toBe(true);
+        expect(TestBed.inject(KeyboardDragService).isActive()).toBe(true);
+      });
+    });
+  });
+
   describe('drag handle', () => {
     beforeEach(() => {
       component.dragHandle.set('.handle');
       fixture.detectChanges();
+    });
+
+    it('should start drag when pressing on a button that is the drag handle', () => {
+      component.dragHandle.set('button');
+      fixture.detectChanges();
+
+      attemptPointerDrag(draggableNative.querySelector('button')!);
+
+      expect(dragStateService.isDragging()).toBe(true);
     });
 
     it('should not start drag when pressing outside the handle', () => {

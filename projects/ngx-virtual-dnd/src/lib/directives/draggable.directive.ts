@@ -30,7 +30,7 @@ import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
-import { INTERACTIVE_ELEMENT_SELECTOR, NO_DRAG_CLASS } from '../utils/interactive-elements';
+import { isPressOnNestedControl, NO_DRAG_CLASS } from '../utils/interactive-elements';
 
 /**
  * Makes an element draggable within the virtual scroll drag-and-drop system.
@@ -307,18 +307,10 @@ export class DraggableDirective implements OnInit, OnDestroy {
       return false;
     }
 
-    if (target.classList.contains(NO_DRAG_CLASS)) {
-      return true;
-    }
-
-    const control = target.closest(INTERACTIVE_ELEMENT_SELECTOR);
-    if (control === null || control === host || !host.contains(control)) {
-      return false;
-    }
-
-    const handleSelector = this.dragHandle();
-    const handle = handleSelector ? control.closest(handleSelector) : null;
-    return handle === null || handle === host || !host.contains(handle);
+    return (
+      target.classList.contains(NO_DRAG_CLASS) ||
+      isPressOnNestedControl(event, host, this.dragHandle())
+    );
   }
 
   /**

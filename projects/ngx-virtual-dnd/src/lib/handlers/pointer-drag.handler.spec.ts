@@ -67,6 +67,34 @@ describe('PointerDragHandler', () => {
   const createTouchStart = (x: number, y: number): TouchEvent =>
     createTouchEvent('touchstart', x, y, mockContext.element);
 
+  /**
+   * Press on `target` with a dispatched event, handed to the handler from a listener on the
+   * draggable as the directive does: the handler reads the event's composed path, which only
+   * exists while the event is dispatched.
+   */
+  const pressOn = (target: Element): void => {
+    const host: HTMLElement = mockContext.element;
+    const onMouseDown = (event: Event): void => handler.onPointerDown(event as MouseEvent, false);
+    host.addEventListener('mousedown', onMouseDown);
+    target.dispatchEvent(
+      new MouseEvent('mousedown', {
+        clientX: 150,
+        clientY: 220,
+        button: 0,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      }),
+    );
+    host.removeEventListener('mousedown', onMouseDown);
+  };
+
+  /** Move the pointer past the threshold: a drag starts only if the press was tracked. */
+  const dragStartsAfterMove = (): boolean => {
+    document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+    return (mockCallbacks.onDragStart as jest.Mock).mock.calls.length > 0;
+  };
+
   beforeEach(() => {
     isDragging = false;
 
@@ -193,22 +221,12 @@ describe('PointerDragHandler', () => {
     });
 
     it('should ignore clicks on interactive elements', () => {
-      const addSpy = jest.spyOn(document, 'addEventListener');
       const button = document.createElement('button');
       mockContext.element.appendChild(button);
 
-      const event = new MouseEvent('mousedown', {
-        clientX: 150,
-        clientY: 220,
-        button: 0,
-        bubbles: true,
-        cancelable: true,
-      });
-      Object.defineProperty(event, 'target', { value: button });
+      pressOn(button);
 
-      handler.onPointerDown(event, false);
-
-      expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(dragStartsAfterMove()).toBe(false);
     });
 
     it('should ignore clicks on no-drag class elements', () => {
@@ -255,6 +273,107 @@ describe('PointerDragHandler', () => {
       document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
 
       expect(mockCallbacks.onDragStart).toHaveBeenCalledWith({ x: 160, y: 220 });
+    });
+  });
+
+  describe('nested controls', () => {
+    it('should ignore presses on an input inside a web component', () => {
+      const widget = document.createElement('div');
+      const input = document.createElement('input');
+      widget.attachShadow({ mode: 'open' }).append(input);
+      mockContext.element.append(widget);
+
+      pressOn(input);
+
+      expect(dragStartsAfterMove()).toBe(false);
+    });
+
+    it.each([
+      'button',
+      'checkbox',
+      'combobox',
+      'radio',
+      'searchbox',
+      'slider',
+      'spinbutton',
+      'switch',
+      'textbox',
+    ])('should ignore presses inside an ARIA %s', (role) => {
+      const widget = document.createElement('div');
+      widget.setAttribute('role', role);
+      const icon = document.createElement('i');
+      widget.append(icon);
+      mockContext.element.append(widget);
+
+      pressOn(icon);
+
+      expect(dragStartsAfterMove()).toBe(false);
+    });
+
+    it('should ignore presses on a summary', () => {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      details.append(summary);
+      mockContext.element.append(details);
+
+      pressOn(summary);
+
+      expect(dragStartsAfterMove()).toBe(false);
+    });
+
+    it('should track presses on a button that is the drag handle', () => {
+      mockContext.dragHandle = '.handle';
+      const handle = document.createElement('button');
+      handle.className = 'handle';
+      mockContext.element.append(handle);
+
+      pressOn(handle);
+
+      expect(dragStartsAfterMove()).toBe(true);
+    });
+
+    it('should track presses on an ARIA button that is the drag handle', () => {
+      mockContext.dragHandle = '.handle';
+      const handle = document.createElement('span');
+      handle.className = 'handle';
+      handle.setAttribute('role', 'button');
+      mockContext.element.append(handle);
+
+      pressOn(handle);
+
+      expect(dragStartsAfterMove()).toBe(true);
+    });
+
+    it('should track presses on the draggable itself when it is a button', () => {
+      mockContext.element = document.createElement('button');
+
+      pressOn(mockContext.element);
+
+      expect(dragStartsAfterMove()).toBe(true);
+    });
+
+    it('should track presses when a control surrounds the draggable', () => {
+      const editor = document.createElement('div');
+      editor.setAttribute('contenteditable', 'true');
+      editor.append(mockContext.element);
+      const content = document.createElement('span');
+      mockContext.element.append(content);
+
+      pressOn(content);
+
+      expect(dragStartsAfterMove()).toBe(true);
+    });
+
+    it('should track presses on content a web component draggable wraps in its own button', () => {
+      // Its shadow tree is part of the draggable, like the draggable element itself
+      const host: HTMLElement = mockContext.element;
+      host.attachShadow({ mode: 'open' }).innerHTML = '<button><slot></slot></button>';
+      const content = document.createElement('span');
+      host.append(content);
+
+      pressOn(content);
+
+      expect(dragStartsAfterMove()).toBe(true);
     });
   });
 
