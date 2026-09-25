@@ -50,3 +50,14 @@ export interface VdndVirtualViewport {
 export const VDND_VIRTUAL_VIEWPORT = new InjectionToken<VdndVirtualViewport>(
   'VDND_VIRTUAL_VIEWPORT',
 );
+
+/**
+ * Internal, not exported from the package. Provided by vdnd-virtual-viewport next to
+ * VDND_VIRTUAL_VIEWPORT: its rows start contentOffset px down its scroll area while its
+ * scrollTop() is the raw position, so VirtualForDirective subtracts the offset when the viewport
+ * it injects is this one. A token instead of an instanceof check keeps the viewport component out
+ * of apps that don't use it.
+ */
+export const VDND_OFFSET_ROWS_VIEWPORT = new InjectionToken<VdndVirtualViewport>(
+  'VDND_OFFSET_ROWS_VIEWPORT',
+);

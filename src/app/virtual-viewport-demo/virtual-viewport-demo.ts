@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import {
   DraggableDirective,
   DragPreviewComponent,
@@ -26,7 +27,7 @@ function createRows(prefix: string, label: string, count: number): Row[] {
 /**
  * E2E fixture: two self-scrolling `vdnd-virtual-viewport` lists that are also the droppables,
  * rendering their rows with `*vdndVirtualFor`. The second one reserves space above its rows with
- * `contentOffset`.
+ * `contentOffset`: 80px, or the `?contentOffset=` query parameter.
  */
 @Component({
   selector: 'app-virtual-viewport-demo',
@@ -144,8 +145,10 @@ function createRows(prefix: string, label: string, count: number): Row[] {
   `,
 })
 export class VirtualViewportDemoComponent {
-  /** Space (px) the Backlog viewport reserves above its rows. */
-  readonly contentOffset = 80;
+  /** Space (px) the Backlog viewport reserves above its rows (`?contentOffset=400` for a deep one). */
+  readonly contentOffset = Number(
+    inject(ActivatedRoute).snapshot.queryParamMap.get('contentOffset') ?? 80,
+  );
 
   readonly tasks = signal<Row[]>(createRows('a', 'Task', 60));
   readonly backlog = signal<Row[]>(createRows('b', 'Backlog item', 30));
