@@ -129,9 +129,10 @@ export class PointerDragHandler {
     this.#isTracking = true;
     this.#startPosition = PointerDragHandler.#getPosition(event);
 
-    // Handle drag delay
+    // Handle drag delay. A repeated press (e.g. a second finger) restarts the delay; the
+    // previous timer must not survive, or it fires after the gesture has ended.
+    this.#cancelDelayTimer();
     if (delay > 0) {
-      this.#delayReady = false;
       this.#delayTimerId = setTimeout(() => {
         this.#delayReady = true;
         this.#deps.callbacks.onPendingChange(true); // Emit ready state when delay passes

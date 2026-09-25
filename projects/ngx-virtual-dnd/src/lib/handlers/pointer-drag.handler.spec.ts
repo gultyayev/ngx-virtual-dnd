@@ -302,6 +302,19 @@ describe('PointerDragHandler', () => {
       expect(mockCallbacks.onPendingChange).not.toHaveBeenCalledWith(true);
     });
 
+    it('should not mark the item pending after a repeated press is released', () => {
+      // A second press (e.g. another finger) before the first delay fires, then release:
+      // no timer of the abandoned gesture may fire afterwards.
+      handler.onPointerDown(createTouchStart(150, 220), true);
+      jest.advanceTimersByTime(100);
+      handler.onPointerDown(createTouchStart(150, 220), true);
+      document.dispatchEvent(createTouchEvent('touchend', 150, 220));
+
+      jest.advanceTimersByTime(200);
+
+      expect(mockCallbacks.onPendingChange).not.toHaveBeenCalledWith(true);
+    });
+
     it('should emit pending change when delay fires', () => {
       handler.onPointerDown(createMouseDown(150, 220), false);
 
