@@ -36,22 +36,14 @@ When dragging within the same list, apply +1 adjustment when `visualIndex >= sou
 
 ## Virtual Scroll Integration
 
-During same-list drag, `scrollHeight` reflects N-1 items. The `getTotalItemCount()` method adds 1 back for true logical total.
+During same-list drag, the strategy's excluded index (`setExcludedIndex`) closes up the offsets after the dragged item, which is why `#isSourceIndexExcluded` skips the +1 adjustment once exclusion is applied. The total height keeps all N items, and `getTotalItemCount()` returns the logical N (strategy item count or `data-total-items`).
 
-## State Caching in Effects
+## Reading State After the Drag Ends
 
-Cache state snapshots in effects if needed during cleanup (state may be cleared before effect fires):
+The live drag state is reset before effects observe the drag end. `DragStateService.endDrag()` / `cancelDrag()` capture `endedDragState()` immediately before the reset, so read that instead of caching snapshots in effects:
 
 ```typescript
-#cachedState: State | null = null;
-
-effect(() => {
-  if (this.isActive()) {
-    this.#cachedState = this.#service.getStateSnapshot();
-  }
-});
-
 #handleDrop(): void {
-  const state = this.#cachedState; // Use cached, not current state
+  const state = untracked(() => this.#dragState.endedDragState());
 }
 ```

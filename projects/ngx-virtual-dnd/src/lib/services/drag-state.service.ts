@@ -55,7 +55,7 @@ export class DragStateService {
   /** ID of the droppable currently being hovered over — changes on droppable crossings */
   readonly #activeDroppableId = signal<string | null>(null);
 
-  /** ID of the item the placeholder should appear before */
+  /** `END_OF_LIST` while a droppable is targeted, otherwise null; see placeholderIndex */
   readonly #placeholderId = signal<string | null>(null);
 
   /** Index where the placeholder should be inserted — updated on each placeholder move */
@@ -91,7 +91,7 @@ export class DragStateService {
   /** ID of the droppable currently being hovered over */
   readonly activeDroppableId = this.#activeDroppableId.asReadonly();
 
-  /** ID of the item the placeholder should appear before */
+  /** `END_OF_LIST` while a droppable is targeted, otherwise null; see placeholderIndex */
   readonly placeholderId = this.#placeholderId.asReadonly();
 
   /** Index where the placeholder should be inserted */
@@ -211,7 +211,7 @@ export class DragStateService {
   }
 
   /**
-   * Update just the placeholder position.
+   * Update just the placeholder ID.
    */
   setPlaceholder(placeholderId: string | null): void {
     if (!this.#state().isDragging) {

@@ -261,6 +261,25 @@ describe('VirtualScrollContainerComponent', () => {
     });
   });
 
+  describe('render entries', () => {
+    // renderedItems is protected, so its entry type is part of what subclasses see
+    it('should flag the entry of the dragged item', () => {
+      dragStateService.startDrag({
+        draggableId: 'item-2',
+        droppableId: 'list',
+        element: document.createElement('div'),
+        height: 50,
+        width: 200,
+      });
+      fixture.detectChanges();
+
+      const draggedEntries = virtualScrollComponent['renderedItems']()
+        .filter((entry) => entry.isDragging)
+        .map((entry) => entry.index);
+      expect(draggedEntries).toEqual([2]);
+    });
+  });
+
   describe('content transform', () => {
     it('should have transform at 0 initially', () => {
       const wrapper = fixture.debugElement.query(By.css('.vdnd-virtual-scroll-content-wrapper'));

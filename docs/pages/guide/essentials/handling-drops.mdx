@@ -19,7 +19,7 @@ interface DropEvent {
   };
   destination: {
     droppableId: string;
-    placeholderId: string; // ID of the item the placeholder sat before, or END_OF_LIST
+    placeholderId: string; // always END_OF_LIST; use index for the position
     index: number; // where the item goes, after it is removed from the source
     data?: unknown; // vdndDroppableData (droppableData on vdnd-sortable-list)
   };
