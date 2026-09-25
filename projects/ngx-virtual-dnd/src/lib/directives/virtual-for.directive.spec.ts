@@ -3,9 +3,14 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { VirtualForDirective } from './virtual-for.directive';
 import { VirtualViewportComponent } from '../components/virtual-viewport.component';
+import { VirtualContentComponent } from '../components/virtual-content.component';
 import { DragStateService } from '../services/drag-state.service';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
+import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-container.token';
 import { END_OF_LIST } from '../models/drag-drop.models';
+
+const nextAnimationFrame = (): Promise<void> =>
+  new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
 interface TestItem {
   id: string;
@@ -59,6 +64,52 @@ class TestHostComponent {
 class DynamicHeightTestHostComponent {
   readonly items = signal<{ id: string; key: string; label: string; height: number }[]>([]);
   readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+}
+
+/** Rows 0..29 of 50px, for lists whose rows start 400px down: deeper than the 3-row overscan */
+const offsetListItems = (): TestItem[] =>
+  Array.from({ length: 30 }, (_, i) => ({
+    id: `item-${i}`,
+    key: `key-${i}`,
+    label: `Item ${i}`,
+    parts: [],
+  }));
+
+@Component({
+  template: `
+    <vdnd-virtual-viewport [itemHeight]="50" [contentOffset]="400" style="height: 300px;">
+      <ng-container *vdndVirtualFor="let item of items; trackBy: trackByFn">
+        <div class="item" [attr.data-id]="item.id">{{ item.label }}</div>
+      </ng-container>
+    </vdnd-virtual-viewport>
+  `,
+  imports: [VirtualViewportComponent, VirtualForDirective],
+})
+class ContentOffsetViewportHostComponent {
+  readonly items = offsetListItems();
+  readonly trackByFn = (_index: number, item: TestItem): string => item.key;
+}
+
+@Component({
+  template: `
+    <vdnd-virtual-content [itemHeight]="50" [contentOffset]="400">
+      <ng-container *vdndVirtualFor="let item of items; trackBy: trackByFn">
+        <div class="item" [attr.data-id]="item.id">{{ item.label }}</div>
+      </ng-container>
+    </vdnd-virtual-content>
+  `,
+  imports: [VirtualContentComponent, VirtualForDirective],
+  providers: [{ provide: VDND_SCROLL_CONTAINER, useExisting: ContentOffsetPageHostComponent }],
+})
+class ContentOffsetPageHostComponent implements VdndScrollContainer {
+  readonly items = offsetListItems();
+  readonly trackByFn = (_index: number, item: TestItem): string => item.key;
+
+  // The page-level scroll container the content sits in
+  scrollTop = signal(0);
+  containerHeight = signal(300);
+  nativeElement = document.createElement('div');
+  scrollTo = jest.fn();
 }
 
 describe('VirtualForDirective', () => {
@@ -474,5 +525,94 @@ describe('VirtualForDirective (shift animation)', () => {
     expect(animationsByKey.get('k3')?.length).toBe(1);
     // In-flight slides whose target did not change keep running
     expect(displaced.every((animation) => animation.cancel.mock.calls.length === 0)).toBe(true);
+  });
+});
+
+describe('VirtualForDirective (content offset)', () => {
+  let originalResizeObserver: typeof ResizeObserver;
+
+  const renderedIds = (fixture: ComponentFixture<unknown>): string[] =>
+    fixture.debugElement
+      .queryAll(By.css('.item'))
+      .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id') ?? '');
+
+  /** item IDs from..to inclusive */
+  const itemIds = (from: number, to: number): string[] =>
+    Array.from({ length: to - from + 1 }, (_, i) => `item-${from + i}`);
+
+  beforeAll(() => {
+    originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+  });
+
+  afterAll(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  beforeEach(() => {
+    // jsdom has no layout: give the viewport its 300px height (6 rows of 50px)
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  describe('in vdnd-virtual-viewport', () => {
+    let fixture: ComponentFixture<ContentOffsetViewportHostComponent>;
+    let viewportEl: HTMLElement;
+
+    /** Scroll the viewport and let the RAF-throttled scroll binding commit. */
+    const scrollViewportTo = async (scrollTop: number): Promise<void> => {
+      viewportEl.scrollTop = scrollTop;
+      viewportEl.dispatchEvent(new Event('scroll'));
+      await nextAnimationFrame();
+      fixture.detectChanges();
+      fixture.detectChanges();
+    };
+
+    beforeEach(() => {
+      TestBed.configureTestingModule({
+        imports: [ContentOffsetViewportHostComponent],
+      });
+
+      fixture = TestBed.createComponent(ContentOffsetViewportHostComponent);
+      fixture.detectChanges();
+      viewportEl = fixture.debugElement.query(By.directive(VirtualViewportComponent))
+        .nativeElement as HTMLElement;
+    });
+
+    afterEach(() => {
+      fixture.destroy();
+    });
+
+    it('should render the rows in view once scrolled past the offset', async () => {
+      // 600 - 400 = 200px into the rows: rows 4-9 are in view, plus 3 overscan on each side
+      await scrollViewportTo(600);
+
+      expect(renderedIds(fixture)).toEqual(itemIds(1, 13));
+    });
+
+    it('should render from the first row while the offset is still in view', async () => {
+      // The rows start 100px below the viewport's top edge: rows 0-3 are in view
+      await scrollViewportTo(300);
+
+      expect(renderedIds(fixture)).toEqual(itemIds(0, 9));
+    });
+  });
+
+  describe('in vdnd-virtual-content', () => {
+    it('should subtract the offset once (its scrollTop is already relative to the rows)', () => {
+      TestBed.configureTestingModule({
+        imports: [ContentOffsetPageHostComponent],
+      });
+      const fixture = TestBed.createComponent(ContentOffsetPageHostComponent);
+      fixture.componentInstance.scrollTop.set(600);
+      fixture.detectChanges();
+      fixture.detectChanges();
+
+      expect(renderedIds(fixture)).toEqual(itemIds(1, 13));
+      fixture.destroy();
+    });
   });
 });

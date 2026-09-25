@@ -7,7 +7,8 @@ type ViewportId = 'viewport-a' | 'viewport-b';
 /**
  * `vdnd-virtual-viewport` as the droppable, rendering its rows with `*vdndVirtualFor`.
  * Fixture: /virtual-viewport. Tasks (viewport-a) holds 60 rows; Backlog (viewport-b) holds 30 and
- * reserves 80px above them with `contentOffset`. Rows are 50px tall, both viewports 300px.
+ * reserves 80px above them with `contentOffset` (`?contentOffset=` sets another offset). Rows are
+ * 50px tall, both viewports 300px.
  */
 test.describe('Virtual viewport', () => {
   test.beforeEach(async ({ page }) => {
@@ -47,13 +48,7 @@ test.describe('Virtual viewport', () => {
   test('drops at the right index after the viewport is scrolled', async ({ page }) => {
     // 9 rows: Task 11 sits one row below the top edge, so the drag stays clear of the
     // autoscroll threshold (a row at the edge would scroll the list as soon as it is picked up)
-    await expect(async () => {
-      const scrollTop = await viewport(page, 'viewport-a').evaluate((element) => {
-        element.scrollTop = 450;
-        return element.scrollTop;
-      });
-      expect(scrollTop).toBe(450);
-    }).toPass();
+    await scrollViewportTo(page, 'viewport-a', 450);
     await expect(row(page, 'a-14')).toBeInViewport();
 
     await dragRowOnto(page, 'a-11', 'a-14', 'viewport-a');
@@ -113,6 +108,48 @@ test.describe('Virtual viewport', () => {
   });
 });
 
+/**
+ * Backlog reserves 400px above its rows, more than the 3 rows of overscan: which rows it renders
+ * depends on the offset, not only on the scroll position.
+ */
+test.describe('Virtual viewport with a content offset deeper than the overscan', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/virtual-viewport?contentOffset=400', { waitUntil: 'domcontentloaded' });
+    await expect(row(page, 'b-1')).toBeAttached();
+  });
+
+  /** Scroll 200px into Backlog's rows, and wait for the render that follows the scroll. */
+  async function scrollIntoRows(page: Page): Promise<void> {
+    await scrollViewportTo(page, 'viewport-b', 600);
+    // Until then the rows rendered for the top of the list are still there (Backlog items 1-10),
+    // scrolled into view: the item 1 above the overscan leaves with that render
+    await expect(row(page, 'b-1')).toHaveCount(0);
+  }
+
+  test('renders the rows in view once scrolled into the list', async ({ page }) => {
+    // Backlog item 5 (index 4) is at the top edge
+    await scrollIntoRows(page);
+
+    const topRow = row(page, 'b-5');
+    await expect(topRow).toBeInViewport();
+    const rowBox = await topRow.boundingBox();
+    const viewportBox = await viewport(page, 'viewport-b').boundingBox();
+    if (!rowBox || !viewportBox) throw new Error('Backlog item 5 or its viewport has no box');
+    expect(Math.abs(rowBox.y - viewportBox.y)).toBeLessThanOrEqual(1);
+  });
+
+  test('drops at the right index once scrolled into the list', async ({ page }) => {
+    // Backlog item 6 sits one row below the top edge, clear of the autoscroll threshold
+    await scrollIntoRows(page);
+    await expect(row(page, 'b-8')).toBeInViewport();
+
+    await dragRowOnto(page, 'b-6', 'b-8', 'viewport-b');
+
+    await expectDrop(page, 5, 7);
+    await expectOrder(page, 'viewport-b', ['b-7', 'b-8', 'b-6', 'b-9']);
+  });
+});
+
 function viewport(page: Page, id: ViewportId) {
   return page.locator(`[data-droppable-id="${id}"]`);
 }
@@ -123,6 +160,20 @@ function row(page: Page, id: string) {
 
 function preview(page: Page) {
   return page.getByTestId('vdnd-drag-preview');
+}
+
+/**
+ * Scroll a viewport, writing and checking the scroll together: a write made before the rows have
+ * their height is clamped for good (E2E.md, "Scroll Commands Before Content Height Is Ready").
+ */
+async function scrollViewportTo(page: Page, id: ViewportId, scrollTop: number): Promise<void> {
+  await expect(async () => {
+    const actual = await viewport(page, id).evaluate((element, top) => {
+      element.scrollTop = top;
+      return element.scrollTop;
+    }, scrollTop);
+    expect(actual).toBe(scrollTop);
+  }).toPass();
 }
 
 /** Press on the center of a row and move past the drag threshold. */

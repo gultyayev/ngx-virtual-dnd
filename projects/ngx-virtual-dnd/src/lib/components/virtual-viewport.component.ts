@@ -10,7 +10,11 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
-import { VDND_VIRTUAL_VIEWPORT, VdndVirtualViewport } from '../tokens/virtual-viewport.token';
+import {
+  VDND_OFFSET_ROWS_VIEWPORT,
+  VDND_VIRTUAL_VIEWPORT,
+  VdndVirtualViewport,
+} from '../tokens/virtual-viewport.token';
 import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-container.token';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import {
@@ -59,6 +63,7 @@ import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [
     { provide: VDND_VIRTUAL_VIEWPORT, useExisting: VirtualViewportComponent },
+    { provide: VDND_OFFSET_ROWS_VIEWPORT, useExisting: VirtualViewportComponent },
     { provide: VDND_SCROLL_CONTAINER, useExisting: VirtualViewportComponent },
   ],
   host: {
