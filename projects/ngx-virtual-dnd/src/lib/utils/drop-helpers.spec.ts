@@ -3,9 +3,17 @@ import { TestBed } from '@angular/core/testing';
 import { DropEvent, END_OF_LIST } from '../models/drag-drop.models';
 import { moveItem, reorderItems } from './drop-helpers';
 
-const dropEvent = (sourceIndex: number, destinationIndex: number): DropEvent => ({
+const dropEvent = (
+  sourceIndex: number,
+  destinationIndex: number,
+  destinationList = 'list',
+): DropEvent => ({
   source: { draggableId: 'dragged', droppableId: 'list', index: sourceIndex },
-  destination: { droppableId: 'list', placeholderId: END_OF_LIST, index: destinationIndex },
+  destination: {
+    droppableId: destinationList,
+    placeholderId: END_OF_LIST,
+    index: destinationIndex,
+  },
 });
 
 /**
@@ -79,6 +87,17 @@ describe('drop helpers', () => {
       moveItem(dropEvent(5, 0), { list });
 
       expect(list()).toBe(before);
+    });
+
+    it('should not make an effect that applies a move between lists depend on the lists', () => {
+      const list = signal(['a', 'b', 'c']);
+      const other = signal(['x']);
+
+      const runs = applyFromEffect(() => moveItem(dropEvent(0, 1, 'other'), { list, other }));
+
+      expect(runs).toBe(1);
+      expect(list()).toEqual(['b', 'c']);
+      expect(other()).toEqual(['x', 'a']);
     });
   });
 });
