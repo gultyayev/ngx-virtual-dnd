@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.2.0-alpha.2](https://github.com/gultyayev/angular-vdnd/compare/v3.2.0-alpha.1...v3.2.0-alpha.2) (2026-09-25)
+
+### Features
+
+- **lib:** animate the drag preview into place on drop ([#72](https://github.com/gultyayev/angular-vdnd/issues/72)) ([57186dc](https://github.com/gultyayev/angular-vdnd/commit/57186dc07a671a75c3853bf0c850a751cd5a3979))
+
 ## [3.2.0-alpha.1](https://github.com/gultyayev/angular-vdnd/compare/v3.2.0-alpha.0...v3.2.0-alpha.1) (2026-09-24)
 
 ### Features
