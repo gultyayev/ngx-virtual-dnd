@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.2.0](https://github.com/gultyayev/angular-vdnd/compare/v3.2.0-alpha.2...v3.2.0) (2026-09-25)
+
 ## [3.2.0-alpha.2](https://github.com/gultyayev/angular-vdnd/compare/v3.2.0-alpha.1...v3.2.0-alpha.2) (2026-09-25)
 
 ### Features
