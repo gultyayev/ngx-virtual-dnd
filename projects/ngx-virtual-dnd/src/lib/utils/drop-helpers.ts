@@ -44,9 +44,9 @@ export function moveItem<T>(event: DropEvent, lists: Record<string, WritableSign
     return;
   }
 
-  // Cross-list move
-  const sourceItems = sourceList();
-  const item = sourceItems[sourceIndex];
+  // Cross-list move. Read untracked, as in reorderItems: an effect that applies the drop must
+  // not depend on the lists it changes.
+  const item = untracked(sourceList)[sourceIndex];
 
   if (item === undefined) {
     if (isDevMode()) {
