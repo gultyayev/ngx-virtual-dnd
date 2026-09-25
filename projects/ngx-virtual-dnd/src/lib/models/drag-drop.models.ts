@@ -49,9 +49,9 @@ export interface DragState {
   sourceIndex: number | null;
   /** ID of the droppable currently being hovered over */
   activeDroppableId: string | null;
-  /** ID of the item the placeholder should appear before, or 'END_OF_LIST' */
+  /** `END_OF_LIST` while a droppable is targeted, otherwise null. See `placeholderIndex`. */
   placeholderId: string | null;
-  /** Index where the placeholder should be inserted (more stable than placeholderId) */
+  /** Index where the placeholder should be inserted */
   placeholderIndex: number | null;
   /** Current cursor position */
   cursorPosition: CursorPosition | null;
@@ -103,7 +103,7 @@ export interface DropSource {
 export interface DropDestination {
   /** ID of the droppable container receiving the item */
   droppableId: string;
-  /** ID of the item to insert before, or 'END_OF_LIST' */
+  /** Always `END_OF_LIST`. Use `index` for the insertion position. */
   placeholderId: string;
   /** Target index in the destination list */
   index: number;
@@ -194,6 +194,7 @@ export const INITIAL_DRAG_STATE: DragState = {
 };
 
 /**
- * Placeholder ID used when dropping at the end of a list.
+ * The value of every `placeholderId` the library sets. Positions are reported as indexes
+ * (`placeholderIndex`, `DropDestination.index`).
  */
 export const END_OF_LIST = 'END_OF_LIST';

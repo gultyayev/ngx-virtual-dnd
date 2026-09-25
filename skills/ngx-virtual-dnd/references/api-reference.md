@@ -357,7 +357,7 @@ interface DropSource {
 
 interface DropDestination {
   droppableId: string;
-  placeholderId: string; // ID of the item the placeholder was before, or END_OF_LIST
+  placeholderId: string; // always END_OF_LIST; use index for the position
   index: number;         // final insertion index, after removal from the source
   data?: unknown;        // the droppable's vdndDroppableData / droppableData
 }
@@ -734,6 +734,6 @@ const INITIAL_DRAG_STATE: DragState;
 // All fields null/false — represents idle state
 
 const END_OF_LIST = 'END_OF_LIST';
-// Placeholder ID used when dropping at the end of a list
+// The value of every placeholderId; positions are reported as indexes
 ```
 
