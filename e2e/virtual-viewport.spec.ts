@@ -21,7 +21,17 @@ test.describe('Virtual viewport', () => {
     expect(await tasks.locator('[data-draggable-id]').count()).toBeLessThan(20);
     await expect(row(page, 'a-60')).toHaveCount(0);
 
-    await tasks.evaluate((element) => (element.scrollTop = element.scrollHeight));
+    // Write and check the scroll together: a write made before the rows have their height is lost
+    await expect(async () => {
+      const atBottom = await tasks.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+        return (
+          element.scrollTop > 0 &&
+          element.scrollTop + element.clientHeight >= element.scrollHeight - 1
+        );
+      });
+      expect(atBottom).toBe(true);
+    }).toPass();
 
     await expect(row(page, 'a-60')).toBeInViewport();
     await expect(row(page, 'a-1')).toHaveCount(0);
@@ -37,7 +47,13 @@ test.describe('Virtual viewport', () => {
   test('drops at the right index after the viewport is scrolled', async ({ page }) => {
     // 9 rows: Task 11 sits one row below the top edge, so the drag stays clear of the
     // autoscroll threshold (a row at the edge would scroll the list as soon as it is picked up)
-    await viewport(page, 'viewport-a').evaluate((element) => (element.scrollTop = 450));
+    await expect(async () => {
+      const scrollTop = await viewport(page, 'viewport-a').evaluate((element) => {
+        element.scrollTop = 450;
+        return element.scrollTop;
+      });
+      expect(scrollTop).toBe(450);
+    }).toPass();
     await expect(row(page, 'a-14')).toBeInViewport();
 
     await dragRowOnto(page, 'a-11', 'a-14', 'viewport-a');
