@@ -155,6 +155,9 @@ export class DraggableDirective implements OnInit, OnDestroy {
   #keyboardHandler!: KeyboardDragHandler;
   #pointerHandler!: PointerDragHandler;
 
+  /** Set by ngOnInit, which creates the handlers */
+  #initialized = false;
+
   /** Cached constraint flag from source droppable */
   #constrainToContainer = false;
 
@@ -232,9 +235,17 @@ export class DraggableDirective implements OnInit, OnDestroy {
         dragDelay: this.dragDelay(),
       }),
     });
+
+    this.#initialized = true;
   }
 
   ngOnDestroy(): void {
+    // Destroyed before its first change detection: there are no handlers yet, and its inputs
+    // have no values (reading a bound ID would throw).
+    if (!this.#initialized) {
+      return;
+    }
+
     // If destroyed mid-drag, cancel to avoid stale global state / ongoing RAF loops.
     if (this.isDragging()) {
       this.#endDrag(true);
