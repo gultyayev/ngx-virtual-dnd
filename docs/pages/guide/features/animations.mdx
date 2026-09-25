@@ -1,11 +1,11 @@
 ---
 title: Animations and haptics
-description: Slide displaced rows into place while dragging, and react to every placeholder move.
+description: Slide displaced rows into place while dragging, glide the dropped item into its slot, and react to every placeholder move.
 ---
 
 # Animations and haptics
 
-By default, rows displaced by the placeholder jump to their new position. Provide `VDND_ANIMATION_CONFIG` to make them slide instead. For feedback on every step, such as a haptic tick, listen to `(placeholderMove)`.
+By default, rows displaced by the placeholder jump to their new position, and the preview disappears on drop. Provide `VDND_ANIMATION_CONFIG` to make rows slide and the dropped item glide into its slot instead. For feedback on every step, such as a haptic tick, listen to `(placeholderMove)`.
 
 :::info Added in 3.2.0
 Both features are new in 3.2.0, which is currently a pre-release. Install it with `npm install ngx-virtual-dnd@next`.
@@ -35,16 +35,18 @@ export const appConfig: ApplicationConfig = {
 };
 ```
 
-| Option          | Default                      | Meaning                                |
-| --------------- | ---------------------------- | -------------------------------------- |
-| `shiftDuration` | `200`                        | Slide duration in ms. `0` turns it off |
-| `shiftEasing`   | `cubic-bezier(0.2, 0, 0, 1)` | Any CSS easing function                |
+| Option          | Default                      | Meaning                                                            |
+| --------------- | ---------------------------- | ------------------------------------------------------------------ |
+| `shiftDuration` | `200`                        | Slide duration in ms. `0` turns it off                             |
+| `shiftEasing`   | `cubic-bezier(0.2, 0, 0, 1)` | Any CSS easing function                                            |
+| `dropDuration`  | `200`                        | [Drop animation](#drop-animation) duration in ms. `0` turns it off |
+| `dropEasing`    | `cubic-bezier(0.2, 0, 0, 1)` | Any CSS easing function                                            |
 
 - The slide is a `transform` animation, so it stays on the compositor. It works with virtual scrolling and with [dynamic heights](/guide/features/dynamic-heights).
 - It is skipped when the user has turned on reduced motion (`prefers-reduced-motion: reduce`).
 - If the placeholder moves again mid-slide, rows continue from where they currently are.
 - Drop positions are calculated from geometry, so a row that is still sliding never changes where an item lands.
-- Rows jump into their final order on drop or cancel.
+- Rows also slide on drop or cancel. After a drop they usually already sit in their final slots, so a slide in progress simply finishes. After a cancel, displaced rows slide back.
 - The slide is added on top of any `transform` you set on rows, so your own transforms are kept.
 
 The config is read each time an animation starts, so a getter can switch it at runtime, for example from a user setting:
@@ -62,6 +64,17 @@ The config is read each time an animation starts, so a getter can switch it at r
   },
 }
 ```
+
+## Drop animation
+
+With the same config, releasing an item no longer makes the preview vanish. The preview glides from where you let go onto the item's final position, then disappears. The real item stays invisible until the preview lands on it, so it is never shown twice. A cancelled drag (<kbd>Escape</kbd>) glides back to where the item started.
+
+- It is purely visual. `drop` and `dragEnd` fire right away, and the list is already in its new order while the preview travels.
+- The preview lands on the item as it is rendered after your `(drop)` handler. Commit the move in the handler (for example with `moveItem()` or `reorderItems()`). If you commit later, for example after a server call, the preview glides back to the item's old slot.
+- If the item is not rendered, or is scrolled out of its list's view, the preview fades out where it was released.
+- Starting a new drag ends the animation at once.
+- While it plays, the preview box has the class `vdnd-drag-preview-dropping`.
+- It is skipped under reduced motion, like the shift animation. Set `dropDuration: 0` to keep only the shift animation.
 
 ### Where it applies
 

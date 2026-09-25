@@ -219,18 +219,63 @@ describe('ShiftAnimator', () => {
     expect(animations.has(hidden)).toBe(false);
   });
 
-  it('cancels running animations when the drag ends', () => {
+  it('slides displaced rows back when the drag ends with them out of place', () => {
     const b = createElement(50);
     entries = [['b', b]];
     const animator = createAnimator();
     render(animator, true, 1);
     render(animator, true, 2, () => tops.set(b, 100));
     const running = lastAnimation(b)!;
+    running.progress = 1; // the displacement finished: b sits at 100
 
-    render(animator, false, -1, () => tops.set(b, 0));
+    // Cancel: the placeholder leaves and b returns to its original slot
+    render(animator, false, -1, () => tops.set(b, 50));
+
+    expect(running.cancel).toHaveBeenCalled();
+    expect(animations.get(b)?.length).toBe(2);
+    expect(fromY(lastAnimation(b))).toBe(50);
+  });
+
+  it('lets an in-flight slide finish when the drop leaves the row in place', () => {
+    const b = createElement(50);
+    entries = [['b', b]];
+    const animator = createAnimator();
+    render(animator, true, 1);
+    render(animator, true, 2, () => tops.set(b, 100));
+    const running = lastAnimation(b)!;
+    running.progress = 0.5;
+
+    // Drop: the item takes the placeholder's slot, so b's layout does not change
+    render(animator, false, -1);
+
+    expect(running.cancel).not.toHaveBeenCalled();
+    expect(animations.get(b)?.length).toBe(1);
+  });
+
+  it('snaps running animations on drag end when animation is turned off mid-drag', () => {
+    const b = createElement(50);
+    entries = [['b', b]];
+    const config: VdndAnimationConfig = { shiftDuration: 200 };
+    const animator = createAnimator(config);
+    render(animator, true, 1);
+    render(animator, true, 2, () => tops.set(b, 100));
+    const running = lastAnimation(b)!;
+
+    config.shiftDuration = 0;
+    render(animator, false, -1, () => tops.set(b, 50));
 
     expect(running.cancel).toHaveBeenCalled();
     expect(animations.get(b)?.length).toBe(1);
+  });
+
+  it('does not animate a drag end render when nothing was being dragged', () => {
+    const b = createElement(50);
+    entries = [['b', b]];
+    const animator = createAnimator();
+
+    render(animator, false, -1, () => tops.set(b, 100));
+
+    expect(animations.size).toBe(0);
   });
 
   it('does nothing when the duration is 0', () => {

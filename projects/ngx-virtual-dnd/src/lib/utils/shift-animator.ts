@@ -28,7 +28,7 @@ const MIN_SHIFT_PX = 0.5;
  * FLIP animator for items displaced by the drag placeholder.
  *
  * Call `beforeUpdate()` before the DOM reflects a new drag/placeholder state. When the
- * placeholder moved, it snapshots every rendered element's visual position, then after
+ * placeholder moved (or the drag ended), it snapshots every rendered element's visual position, then after
  * the render measures again and plays a compositor-only `transform` animation from the
  * old position to the new one.
  *
@@ -74,11 +74,19 @@ export class ShiftAnimator {
     this.#lastPlaceholderIndex = placeholderIndex;
 
     if (!isDragging) {
-      // Drop/cancel: the list re-renders with the committed order, so snap everything.
-      this.#snapshot = null;
-      if (wasDragging) {
-        this.cancelAll();
+      // Drop/cancel: one last pass slides rows from their drag layout into the committed
+      // order. After a drop the rows usually already sit in their final slots, so in-flight
+      // slides simply finish; after a cancel the displaced rows slide back.
+      // A pending snapshot already holds this tick's "before".
+      if (!wasDragging || this.#snapshot) {
+        return;
       }
+      if (!this.#isEnabled()) {
+        this.cancelAll();
+        return;
+      }
+      this.#snapshot = this.#measure();
+      afterNextRender(() => this.#play(), { injector: this.#injector });
       return;
     }
 
@@ -154,7 +162,7 @@ export class ShiftAnimator {
   #play(): void {
     const first = this.#snapshot;
     this.#snapshot = null;
-    if (!first || !this.#wasDragging) return;
+    if (!first) return;
 
     const last = this.#measure();
     const stale: HTMLElement[] = [];

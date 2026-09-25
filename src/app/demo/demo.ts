@@ -17,7 +17,11 @@ import {
   VirtualSortableListComponent,
 } from 'ngx-virtual-dnd';
 import { TopBarComponent } from '../top-bar/top-bar';
-import { DEMO_SHIFT_DURATION, DemoAnimationSettings } from '../demo-animation-settings';
+import {
+  DEMO_DROP_DURATION,
+  DEMO_SHIFT_DURATION,
+  DemoAnimationSettings,
+} from '../demo-animation-settings';
 
 interface Item {
   id: string;
@@ -70,12 +74,14 @@ export class DemoComponent {
   /**
    * Initial settings from the URL (e.g. `/?api=simplified&dragDelay=500`), so E2E tests and
    * shared links open the demo pre-configured instead of clicking through the panel.
-   * `shiftAnimation` is read separately by DemoAnimationSettings.
+   * `shiftAnimation` and `dropAnimation` are read separately by DemoAnimationSettings.
    */
   readonly #initial = readDemoSettings(inject(ActivatedRoute).snapshot.queryParamMap);
 
-  /** Whether displaced items slide (VDND_ANIMATION_CONFIG shift animation) */
-  readonly shiftAnimation = computed(() => this.#animationSettings.shiftDuration() > 0);
+  /** Whether displaced items slide and drops glide into place (VDND_ANIMATION_CONFIG) */
+  readonly shiftAnimation = computed(
+    () => this.#animationSettings.shiftDuration() > 0 || this.#animationSettings.dropDuration() > 0,
+  );
 
   /** Whether a drag is currently active (drives the debug live indicator). */
   readonly isDragging = this.#dragState.isDragging;
@@ -241,10 +247,11 @@ export class DemoComponent {
     this.constrainToContainer.set(checkbox.checked);
   }
 
-  /** Toggle the shift animation setting */
+  /** Toggle the shift and drop animation settings */
   toggleShiftAnimation(event: Event): void {
     const checkbox = event.target as HTMLInputElement;
     this.#animationSettings.shiftDuration.set(checkbox.checked ? DEMO_SHIFT_DURATION : 0);
+    this.#animationSettings.dropDuration.set(checkbox.checked ? DEMO_DROP_DURATION : 0);
   }
 
   /** Haptic tick on every item displacement (no-op where vibration is unsupported). */

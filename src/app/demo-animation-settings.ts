@@ -1,21 +1,26 @@
 import { inject, Injectable, signal } from '@angular/core';
 import { VDND_ANIMATION_CONFIG, VdndAnimationConfig } from 'ngx-virtual-dnd';
 
-/** Duration used when the demo toggle is switched on. */
+/** Shift animation duration used when the demo toggle is switched on. */
 export const DEMO_SHIFT_DURATION = 200;
 
+/** Drop animation duration used when the demo toggle is switched on. */
+export const DEMO_DROP_DURATION = 200;
+
 /**
- * Demo-wide shift animation duration (0 = off).
- * Initialized from the `?shiftAnimation=<ms>` query param so every demo page can opt in.
+ * Demo-wide shift and drop animation durations (0 = off).
+ * Initialized from the `?shiftAnimation=<ms>` and `?dropAnimation=<ms>` query params so every
+ * demo page can opt in.
  */
 @Injectable({ providedIn: 'root' })
 export class DemoAnimationSettings {
-  readonly shiftDuration = signal(readDurationParam());
+  readonly shiftDuration = signal(readDurationParam('shiftAnimation'));
+  readonly dropDuration = signal(readDurationParam('dropAnimation'));
 }
 
-function readDurationParam(): number {
+function readDurationParam(name: string): number {
   if (typeof location === 'undefined') return 0;
-  const value = Number(new URLSearchParams(location.search).get('shiftAnimation'));
+  const value = Number(new URLSearchParams(location.search).get(name));
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
@@ -29,6 +34,9 @@ export function provideDemoAnimationConfig() {
       return {
         get shiftDuration() {
           return settings.shiftDuration();
+        },
+        get dropDuration() {
+          return settings.dropDuration();
         },
       };
     },

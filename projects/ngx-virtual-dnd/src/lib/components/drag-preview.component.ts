@@ -6,14 +6,20 @@ import {
   effect,
   ElementRef,
   inject,
+  Injector,
   input,
   OnDestroy,
+  signal,
   TemplateRef,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { DragStateService } from '../services/drag-state.service';
 import { OverlayContainerService } from '../services/overlay-container.service';
+import { CursorPosition, DraggedItem, DragState } from '../models/drag-drop.models';
+import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
+import { DropAnimator, findDropTarget } from '../utils/drop-animator';
 
 /**
  * Context provided to the drag preview template.
@@ -27,12 +33,21 @@ export interface DragPreviewContext<T = unknown> {
   droppableId: string;
 }
 
+/** A preview that outlives its drag while it glides into the drop position. */
+interface SettlingPreview {
+  item: DraggedItem;
+  position: CursorPosition;
+}
+
 /**
  * Renders a preview of the dragged item that follows the cursor.
  *
  * The component automatically teleports itself into a body-level overlay container,
  * so it works correctly even inside ancestors with CSS `transform` (e.g. Ionic pages).
  * It can be placed anywhere in the component tree.
+ *
+ * When `VDND_ANIMATION_CONFIG` is provided, the preview stays up briefly after a drop or
+ * cancel and glides into the item's final position.
  *
  * @example
  * ```html
@@ -50,8 +65,10 @@ export interface DragPreviewContext<T = unknown> {
   template: `
     @if (isVisible()) {
       <div
+        #preview
         class="vdnd-drag-preview"
-        data-testid="vdnd-drag-preview"
+        [class.vdnd-drag-preview-dropping]="isSettling()"
+        [attr.data-testid]="isSettling() ? 'vdnd-drag-preview-dropping' : 'vdnd-drag-preview'"
         [style.transform]="transform()"
         [style.width.px]="dimensions().width"
         [style.height.px]="dimensions().height"
@@ -63,7 +80,7 @@ export interface DragPreviewContext<T = unknown> {
           <div class="vdnd-drag-preview-clone" #cloneContainer></div>
         } @else {
           <div class="vdnd-drag-preview-default">
-            {{ dragState.draggedItem()?.draggableId }}
+            {{ displayedItem()?.draggableId }}
           </div>
         }
       </div>
@@ -91,6 +108,8 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
   protected readonly dragState = inject(DragStateService);
   readonly #overlayContainer = inject(OverlayContainerService);
   readonly #elementRef = inject(ElementRef<HTMLElement>);
+  readonly #injector = inject(Injector);
+  readonly #dropAnimator = this.#createDropAnimator();
 
   /** Optional custom template for the preview */
   previewTemplate = input<TemplateRef<DragPreviewContext<T>>>();
@@ -101,6 +120,23 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
   /** Reference to the clone container element (cannot use ES private with viewChild) */
   private readonly cloneContainer = viewChild<ElementRef<HTMLElement>>('cloneContainer');
 
+  /** The rendered preview box (cannot use ES private with viewChild) */
+  private readonly previewElement = viewChild<ElementRef<HTMLElement>>('preview');
+
+  /** Set while the preview animates into the drop position after the drag ended */
+  readonly #settling = signal<SettlingPreview | null>(null);
+
+  /** Whether the drag was still active on the last state change (detects drag end) */
+  #wasDragging = false;
+
+  /** Whether the preview is playing the drop animation */
+  protected readonly isSettling = computed(() => this.#settling() !== null);
+
+  /** The item shown: the live dragged item, or the dropped one while it settles */
+  protected readonly displayedItem = computed(
+    () => this.dragState.draggedItem() ?? this.#settling()?.item ?? null,
+  );
+
   /** Whether this preview's template registration is currently counted (kept balanced). */
   #templateRegistered = false;
 
@@ -109,7 +145,7 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
     if (this.previewTemplate()) {
       return null; // Custom template takes precedence
     }
-    return this.dragState.draggedItem()?.clonedElement ?? null;
+    return this.displayedItem()?.clonedElement ?? null;
   });
 
   constructor() {
@@ -151,9 +187,25 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
         container.appendChild(clone);
       }
     });
+
+    // Drop animation: when a drag ends, keep the preview up and glide it into place.
+    // A new drag cuts any settle short.
+    effect(() => {
+      const isDragging = this.dragState.isDragging();
+      untracked(() => {
+        const wasDragging = this.#wasDragging;
+        this.#wasDragging = isDragging;
+        if (isDragging) {
+          this.#stopSettling();
+        } else if (wasDragging) {
+          this.#startSettling();
+        }
+      });
+    });
   }
 
   ngOnDestroy(): void {
+    this.#dropAnimator?.cancel();
     if (this.#templateRegistered) {
       this.#overlayContainer.setTemplatePreviewActive(false);
       this.#templateRegistered = false;
@@ -163,23 +215,38 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
 
   /** Whether the preview is visible */
   protected readonly isVisible = computed(() => {
-    return this.dragState.isDragging() && this.dragState.cursorPosition() !== null;
+    return (
+      (this.dragState.isDragging() && this.dragState.cursorPosition() !== null) || this.isSettling()
+    );
   });
 
   /** Position of the preview */
   protected readonly position = computed(() => {
-    const cursor = this.dragState.cursorPosition();
-    const grabOffset = this.dragState.grabOffset();
-    const fallbackOffset = this.cursorOffset();
-    const initialPosition = this.dragState.initialPosition();
-    const lockAxis = this.dragState.lockAxis();
+    const settling = this.#settling();
+    if (settling && !this.dragState.isDragging()) {
+      return settling.position;
+    }
+    return this.#positionFor({
+      cursorPosition: this.dragState.cursorPosition(),
+      grabOffset: this.dragState.grabOffset(),
+      initialPosition: this.dragState.initialPosition(),
+      lockAxis: this.dragState.lockAxis(),
+    });
+  });
+
+  #positionFor(
+    state: Pick<DragState, 'cursorPosition' | 'grabOffset' | 'initialPosition' | 'lockAxis'>,
+  ): CursorPosition {
+    const cursor = state.cursorPosition;
+    const initialPosition = state.initialPosition;
+    const lockAxis = state.lockAxis;
 
     if (!cursor) {
       return { x: 0, y: 0 };
     }
 
     // Use grab offset if available (preserves grab position), otherwise fall back to cursorOffset input
-    const offset = grabOffset ?? fallbackOffset;
+    const offset = state.grabOffset ?? this.cursorOffset();
 
     let x = cursor.x - offset.x;
     let y = cursor.y - offset.y;
@@ -196,7 +263,7 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
     }
 
     return { x, y };
-  });
+  }
 
   /** Transform-based positioning for better performance (avoid layout from left/top). */
   protected readonly transform = computed(() => {
@@ -206,7 +273,7 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
 
   /** Dimensions of the preview */
   protected readonly dimensions = computed(() => {
-    const item = this.dragState.draggedItem();
+    const item = this.displayedItem();
 
     if (!item) {
       return { width: 100, height: 50 };
@@ -220,7 +287,7 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
 
   /** Template context */
   protected readonly templateContext = computed((): DragPreviewContext<T> => {
-    const item = this.dragState.draggedItem();
+    const item = this.displayedItem();
 
     return {
       $implicit: (item?.data ?? null) as T,
@@ -228,4 +295,57 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
       droppableId: item?.droppableId ?? '',
     };
   });
+
+  #createDropAnimator(): DropAnimator | null {
+    const config = inject(VDND_ANIMATION_CONFIG, { optional: true });
+    return config ? new DropAnimator(config) : null;
+  }
+
+  /**
+   * Keep the ended drag's preview on screen, then (once the consumer's drop handler has
+   * re-rendered the lists) animate it onto the item's final position.
+   */
+  #startSettling(): void {
+    const ended = this.dragState.endedDragState();
+    if (!this.#dropAnimator?.isEnabled() || !ended?.draggedItem || !ended.cursorPosition) {
+      return;
+    }
+
+    const settling: SettlingPreview = {
+      item: ended.draggedItem,
+      position: this.#positionFor(ended),
+    };
+    this.#settling.set(settling);
+
+    // A normal drop lands in the target list; a cancel, a rejected drop or one the consumer
+    // has not committed yet leaves the item in its source list.
+    const droppableIds = this.dragState.wasCancelled()
+      ? [ended.sourceDroppableId]
+      : [ended.activeDroppableId, ended.sourceDroppableId];
+
+    afterNextRender(
+      () => {
+        if (this.#settling() !== settling) {
+          return;
+        }
+        const ghost = this.previewElement()?.nativeElement;
+        if (!ghost || !this.#dropAnimator) {
+          this.#settling.set(null);
+          return;
+        }
+        const target = findDropTarget(settling.item.draggableId, droppableIds);
+        this.#dropAnimator.play(ghost, target, () => {
+          if (this.#settling() === settling) {
+            this.#settling.set(null);
+          }
+        });
+      },
+      { injector: this.#injector },
+    );
+  }
+
+  #stopSettling(): void {
+    this.#dropAnimator?.cancel();
+    this.#settling.set(null);
+  }
 }

@@ -1,9 +1,10 @@
-import { Component, TemplateRef, viewChild } from '@angular/core';
+import { ApplicationRef, Component, TemplateRef, viewChild } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DragPreviewComponent, DragPreviewContext } from './drag-preview.component';
 import { DragStateService } from '../services/drag-state.service';
 import { OverlayContainerService } from '../services/overlay-container.service';
 import { CursorPosition, DraggedItem, GrabOffset } from '../models/drag-drop.models';
+import { VDND_ANIMATION_CONFIG, VdndAnimationConfig } from '../tokens/animation-config.token';
 
 interface TestItemData {
   id: string;
@@ -39,6 +40,16 @@ class CustomTemplateTestHostComponent {
     viewChild.required<TemplateRef<DragPreviewContext<TestItemData>>>('customTemplate');
   cursorOffset = { x: 8, y: 8 };
 }
+
+// Test host with the drop animation turned on
+const animationConfig: VdndAnimationConfig = {};
+
+@Component({
+  template: ` <vdnd-drag-preview /> `,
+  imports: [DragPreviewComponent],
+  providers: [{ provide: VDND_ANIMATION_CONFIG, useValue: animationConfig }],
+})
+class AnimatedTestHostComponent {}
 
 describe('DragPreviewComponent', () => {
   const createMockDraggedItem = (overrides?: Partial<DraggedItem>): DraggedItem => {
@@ -363,6 +374,148 @@ describe('DragPreviewComponent', () => {
 
       expect(cloneContainer).toBeNull();
       expect(customPreview).not.toBeNull();
+    });
+  });
+
+  describe('drop animation', () => {
+    const originalAnimate = Element.prototype.animate;
+    let fixture: ComponentFixture<AnimatedTestHostComponent>;
+    let dragStateService: DragStateService;
+    let overlayContainerService: OverlayContainerService;
+    let animations: Map<Element, { keyframes: Keyframe[]; cancel: jest.Mock; finish: () => void }>;
+
+    /** Change detection plus the afterNextRender hooks that follow it. */
+    const render = (): void => {
+      fixture.detectChanges();
+      TestBed.inject(ApplicationRef).tick();
+    };
+
+    const addListItem = (droppableId: string, draggableId: string, top: number): HTMLElement => {
+      let droppable = document.querySelector<HTMLElement>(`[data-droppable-id="${droppableId}"]`);
+      if (!droppable) {
+        droppable = document.createElement('div');
+        droppable.setAttribute('data-droppable-id', droppableId);
+        droppable.getBoundingClientRect = () =>
+          ({ left: 0, top: 0, right: 300, bottom: 500, width: 300, height: 500 }) as DOMRect;
+        document.body.appendChild(droppable);
+      }
+      const item = document.createElement('div');
+      item.setAttribute('data-draggable-id', draggableId);
+      item.getBoundingClientRect = () =>
+        ({ left: 0, top, right: 200, bottom: top + 50, width: 200, height: 50 }) as DOMRect;
+      droppable.appendChild(item);
+      return item;
+    };
+
+    const startDrag = (activeDroppableId = 'list-1'): void => {
+      dragStateService.startDrag(
+        createMockDraggedItem(),
+        { x: 100, y: 100 },
+        { x: 10, y: 10 },
+        null,
+        activeDroppableId,
+        null,
+        2,
+        0,
+      );
+      render();
+    };
+
+    beforeEach(() => {
+      delete animationConfig.dropDuration;
+      animations = new Map();
+      Element.prototype.animate = function (this: Element, keyframes: Keyframe[]) {
+        const animation = {
+          keyframes,
+          cancel: jest.fn(),
+          onfinish: null as (() => void) | null,
+          finish: () => animation.onfinish?.(),
+        };
+        animations.set(this, animation);
+        return animation as unknown as Animation;
+      } as typeof Element.prototype.animate;
+
+      TestBed.configureTestingModule({ imports: [AnimatedTestHostComponent] });
+      fixture = TestBed.createComponent(AnimatedTestHostComponent);
+      dragStateService = TestBed.inject(DragStateService);
+      overlayContainerService = TestBed.inject(OverlayContainerService);
+      render();
+    });
+
+    afterEach(() => {
+      Element.prototype.animate = originalAnimate;
+      fixture.destroy();
+      overlayContainerService.ngOnDestroy();
+      document.querySelectorAll('[data-droppable-id]').forEach((el) => el.remove());
+    });
+
+    it('keeps the preview at the release point and glides it onto the dropped item', () => {
+      const landed = addListItem('list-1', 'item-1', 120);
+      startDrag();
+
+      dragStateService.endDrag();
+      render();
+
+      const preview = queryPreview('.vdnd-drag-preview')!;
+      expect(preview.getAttribute('data-testid')).toBe('vdnd-drag-preview-dropping');
+      expect(preview.style.transform).toBe('translate3d(90px, 90px, 0)');
+      // The preview travels to the item, which stays invisible until it lands
+      expect(animations.get(preview)?.keyframes.at(-1)?.['width']).toBe('200px');
+      expect(animations.get(landed)?.keyframes).toEqual([{ opacity: 0 }, { opacity: 0 }]);
+
+      animations.get(preview)!.finish();
+      render();
+
+      expect(queryPreview('.vdnd-drag-preview')).toBeNull();
+      expect(animations.get(landed)!.cancel).toHaveBeenCalled();
+    });
+
+    it('fades out in place when the dropped item is not rendered', () => {
+      startDrag();
+
+      dragStateService.cancelDrag();
+      render();
+
+      const preview = queryPreview('.vdnd-drag-preview')!;
+      expect(animations.get(preview)?.keyframes).toEqual([{ opacity: 1 }, { opacity: 0 }]);
+    });
+
+    it('returns a cancelled drag to the source list, not the hovered one', () => {
+      const original = addListItem('list-1', 'item-1', 0);
+      const hovered = addListItem('list-2', 'item-1', 200);
+      startDrag('list-2');
+
+      dragStateService.cancelDrag();
+      render();
+
+      expect(animations.has(original)).toBe(true);
+      expect(animations.has(hovered)).toBe(false);
+    });
+
+    it('a new drag cuts the drop animation short', () => {
+      const landed = addListItem('list-1', 'item-1', 120);
+      startDrag();
+      dragStateService.endDrag();
+      render();
+      const glide = animations.get(queryPreview('.vdnd-drag-preview')!)!;
+
+      startDrag();
+
+      expect(glide.cancel).toHaveBeenCalled();
+      expect(animations.get(landed)!.cancel).toHaveBeenCalled();
+      const preview = queryPreview('.vdnd-drag-preview')!;
+      expect(preview.getAttribute('data-testid')).toBe('vdnd-drag-preview');
+    });
+
+    it('hides the preview immediately when the drop duration is 0', () => {
+      animationConfig.dropDuration = 0;
+      startDrag();
+
+      dragStateService.endDrag();
+      render();
+
+      expect(queryPreview('.vdnd-drag-preview')).toBeNull();
+      expect(animations.size).toBe(0);
     });
   });
 });
