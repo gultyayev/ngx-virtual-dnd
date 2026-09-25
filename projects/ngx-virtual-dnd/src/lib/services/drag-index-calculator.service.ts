@@ -5,7 +5,7 @@ import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 
 interface DroppableCache {
   droppableId: string | null;
-  containerType: 'virtualScroll' | 'virtualContent' | 'fallback';
+  containerType: 'viewport' | 'virtualScroll' | 'virtualContent' | 'fallback';
   scrollContainer: HTMLElement;
   virtualScrollElement: HTMLElement | null;
   virtualContentElement: HTMLElement | null;
@@ -13,6 +13,24 @@ interface DroppableCache {
   itemHeight: number;
   isConstrainedToContainer: boolean;
   strategy: VirtualScrollStrategy | null;
+}
+
+/** Where a droppable's rows are, relative to the element they scroll in. */
+export interface DroppableScrollGeometry {
+  /** Viewport rect of the element the rows scroll in */
+  rect: DOMRect;
+  /**
+   * How far the rows are scrolled: a row's offset from the first row (as in
+   * `VirtualScrollStrategy.getOffsetForIndex`) is `rowTop - rect.top + scrollTop`. Space reserved
+   * above the rows (`contentOffset`) is already subtracted.
+   */
+  scrollTop: number;
+  /**
+   * Whether the container virtualizes its rows itself (`vdnd-virtual-scroll`,
+   * `vdnd-virtual-content`), so a row's index can't be counted from the rows before it. A
+   * viewport's rows are virtualized by `*vdndVirtualFor`, which registers a strategy.
+   */
+  isVirtual: boolean;
 }
 
 @Injectable({
@@ -58,6 +76,7 @@ export class DragIndexCalculatorService {
     const cached = this.#droppableCache.get(droppableElement);
     if (cached) return cached;
 
+    const isViewport = droppableElement.hasAttribute('data-virtual-viewport');
     const virtualScrollElement = droppableElement.querySelector(
       'vdnd-virtual-scroll',
     ) as HTMLElement | null;
@@ -71,7 +90,12 @@ export class DragIndexCalculatorService {
     let scrollContainer: HTMLElement;
     let scrollableParent: HTMLElement | null = null;
 
-    if (virtualScrollElement) {
+    if (isViewport) {
+      // The viewport scrolls its own rows. Checked first so a list nested in a row is not
+      // mistaken for this one.
+      containerType = 'viewport';
+      scrollContainer = droppableElement;
+    } else if (virtualScrollElement) {
       containerType = 'virtualScroll';
       scrollContainer = virtualScrollElement;
     } else if (virtualContentElement) {
@@ -120,6 +144,17 @@ export class DragIndexCalculatorService {
     return this.#getTotalItemCount(args.droppableElement, args.isSameList, args.draggedItemHeight);
   }
 
+  /**
+   * Live scroll geometry of a droppable's rows (see {@link DroppableScrollGeometry}). The same
+   * measurement places the placeholder and finds the dragged item's source index.
+   */
+  getScrollGeometry(
+    droppableElement: HTMLElement,
+    draggedItemHeight: number,
+  ): DroppableScrollGeometry {
+    return this.#getScrollGeometry(this.#resolveDroppable(droppableElement, draggedItemHeight));
+  }
+
   calculatePlaceholderIndex(args: {
     droppableElement: HTMLElement;
     position: CursorPosition;
@@ -146,23 +181,7 @@ export class DragIndexCalculatorService {
     const cache = this.#resolveDroppable(droppableElement, draggedItemHeight);
 
     // Live reads: getBoundingClientRect() and scrollTop change during scroll
-    let currentScrollTop: number;
-    let rect: DOMRect;
-
-    if (cache.containerType === 'virtualScroll') {
-      rect = cache.scrollContainer.getBoundingClientRect();
-      currentScrollTop = cache.scrollContainer.scrollTop;
-    } else if (cache.containerType === 'virtualContent' && cache.scrollableParent) {
-      rect = cache.scrollContainer.getBoundingClientRect();
-      const contentOffsetAttr = cache.virtualContentElement!.getAttribute('data-content-offset');
-      const contentOffset = contentOffsetAttr ? parseFloat(contentOffsetAttr) : 0;
-      const offsetValue = Number.isFinite(contentOffset) ? contentOffset : 0;
-      currentScrollTop = cache.scrollContainer.scrollTop - offsetValue;
-    } else {
-      rect = cache.scrollContainer.getBoundingClientRect();
-      currentScrollTop =
-        cache.containerType === 'virtualContent' ? 0 : cache.scrollContainer.scrollTop;
-    }
+    const { rect, scrollTop: currentScrollTop } = this.#getScrollGeometry(cache);
 
     const {
       strategy,
@@ -265,6 +284,39 @@ export class DragIndexCalculatorService {
     placeholderIndex = Math.max(0, Math.min(placeholderIndex, totalItems));
 
     return { index: placeholderIndex, placeholderId: END_OF_LIST };
+  }
+
+  #getScrollGeometry(cache: DroppableCache): DroppableScrollGeometry {
+    const { containerType, scrollContainer } = cache;
+    const rect = scrollContainer.getBoundingClientRect();
+    const isVirtual = containerType === 'virtualScroll' || containerType === 'virtualContent';
+
+    switch (containerType) {
+      case 'viewport':
+        return {
+          rect,
+          scrollTop: scrollContainer.scrollTop - this.#readContentOffset(scrollContainer),
+          isVirtual,
+        };
+      case 'virtualContent':
+        // Without a vdndScrollable parent the content element itself is measured, unscrolled
+        return cache.scrollableParent
+          ? {
+              rect,
+              scrollTop:
+                scrollContainer.scrollTop - this.#readContentOffset(cache.virtualContentElement),
+              isVirtual,
+            }
+          : { rect, scrollTop: 0, isVirtual };
+      default:
+        return { rect, scrollTop: scrollContainer.scrollTop, isVirtual };
+    }
+  }
+
+  /** The `data-content-offset` (px reserved above the rows) of a virtual container, or 0. */
+  #readContentOffset(element: HTMLElement | null): number {
+    const offset = parseFloat(element?.getAttribute('data-content-offset') ?? '');
+    return Number.isFinite(offset) ? offset : 0;
   }
 
   #getTotalItemCount(
