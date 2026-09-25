@@ -1,5 +1,6 @@
 import { NgZone } from '@angular/core';
 import { CursorPosition } from '../models/drag-drop.models';
+import { INTERACTIVE_ELEMENT_SELECTOR, NO_DRAG_CLASS } from '../utils/interactive-elements';
 
 /**
  * Callbacks from the handler back into the directive for drag lifecycle.
@@ -110,10 +111,7 @@ export class PointerDragHandler {
 
     // Check for elements that should not trigger drag
     const target = event.target as HTMLElement;
-    if (
-      target.closest('button, input, textarea, select, [contenteditable]') ||
-      target.classList.contains('no-drag')
-    ) {
+    if (target.closest(INTERACTIVE_ELEMENT_SELECTOR) || target.classList.contains(NO_DRAG_CLASS)) {
       return;
     }
 
