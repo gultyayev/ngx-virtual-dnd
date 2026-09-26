@@ -21,6 +21,32 @@ test.describe('Keyboard Drag - Basic Operations', () => {
     await expect(demoPage.placeholder).toBeVisible();
   });
 
+  test('Space on another item during a mouse drag does not start a keyboard drag', async ({
+    page,
+  }) => {
+    await demoPage.goto();
+    const firstId = await demoPage.getItemId('list1', 0);
+    const thirdId = await demoPage.getItemId('list1', 2);
+    const first = page.locator(`[data-draggable-id="${firstId}"]`);
+    const third = page.locator(`[data-draggable-id="${thirdId}"]`);
+
+    const start = await demoPage.startDrag(first);
+    await third.focus();
+    await afterInputHandled(page, 'keyup', () => page.keyboard.press('Space'));
+
+    await expect(third).toHaveAttribute('aria-grabbed', 'false');
+    await expect(first).toHaveAttribute('aria-grabbed', 'true');
+
+    // The mouse drag still owns the drag: releasing drops the first item where it started
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.up();
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'false');
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '0');
+    await expect(third).toHaveAttribute('aria-grabbed', 'false');
+    expect(await demoPage.getItemId('list1', 0)).toBe(firstId);
+  });
+
   for (const dropKey of ['Space', 'Enter'] as const) {
     test(`should drop item with ${dropKey} key during keyboard drag`, async ({ page }) => {
       await demoPage.goto();

@@ -7,6 +7,7 @@ describe('PointerDragHandler', () => {
   let mockCallbacks: PointerDragCallbacks;
   let mockContext: any;
   let isDragging: boolean;
+  let otherDragActive: boolean;
 
   const createElement = (): HTMLElement => {
     const el = document.createElement('div');
@@ -69,6 +70,7 @@ describe('PointerDragHandler', () => {
 
   beforeEach(() => {
     isDragging = false;
+    otherDragActive = false;
 
     mockNgZone = {
       runOutsideAngular: jest.fn((fn: () => void) => fn()),
@@ -84,6 +86,7 @@ describe('PointerDragHandler', () => {
       }),
       onPendingChange: jest.fn(),
       isDragging: jest.fn(() => isDragging),
+      isOtherDragActive: jest.fn(() => otherDragActive),
     };
 
     mockContext = {
@@ -329,6 +332,81 @@ describe('PointerDragHandler', () => {
       document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
 
       expect(mockCallbacks.onDragStart).toHaveBeenCalledWith({ x: 160, y: 220 });
+    });
+  });
+
+  describe('another drag in progress', () => {
+    it('should ignore a press while another drag is active', () => {
+      const addSpy = jest.spyOn(document, 'addEventListener');
+      otherDragActive = true;
+
+      handler.onPointerDown(createMouseDown(150, 220), false);
+
+      expect(addSpy).not.toHaveBeenCalled();
+      expect(handler.getStartPosition()).toBeNull();
+    });
+
+    it('should keep a rejected mouse press from moving focus or selecting text', () => {
+      otherDragActive = true;
+      const event = createMouseDown(150, 220);
+
+      handler.onPointerDown(event, false);
+
+      // Focusing this item mid-drag would route the next key (Space) to the wrong draggable
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('should leave a rejected touch alone when a drag delay lets the page scroll', () => {
+      otherDragActive = true;
+      mockContext.dragDelay = 200;
+      const event = createTouchStart(150, 220);
+
+      handler.onPointerDown(event, true);
+
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it('should let a press on a control in another item focus it as usual', () => {
+      otherDragActive = true;
+      const input = document.createElement('input');
+      mockContext.element.appendChild(input);
+      const event = createMouseEvent('mousedown', 150, 220, 0, input);
+
+      handler.onPointerDown(event, false);
+
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it('should drop a pending press instead of marking it ready when another drag started', () => {
+      jest.useFakeTimers();
+      try {
+        mockContext.dragDelay = 200;
+        handler.onPointerDown(createTouchStart(150, 220), true);
+        otherDragActive = true;
+
+        jest.advanceTimersByTime(200);
+
+        expect(mockCallbacks.onPendingChange).not.toHaveBeenCalledWith(true);
+        expect(handler.getStartPosition()).toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should drop a pending press when another drag starts before the threshold is crossed', () => {
+      const removeSpy = jest.spyOn(document, 'removeEventListener');
+      handler.onPointerDown(createTouchStart(150, 220), true);
+      otherDragActive = true;
+
+      const move = createTouchEvent('touchmove', 160, 220);
+      document.dispatchEvent(move);
+
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+      expect(mockCallbacks.onDragMove).not.toHaveBeenCalled();
+      expect(handler.getStartPosition()).toBeNull();
+      expect(removeSpy).toHaveBeenCalledWith('touchmove', expect.any(Function));
+      // The other drag owns the gesture: leave its touchmove alone
+      expect(move.defaultPrevented).toBe(false);
     });
   });
 

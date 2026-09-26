@@ -446,6 +446,148 @@ describe('DraggableDirective', () => {
     });
   });
 
+  describe('while another drag is active', () => {
+    let otherElement: HTMLElement;
+
+    beforeEach(() => {
+      otherElement = document.createElement('div');
+      document.body.appendChild(otherElement);
+    });
+
+    afterEach(() => {
+      otherElement.remove();
+    });
+
+    function startOtherDrag(isKeyboardDrag = false): void {
+      dragStateService.startDrag(
+        {
+          draggableId: 'other-item',
+          droppableId: 'foreign-list',
+          element: otherElement,
+          height: 50,
+          width: 200,
+        },
+        { x: 10, y: 10 },
+        undefined,
+        null,
+        'foreign-list',
+        null,
+        0,
+        0,
+        isKeyboardDrag,
+      );
+    }
+
+    it('should not start a pointer drag that would replace an active drag', () => {
+      startOtherDrag();
+
+      attemptPointerDrag(draggableNative);
+
+      expect(dragStateService.draggedItem()?.draggableId).toBe('other-item');
+      expect(component.dragStartEvents).toEqual([]);
+    });
+
+    it('should not start a pointer drag that would replace an active keyboard drag', () => {
+      startOtherDrag(true);
+
+      attemptPointerDrag(draggableNative);
+
+      expect(dragStateService.draggedItem()?.draggableId).toBe('other-item');
+      expect(dragStateService.isKeyboardDrag()).toBe(true);
+      expect(component.dragStartEvents).toEqual([]);
+    });
+
+    it("should not take focus from a press during another item's keyboard drag", () => {
+      startOtherDrag(true);
+      const press = new MouseEvent('mousedown', {
+        clientX: 100,
+        clientY: 100,
+        button: 0,
+        bubbles: true,
+        cancelable: true,
+      });
+
+      draggableNative.dispatchEvent(press);
+
+      // A focused item would take the next Space and end the keyboard drag in its own name
+      expect(press.defaultPrevented).toBe(true);
+      expect(dragStateService.isKeyboardDrag()).toBe(true);
+    });
+
+    it('should not start a pending press once another drag has started', () => {
+      // Both presses land before either crosses the threshold (two fingers on a touch screen)
+      draggableNative.dispatchEvent(
+        new MouseEvent('mousedown', {
+          clientX: 100,
+          clientY: 100,
+          button: 0,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      startOtherDrag();
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 120 }));
+
+      expect(dragStateService.draggedItem()?.draggableId).toBe('other-item');
+      expect(component.dragStartEvents).toEqual([]);
+      expect(component.dragEndEvents).toEqual([]);
+    });
+
+    it('should clear the pending state of a press that loses the race to another drag', () => {
+      component.dragDelay.set(100);
+      fixture.detectChanges();
+      jest.useFakeTimers();
+      try {
+        draggableNative.dispatchEvent(
+          new MouseEvent('mousedown', {
+            clientX: 100,
+            clientY: 100,
+            button: 0,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        jest.advanceTimersByTime(100);
+        fixture.detectChanges();
+        expect(draggableNative.classList.contains('vdnd-drag-pending')).toBe(true);
+
+        startOtherDrag();
+        document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 120 }));
+        fixture.detectChanges();
+
+        expect(draggableNative.classList.contains('vdnd-drag-pending')).toBe(false);
+        expect(component.dragStartEvents).toEqual([]);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should not start a keyboard drag that would replace an active pointer drag', () => {
+      startOtherDrag();
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+
+      draggableNative.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+
+      expect(keyboardDrag.isActive()).toBe(false);
+      expect(dragStateService.draggedItem()?.draggableId).toBe('other-item');
+      expect(component.dragStartEvents).toEqual([]);
+    });
+
+    it('should start a pointer drag again once the other drag has ended', () => {
+      startOtherDrag();
+      attemptPointerDrag(draggableNative);
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 100, clientY: 120 }));
+      dragStateService.endDrag();
+
+      attemptPointerDrag(draggableNative);
+
+      expect(dragStateService.draggedItem()?.draggableId).toBe('test-item');
+      expect(component.dragStartEvents.length).toBe(1);
+    });
+  });
+
   describe('axis locking input', () => {
     it('should store null lockAxis in drag state when no axis is locked', () => {
       component.lockAxis.set(null);
