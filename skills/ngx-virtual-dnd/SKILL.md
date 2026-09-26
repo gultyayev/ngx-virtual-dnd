@@ -326,6 +326,7 @@ Measurement relies on rules 3 and 7: the measured element is the one whose `data
 - **`dragDelay`** (default `0`) — ms the pointer must be held first. Moving past the threshold before the delay ends aborts the drag, so touch users can still scroll the list. When the delay has passed the element gets `vdnd-drag-pending` — style it to show the item is ready.
 - **`lockAxis`** — names the axis that is **frozen**: `'x'` → vertical-only movement, `'y'` → horizontal-only. This is the opposite of Angular CDK's `cdkDragLockAxis`.
 - **`disabled`** — the item cannot be dragged and gets `tabindex="-1"` and `vdnd-draggable-disabled`.
+- **One drag at a time** — while an item is being dragged (pointer or keyboard), presses and `Space` on other items do not start a second drag, so a second finger on a touch screen cannot take over the drag.
 
 ## Droppable and list options
 
