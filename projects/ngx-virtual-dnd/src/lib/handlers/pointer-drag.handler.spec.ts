@@ -231,6 +231,60 @@ describe('PointerDragHandler', () => {
       expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
     });
 
+    it('should ignore presses on elements inside a no-drag element', () => {
+      const addSpy = jest.spyOn(document, 'addEventListener');
+      const noDragEl = document.createElement('div');
+      noDragEl.classList.add('no-drag');
+      const label = document.createElement('span');
+      noDragEl.appendChild(label);
+      mockContext.element.appendChild(noDragEl);
+
+      handler.onPointerDown(createMouseEvent('mousedown', 150, 220, 0, label), false);
+
+      expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
+    });
+
+    it('should ignore touches on an SVG icon inside a no-drag element', () => {
+      const addSpy = jest.spyOn(document, 'addEventListener');
+      const noDragEl = document.createElement('div');
+      noDragEl.classList.add('no-drag');
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      icon.appendChild(path);
+      noDragEl.appendChild(icon);
+      mockContext.element.appendChild(noDragEl);
+
+      const event = createTouchEvent('touchstart', 150, 220);
+      Object.defineProperty(event, 'target', { value: path });
+      handler.onPointerDown(event, true);
+
+      expect(addSpy).not.toHaveBeenCalledWith('touchmove', expect.any(Function), expect.anything());
+    });
+
+    it('should ignore presses anywhere inside a draggable that carries no-drag itself', () => {
+      const addSpy = jest.spyOn(document, 'addEventListener');
+      mockContext.element.classList.add('no-drag');
+      const content = document.createElement('span');
+      mockContext.element.appendChild(content);
+
+      handler.onPointerDown(createMouseEvent('mousedown', 150, 220, 0, content), false);
+
+      expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
+    });
+
+    it('should start tracking when the no-drag element is an ancestor of the draggable', () => {
+      const addSpy = jest.spyOn(document, 'addEventListener');
+      const outer = document.createElement('div');
+      outer.classList.add('no-drag');
+      outer.appendChild(mockContext.element);
+      const content = document.createElement('span');
+      mockContext.element.appendChild(content);
+
+      handler.onPointerDown(createMouseEvent('mousedown', 150, 220, 0, content), false);
+
+      expect(addSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+    });
+
     it('should ignore pointer down outside the drag handle', () => {
       const addSpy = jest.spyOn(document, 'addEventListener');
       mockContext.dragHandle = '.handle';

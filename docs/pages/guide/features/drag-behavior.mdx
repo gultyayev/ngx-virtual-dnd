@@ -21,11 +21,11 @@ Make the handle a non-interactive element such as a `<span>`. Presses inside but
 
 ## Interactive children
 
-Presses inside a `button`, `input`, `textarea`, `select` or `[contenteditable]` element never start a drag, so controls inside rows keep working. To exclude another element, add the `no-drag` class. It applies only to the exact element that is pressed, not to its children. Only the primary mouse button starts a drag.
+Presses inside a `button`, `input`, `textarea`, `select` or `[contenteditable]` element never start a drag, so controls inside rows keep working. To exclude another element, add the `no-drag` class. It covers the element and everything inside it, such as its text and icons. Only the primary mouse button starts a drag.
 
 Other interactive elements are not recognized, for example a web component whose input is inside its shadow DOM, or an element with `role="switch"`. Add `no-drag` to them. For a web component, add it to the component element itself: presses inside its shadow DOM reach the row as presses on that element.
 
-The same goes for the keyboard: <kbd>Space</kbd> pressed in one of these controls (or on a `no-drag` element) inside a row types a space or clicks the button instead of picking the row up. The drag handle is the exception: <kbd>Space</kbd> on it picks the row up, even when it is a button.
+The same goes for the keyboard: <kbd>Space</kbd> pressed in one of these controls (or inside a `no-drag` element) inside a row types a space or clicks the button instead of picking the row up. The drag handle is the exception: <kbd>Space</kbd> on it picks the row up, even when it is a button. So is the row itself: with `no-drag` on the draggable element, pointer presses never start a drag, but <kbd>Space</kbd> on the row still picks it up. To turn dragging off, use `disabled`.
 
 ## Threshold and delay
 
