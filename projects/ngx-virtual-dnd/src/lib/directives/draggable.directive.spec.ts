@@ -651,6 +651,84 @@ describe('DraggableDirective', () => {
       expect(component.dragStartEvents).toEqual([]);
     });
 
+    it('should let Space reach an element inside a no-drag element instead of starting a drag', () => {
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      const region = draggableNative.querySelector('.content') as HTMLElement;
+      region.classList.add('no-drag');
+      const customControl = document.createElement('span');
+      customControl.tabIndex = 0;
+      region.appendChild(customControl);
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+      });
+      customControl.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(false);
+      expect(keyboardDrag.isActive()).toBe(false);
+      expect(component.dragStartEvents).toEqual([]);
+    });
+
+    describe('on a draggable that carries no-drag itself', () => {
+      beforeEach(() => {
+        draggableNative.classList.add('no-drag');
+      });
+
+      it('should still pick the item up with Space on the draggable', () => {
+        const keyboardDrag = TestBed.inject(KeyboardDragService);
+        const space = new KeyboardEvent('keydown', {
+          key: ' ',
+          code: 'Space',
+          bubbles: true,
+          cancelable: true,
+        });
+        draggableNative.dispatchEvent(space);
+
+        expect(space.defaultPrevented).toBe(true);
+        expect(keyboardDrag.isActive()).toBe(true);
+      });
+
+      it('should let Space reach an element inside it instead of starting a drag', () => {
+        const keyboardDrag = TestBed.inject(KeyboardDragService);
+        const content = draggableNative.querySelector('.content') as HTMLElement;
+        content.tabIndex = 0;
+        const space = new KeyboardEvent('keydown', {
+          key: ' ',
+          code: 'Space',
+          bubbles: true,
+          cancelable: true,
+        });
+        content.dispatchEvent(space);
+
+        expect(space.defaultPrevented).toBe(false);
+        expect(keyboardDrag.isActive()).toBe(false);
+        expect(component.dragStartEvents).toEqual([]);
+      });
+    });
+
+    it('should pick the item up with Space inside a draggable that sits in a no-drag element', () => {
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      const outer = document.createElement('div');
+      outer.classList.add('no-drag');
+      draggableNative.parentElement!.insertBefore(outer, draggableNative);
+      outer.appendChild(draggableNative);
+      const content = draggableNative.querySelector('.content') as HTMLElement;
+      content.tabIndex = 0;
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+      });
+      content.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(true);
+      expect(keyboardDrag.isActive()).toBe(true);
+      expect(component.dragStartEvents.length).toBe(1);
+    });
+
     it('should pick the item up with Space on a button that is the drag handle', () => {
       component.dragHandle.set('button');
       fixture.detectChanges();
