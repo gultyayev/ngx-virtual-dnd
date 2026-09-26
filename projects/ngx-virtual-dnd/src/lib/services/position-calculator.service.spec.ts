@@ -222,6 +222,69 @@ describe('PositionCalculatorService', () => {
       expect(result).toBeNull();
     });
 
+    /** Append a chain of `depth` nested divs under `parent`; returns the innermost. */
+    const nest = (parent: HTMLElement, depth: number): HTMLElement => {
+      let current = parent;
+      for (let i = 0; i < depth; i++) {
+        const child = document.createElement('div');
+        current.appendChild(child);
+        current = child;
+      }
+      return current;
+    };
+
+    it('should find a droppable parent any number of levels up', () => {
+      // Component wrappers and layout shells between a list and its rows
+      const deepDraggable = nest(droppable, 20);
+      deepDraggable.setAttribute('data-draggable-id', 'deep-draggable');
+
+      expect(service.getDroppableParent(deepDraggable, 'test-group')).toBe(droppable);
+    });
+
+    it('should skip droppables of other groups on the way up', () => {
+      const otherGroup = nest(droppable, 3);
+      otherGroup.setAttribute('data-droppable-group', 'other-group');
+      const deepDraggable = nest(otherGroup, 17);
+
+      expect(service.getDroppableParent(deepDraggable, 'test-group')).toBe(droppable);
+      expect(service.getDroppableParent(deepDraggable, 'other-group')).toBe(otherGroup);
+    });
+
+    it('should find a draggable parent any number of levels up', () => {
+      const deepTarget = nest(draggable, 20);
+
+      expect(service.getDraggableParent(deepTarget)).toBe(draggable);
+    });
+
+    it('should skip elements with an empty draggable ID', () => {
+      const unnamed = nest(draggable, 2);
+      unnamed.setAttribute('data-draggable-id', '');
+      const target = nest(unnamed, 2);
+
+      expect(service.getDraggableParent(target)).toBe(draggable);
+    });
+
+    it('should not match an empty group name', () => {
+      const unnamed = nest(droppable, 1);
+      unnamed.setAttribute('data-droppable-group', '');
+
+      expect(service.getDroppableParent(nest(unnamed, 1), '')).toBeNull();
+    });
+
+    it('should not treat <body> as a droppable or draggable', () => {
+      document.body.setAttribute('data-droppable-group', 'body-group');
+      document.body.setAttribute('data-draggable-id', 'body');
+      try {
+        const orphan = nest(container, 1);
+
+        expect(service.getDroppableParent(orphan, 'body-group')).toBeNull();
+        expect(service.getDraggableParent(orphan)).toBeNull();
+      } finally {
+        document.body.removeAttribute('data-droppable-group');
+        document.body.removeAttribute('data-draggable-id');
+      }
+    });
+
     it('should get draggable ID from element', () => {
       const id = service.getDraggableId(draggable);
       expect(id).toBe('test-draggable');
