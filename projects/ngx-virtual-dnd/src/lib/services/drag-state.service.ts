@@ -91,7 +91,11 @@ export class DragStateService {
   /** ID of the droppable currently being hovered over */
   readonly activeDroppableId = this.#activeDroppableId.asReadonly();
 
-  /** `END_OF_LIST` while a droppable is targeted, otherwise null; see placeholderIndex */
+  /**
+   * `END_OF_LIST` while a droppable is targeted, otherwise null.
+   * @deprecated It never identifies an item. Use `placeholderIndex`. Will be removed in the next
+   * major version.
+   */
   readonly placeholderId = this.#placeholderId.asReadonly();
 
   /** Index where the placeholder should be inserted */
@@ -142,6 +146,7 @@ export class DragStateService {
 
   /**
    * Start a drag operation.
+   * `placeholderId` is deprecated with the `placeholderId` signal; the library passes `END_OF_LIST`.
    */
   startDrag(
     item: DraggedItem,
@@ -177,6 +182,7 @@ export class DragStateService {
 
   /**
    * Update the drag position and targets.
+   * `placeholderId` is deprecated with the `placeholderId` signal; the library passes `END_OF_LIST`.
    */
   updateDragPosition(update: {
     cursorPosition: CursorPosition;
@@ -212,6 +218,8 @@ export class DragStateService {
 
   /**
    * Update just the placeholder ID.
+   * @deprecated Sets only the deprecated `placeholderId`. Will be removed in the next major
+   * version.
    */
   setPlaceholder(placeholderId: string | null): void {
     if (!this.#state().isDragging) {
@@ -227,6 +235,7 @@ export class DragStateService {
    * Used by the autoscroll scroll-only fast path: when a scroll fires, the cursor has not
    * moved, so only the placeholder index needs recalculation. Skipping the cursor and
    * active-droppable writes avoids spurious re-evaluation of computeds that read those signals.
+   * `placeholderId` is deprecated with the `placeholderId` signal; the library passes `END_OF_LIST`.
    */
   updateScrollOnlyPlaceholder(placeholderId: string | null, placeholderIndex: number | null): void {
     if (!this.#state().isDragging) {
