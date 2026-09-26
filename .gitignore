@@ -60,3 +60,6 @@ storybook-static
 
 # Local-only Playwright config pointing at a provisioned browser binary
 e2e.local.config.ts
+
+# Claude Code agent worktrees (full checkouts of this repo)
+/.claude/worktrees/
