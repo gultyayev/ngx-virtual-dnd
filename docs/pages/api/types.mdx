@@ -86,7 +86,7 @@ interface DragState {
   sourceDroppableId: string | null;
   sourceIndex: number | null;
   activeDroppableId: string | null;
-  placeholderId: string | null;
+  placeholderId: string | null; // deprecated: always END_OF_LIST or null, use placeholderIndex
   placeholderIndex: number | null;
   cursorPosition: CursorPosition | null;
   grabOffset: GrabOffset | null;
@@ -158,6 +158,6 @@ interface VdndGroupContext {
 ## Constants
 
 ```ts
-const END_OF_LIST = 'END_OF_LIST'; // the value of every placeholderId; positions are indexes
+const END_OF_LIST = 'END_OF_LIST'; // deprecated: the value of every placeholderId; positions are indexes
 const INITIAL_DRAG_STATE: DragState; // the idle state
 ```
