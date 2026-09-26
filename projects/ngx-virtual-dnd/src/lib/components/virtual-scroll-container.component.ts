@@ -12,11 +12,12 @@ import {
   NgZone,
   OnDestroy,
   OnInit,
+  PLATFORM_ID,
   signal,
   TemplateRef,
   untracked,
 } from '@angular/core';
-import { NgTemplateOutlet } from '@angular/common';
+import { isPlatformBrowser, NgTemplateOutlet } from '@angular/common';
 import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
@@ -157,6 +158,7 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
   readonly #keyboardDrag = inject(KeyboardDragService);
   readonly #ngZone = inject(NgZone);
   readonly #injector = inject(Injector);
+  readonly #isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   /** Cleanup function for scroll listener */
   #scrollCleanup: (() => void) | null = null;
@@ -616,8 +618,8 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
   }
 
   ngOnInit(): void {
-    // Set up ResizeObserver for dynamic height measurement
-    if (this.dynamicItemHeight()) {
+    // Set up ResizeObserver for dynamic height measurement (browser only: none on the server)
+    if (this.dynamicItemHeight() && this.#isBrowser) {
       this.#setupItemResizeObserver();
     }
   }
