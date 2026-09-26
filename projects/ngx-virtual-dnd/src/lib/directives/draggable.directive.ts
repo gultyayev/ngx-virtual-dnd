@@ -30,7 +30,7 @@ import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
-import { INTERACTIVE_ELEMENT_SELECTOR, NO_DRAG_CLASS } from '../utils/interactive-elements';
+import { findNoDragElement, INTERACTIVE_ELEMENT_SELECTOR } from '../utils/interactive-elements';
 
 /**
  * Makes an element draggable within the virtual scroll drag-and-drop system.
@@ -295,7 +295,7 @@ export class DraggableDirective implements OnInit, OnDestroy {
   }
 
   /**
-   * Whether the event comes from a control (or a `no-drag` element) nested inside this
+   * Whether the event comes from a control (or from inside a `no-drag` element) nested inside this
    * draggable. Neither the draggable itself nor a control around it counts, so a
    * `<button vdndDraggable>` still picks up with Space, and neither does a control that is the
    * drag handle, such as a button handle. Controls inside the handle do count.
@@ -307,7 +307,7 @@ export class DraggableDirective implements OnInit, OnDestroy {
       return false;
     }
 
-    if (target.classList.contains(NO_DRAG_CLASS)) {
+    if (findNoDragElement(target, host) !== null) {
       return true;
     }
 

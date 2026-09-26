@@ -15,9 +15,10 @@ interface Row {
 }
 
 /**
- * E2E fixture: rows that contain form controls. The controls keep their own mouse and keyboard
- * behavior (Space types a space, clicks the button), and the default drag preview, a clone of
- * the row, must not change their state.
+ * E2E fixture: rows that contain form controls and a `no-drag` tag. The controls keep their own
+ * mouse and keyboard behavior (Space types a space, clicks the button), presses anywhere in the
+ * tag never start a drag, and the default drag preview, a clone of the row, must not change the
+ * controls' state.
  */
 @Component({
   selector: 'app-interactive-children-demo',
@@ -33,8 +34,9 @@ interface Row {
     <main class="icd">
       <h1 class="icd-title">Interactive children</h1>
       <p class="icd-hint">
-        Each row holds a text field, a radio group and a button. They work as usual, and dragging a
-        row leaves them unchanged.
+        Each row holds a text field, a radio group, a <code>no-drag</code> tag and a button. They
+        work as usual, pressing the tag never starts a drag, and dragging a row leaves them
+        unchanged.
       </p>
 
       <div class="listcard" vdndGroup="interactive">
@@ -76,6 +78,9 @@ interface Row {
                     />
                     High
                   </label>
+                </span>
+                <span class="tag tag--work no-drag">
+                  <span data-testid="row-no-drag-label">Pinned</span>
                 </span>
                 <button
                   type="button"
