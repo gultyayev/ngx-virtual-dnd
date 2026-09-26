@@ -1,5 +1,10 @@
 import { NgZone, type WritableSignal } from '@angular/core';
 
+/** A layout value, or 0 where there is no layout (server rendering leaves them undefined). */
+function layoutValue(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
+
 export function bindRafThrottledScrollTopSignal(options: {
   element: HTMLElement;
   ngZone: NgZone;
@@ -10,7 +15,7 @@ export function bindRafThrottledScrollTopSignal(options: {
   const { element, ngZone, scrollTop, thresholdPx = 5, onCommit } = options;
 
   let pendingRaf: number | null = null;
-  let lastCommittedScrollTop = element.scrollTop;
+  let lastCommittedScrollTop = layoutValue(element.scrollTop);
 
   const onScroll = () => {
     if (pendingRaf !== null) {
@@ -57,7 +62,7 @@ export function bindResizeObserverHeightSignal(options: {
   const { element, ngZone, height, minDeltaPx = 1 } = options;
 
   if (typeof ResizeObserver === 'undefined') {
-    height.set(element.clientHeight);
+    height.set(layoutValue(element.clientHeight));
     return () => undefined;
   }
 
@@ -75,7 +80,7 @@ export function bindResizeObserverHeightSignal(options: {
     observer.observe(element);
   });
 
-  height.set(element.clientHeight);
+  height.set(layoutValue(element.clientHeight));
 
   return () => {
     observer?.disconnect();
