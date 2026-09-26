@@ -195,6 +195,18 @@ describe('DraggableDirective', () => {
     expect(component.dragStartEvents.length).toBe(1);
   });
 
+  it('should cancel a pointer drag when the window loses focus mid-drag', () => {
+    attemptPointerDrag(draggableNative);
+
+    window.dispatchEvent(new Event('blur'));
+    fixture.detectChanges();
+
+    expect(dragStateService.isDragging()).toBe(false);
+    expect(component.dragEndEvents.length).toBe(1);
+    expect(component.dragEndEvents[0].cancelled).toBe(true);
+    expect(draggableNative.style.display).not.toBe('none');
+  });
+
   describe('initialization', () => {
     it('should have data-draggable-id attribute', () => {
       expect(draggableNative.getAttribute('data-draggable-id')).toBe('test-item');

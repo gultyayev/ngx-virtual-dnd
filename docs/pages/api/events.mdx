@@ -64,11 +64,11 @@ interface DragEndEvent {
 
 `destinationIndex` is `null` when nothing was dropped:
 
-- the drag was cancelled (<kbd>Escape</kbd>, or <kbd>Tab</kbd> during a keyboard drag)
+- the drag was cancelled (<kbd>Escape</kbd>, <kbd>Tab</kbd> during a keyboard drag, or the window losing focus or the page being hidden during a pointer drag, since the release would never reach the page)
 - it was released outside every droppable
 - it was released over a disabled droppable
 
-A non-null value means a `drop` event fired on the destination. `cancelled` is `true` only for an explicit cancel.
+A non-null value means a `drop` event fired on the destination. `cancelled` is `true` only when the drag was cancelled (the first case).
 
 ## PlaceholderMoveEvent
 

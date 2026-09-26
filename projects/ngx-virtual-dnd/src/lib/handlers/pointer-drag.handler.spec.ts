@@ -554,6 +554,83 @@ describe('PointerDragHandler', () => {
     });
   });
 
+  describe('focus loss', () => {
+    const setVisibility = (state: DocumentVisibilityState): void => {
+      Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+
+    afterEach(() => {
+      // Restore jsdom's own getter
+      delete (document as unknown as Record<string, unknown>)['visibilityState'];
+    });
+
+    it('should cancel the drag when the window loses focus', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      window.dispatchEvent(new Event('blur'));
+
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledTimes(1);
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(true);
+      expect(handler.getStartPosition()).toBeNull();
+    });
+
+    it('should cancel a touch drag when the page is hidden', () => {
+      handler.onPointerDown(createTouchStart(150, 220), true);
+      document.dispatchEvent(createTouchEvent('touchmove', 150, 240));
+
+      setVisibility('hidden');
+
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledTimes(1);
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(true);
+    });
+
+    it('should keep the drag when the page becomes visible', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      setVisibility('visible');
+
+      expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
+      expect(isDragging).toBe(true);
+    });
+
+    it('should drop a pending press without ending a drag when the window loses focus', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+
+      window.dispatchEvent(new Event('blur'));
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+    });
+
+    it('should stop listening for focus loss once the drag has ended', () => {
+      const windowAddSpy = jest.spyOn(window, 'addEventListener');
+      const documentAddSpy = jest.spyOn(document, 'addEventListener');
+      const windowRemoveSpy = jest.spyOn(window, 'removeEventListener');
+      const documentRemoveSpy = jest.spyOn(document, 'removeEventListener');
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+      document.dispatchEvent(createMouseEvent('mouseup', 160, 220));
+
+      window.dispatchEvent(new Event('blur'));
+      setVisibility('hidden');
+
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledTimes(1);
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(false);
+      const blurListener = windowAddSpy.mock.calls.find(([type]) => type === 'blur')?.[1];
+      const visibilityListener = documentAddSpy.mock.calls.find(
+        ([type]) => type === 'visibilitychange',
+      )?.[1];
+      expect(blurListener).toEqual(expect.any(Function));
+      expect(visibilityListener).toEqual(expect.any(Function));
+      expect(windowRemoveSpy).toHaveBeenCalledWith('blur', blurListener);
+      expect(documentRemoveSpy).toHaveBeenCalledWith('visibilitychange', visibilityListener);
+    });
+  });
+
   describe('cleanup', () => {
     it('should remove all document listeners', () => {
       const removeSpy = jest.spyOn(document, 'removeEventListener');

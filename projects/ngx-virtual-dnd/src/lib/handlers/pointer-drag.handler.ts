@@ -45,7 +45,8 @@ export interface PointerDragDeps {
  * - Drag delay timer
  * - Forwarding moves to the directive (DragSchedulerService coalesces them per frame)
  * - Document-level listener management
- * - Escape key cancellation during pointer drag
+ * - Escape key cancellation during pointer drag, and cancellation when the window loses focus
+ *   or the page is hidden (the release would never arrive)
  */
 export class PointerDragHandler {
   readonly #deps: PointerDragDeps;
@@ -60,6 +61,8 @@ export class PointerDragHandler {
   #boundPointerMove: ((e: MouseEvent | TouchEvent) => void) | null = null;
   #boundPointerUp: ((e: MouseEvent | TouchEvent) => void) | null = null;
   #boundKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  #boundWindowBlur: (() => void) | null = null;
+  #boundVisibilityChange: (() => void) | null = null;
 
   /** Timer ID for drag delay */
   #delayTimerId: ReturnType<typeof setTimeout> | null = null;
@@ -72,6 +75,8 @@ export class PointerDragHandler {
     this.#boundPointerMove = this.#onPointerMove.bind(this);
     this.#boundPointerUp = this.#onPointerUp.bind(this);
     this.#boundKeyDown = this.#onEscapeKeyDown.bind(this);
+    this.#boundWindowBlur = this.#onFocusLost.bind(this);
+    this.#boundVisibilityChange = this.#onVisibilityChange.bind(this);
   }
 
   /**
@@ -172,6 +177,10 @@ export class PointerDragHandler {
       }
       // Listen for Escape key on document to cancel drag
       document.addEventListener('keydown', this.#boundKeyDown!);
+      // Switching windows or tabs mid-drag means the release never reaches this page: cancel
+      // instead of leaving the drag active until the next press.
+      window.addEventListener('blur', this.#boundWindowBlur!);
+      document.addEventListener('visibilitychange', this.#boundVisibilityChange!);
     });
   }
 
@@ -197,6 +206,12 @@ export class PointerDragHandler {
     }
     if (this.#boundKeyDown) {
       document.removeEventListener('keydown', this.#boundKeyDown);
+    }
+    if (this.#boundWindowBlur) {
+      window.removeEventListener('blur', this.#boundWindowBlur);
+    }
+    if (this.#boundVisibilityChange) {
+      document.removeEventListener('visibilitychange', this.#boundVisibilityChange);
     }
   }
 
@@ -299,6 +314,29 @@ export class PointerDragHandler {
       // No ngZone.run() needed - #endDrag uses signals which work outside zone
       this.#deps.callbacks.onDragEnd(true);
       this.cleanup();
+    }
+  }
+
+  /**
+   * Cancel the drag (or drop the pending press) when the window loses focus.
+   */
+  #onFocusLost(): void {
+    if (!this.#isTracking) {
+      return;
+    }
+
+    if (this.#deps.callbacks.isDragging()) {
+      this.#deps.callbacks.onDragEnd(true);
+    }
+    this.cleanup();
+  }
+
+  /**
+   * Treat the page being hidden (tab switch, app switch on mobile) as focus loss.
+   */
+  #onVisibilityChange(): void {
+    if (document.visibilityState === 'hidden') {
+      this.#onFocusLost();
     }
   }
 
