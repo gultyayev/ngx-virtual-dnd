@@ -7,6 +7,8 @@ description: Drag handles, interactive children, threshold and delay, axis locki
 
 These inputs change when a drag starts and how it moves. All of them are optional.
 
+Only one drag runs at a time. While an item is being dragged, with the pointer or the keyboard, pressing another item (a second finger on a touch screen) or pressing <kbd>Space</kbd> on it does not start a second drag.
+
 ## Drag handles
 
 Set `dragHandle` to a CSS selector, and only presses inside a matching element start a drag. The rest of the row stays free for selecting text, clicking and so on.
