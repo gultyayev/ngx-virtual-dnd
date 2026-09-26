@@ -1,4 +1,4 @@
-import { Component, signal, TemplateRef, viewChild } from '@angular/core';
+import { Component, PLATFORM_ID, signal, TemplateRef, viewChild } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import {
@@ -15,12 +15,34 @@ import { DraggedItem } from '../models/drag-drop.models';
 class MockResizeObserver {
   static instances: MockResizeObserver[] = [];
 
+  disconnected = false;
   observe = jest.fn();
   unobserve = jest.fn();
-  disconnect = jest.fn();
+  disconnect = jest.fn(() => {
+    this.disconnected = true;
+  });
 
   constructor() {
     MockResizeObserver.instances.push(this);
+  }
+
+  /** Live observers that observed list rows (the container also observes its own size). */
+  static measuringRows(): MockResizeObserver[] {
+    return MockResizeObserver.instances.filter(
+      (observer) =>
+        !observer.disconnected &&
+        observer.observe.mock.calls.some(([element]) =>
+          (element as Element).hasAttribute('data-draggable-id'),
+        ),
+    );
+  }
+
+  /** Elements observed and not unobserved since. */
+  observedElements(): Element[] {
+    const unobserved = new Set(this.unobserve.mock.calls.map(([element]) => element));
+    return this.observe.mock.calls
+      .map(([element]) => element as Element)
+      .filter((element) => !unobserved.has(element));
   }
 }
 
@@ -48,7 +70,7 @@ interface TestItem {
 
     <vdnd-virtual-scroll
       [items]="items()"
-      [itemHeight]="50"
+      [itemHeight]="itemHeight()"
       [containerHeight]="containerHeight()"
       [overscan]="overscan()"
       [stickyItemIds]="stickyItemIds()"
@@ -77,6 +99,7 @@ class TestHostComponent {
   autoScrollEnabled = signal(true);
   autoScrollConfig = signal<Partial<AutoScrollConfig>>({});
   dynamicItemHeight = signal(false);
+  itemHeight = signal(50);
 
   readonly itemIdFn = (item: TestItem): string => item.id;
   readonly trackByFn = (_: number, item: TestItem): string => item.id;
@@ -497,8 +520,14 @@ describe('VirtualScrollContainerComponent', () => {
   });
 
   describe('dynamic item measurement', () => {
+    beforeEach(() => {
+      // Drop the observers that earlier fixtures disconnected
+      MockResizeObserver.instances = MockResizeObserver.instances.filter(
+        (observer) => !observer.disconnected,
+      );
+    });
+
     it('observes rendered items with selector-sensitive draggable IDs', () => {
-      MockResizeObserver.instances.length = 0;
       const unsafeId = 'item-"quoted"\\[one]';
       const dynamicFixture = TestBed.createComponent(TestHostComponent);
       dynamicFixture.componentInstance.items.set([{ id: unsafeId, name: 'Unsafe ID item' }]);
@@ -509,13 +538,107 @@ describe('VirtualScrollContainerComponent', () => {
         dynamicFixture.detectChanges();
       }).not.toThrow();
 
-      const itemObserver = MockResizeObserver.instances[0];
+      const [itemObserver] = MockResizeObserver.measuringRows();
       const itemElement = dynamicFixture.nativeElement.querySelector('.item') as HTMLElement | null;
 
       expect(itemElement?.getAttribute('data-draggable-id')).toBe(unsafeId);
       expect(itemObserver.observe).toHaveBeenCalledWith(itemElement);
 
       dynamicFixture.destroy();
+    });
+
+    const renderedItems = (): Element[] =>
+      fixture.debugElement
+        .queryAll(By.css('[data-draggable-id]'))
+        .map((el) => el.nativeElement as Element);
+
+    const setDynamic = (dynamic: boolean): void => {
+      component.dynamicItemHeight.set(dynamic);
+      fixture.detectChanges();
+      fixture.detectChanges();
+    };
+
+    it('should not measure rows while heights are fixed', () => {
+      expect(renderedItems().length).toBeGreaterThan(0);
+      expect(MockResizeObserver.measuringRows()).toEqual([]);
+    });
+
+    it('should start measuring the rendered rows when dynamic heights are turned on', () => {
+      setDynamic(true);
+
+      const observers = MockResizeObserver.measuringRows();
+      expect(observers.length).toBe(1);
+      expect(observers[0].observedElements()).toEqual(renderedItems());
+    });
+
+    it('should stop measuring when dynamic heights are turned off', () => {
+      setDynamic(true);
+      const [observer] = MockResizeObserver.measuringRows();
+
+      setDynamic(false);
+
+      expect(observer.disconnect).toHaveBeenCalled();
+      expect(MockResizeObserver.measuringRows()).toEqual([]);
+    });
+
+    it('should measure rows added by a render', () => {
+      component.items.set(generateItems(2));
+      setDynamic(true);
+      expect(MockResizeObserver.measuringRows()[0].observedElements().length).toBe(2);
+
+      component.items.set(generateItems(4));
+      fixture.detectChanges();
+
+      const [observer] = MockResizeObserver.measuringRows();
+      expect(observer.observedElements()).toEqual(renderedItems());
+      expect(renderedItems().length).toBe(4);
+    });
+
+    it('should measure every rendered row into the new strategy when itemHeight changes', () => {
+      setDynamic(true);
+      const [first] = MockResizeObserver.measuringRows();
+
+      component.itemHeight.set(80);
+      fixture.detectChanges();
+      fixture.detectChanges();
+
+      const observers = MockResizeObserver.measuringRows();
+      expect(first.disconnected).toBe(true);
+      expect(observers.length).toBe(1);
+      expect(observers[0].observedElements()).toEqual(renderedItems());
+    });
+
+    it('should not measure rows during server rendering', () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        imports: [TestHostComponent],
+        providers: [
+          DragStateService,
+          AutoScrollService,
+          PositionCalculatorService,
+          { provide: PLATFORM_ID, useValue: 'server' },
+        ],
+      });
+      MockResizeObserver.instances = [];
+      const serverFixture = TestBed.createComponent(TestHostComponent);
+      serverFixture.componentInstance.items.set(generateItems(4));
+      serverFixture.componentInstance.dynamicItemHeight.set(true);
+      serverFixture.detectChanges();
+      serverFixture.detectChanges();
+
+      expect(MockResizeObserver.measuringRows()).toEqual([]);
+      serverFixture.destroy();
+    });
+
+    it('should measure every rendered row again when dynamic heights are turned back on', () => {
+      setDynamic(true);
+      setDynamic(false);
+
+      setDynamic(true);
+
+      const observers = MockResizeObserver.measuringRows();
+      expect(observers.length).toBe(1);
+      expect(observers[0].observedElements()).toEqual(renderedItems());
     });
   });
 

@@ -273,7 +273,7 @@ export class PageComponent {
 
 ## Dynamic item heights
 
-Set `[dynamicItemHeight]="true"`; `itemHeight` becomes the estimate for unmeasured items. Rendered items are measured with `ResizeObserver`, and heights are cached by item ID, so they survive reordering.
+Set `[dynamicItemHeight]="true"`; `itemHeight` becomes the estimate for unmeasured items. Rendered items are measured with `ResizeObserver`, and heights are cached by item ID, so they survive reordering. Changing `dynamicItemHeight` or `itemHeight` at runtime restarts from the estimate and re-measures the rendered items; turning `dynamicItemHeight` off stops measuring.
 
 ```html
 <vdnd-sortable-list
