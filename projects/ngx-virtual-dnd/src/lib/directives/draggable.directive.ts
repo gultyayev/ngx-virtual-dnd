@@ -278,20 +278,22 @@ export class DraggableDirective implements OnInit, OnDestroy {
     }
 
     event.preventDefault();
-    event.stopPropagation(); // Prevent document listener from receiving this event
 
     // If we're in a keyboard drag, Space drops the item
     if (this.#keyboardHandler.isActive()) {
+      event.stopPropagation(); // Prevent document listener from receiving this event
       this.#keyboardHandler.complete();
       return;
     }
 
-    // A pointer drag (of this item or another) is in progress: don't replace it
+    // Another drag is in progress: don't replace it. The key goes on to the document, where a
+    // keyboard drag of another item drops with it.
     if (this.#dragState.isDragging()) {
       return;
     }
 
-    // Start keyboard drag
+    // Start keyboard drag. The document listener it adds must not receive this event.
+    event.stopPropagation();
     this.#keyboardHandler.activate();
   }
 
