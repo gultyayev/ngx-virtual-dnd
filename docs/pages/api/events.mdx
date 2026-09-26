@@ -41,7 +41,7 @@ interface DropSource {
 
 interface DropDestination {
   droppableId: string;
-  placeholderId: string; // always END_OF_LIST; use index for the position
+  placeholderId: string; // deprecated: always END_OF_LIST; use index for the position
   index: number; // final insertion index, after removal from the source
   data?: unknown; // vdndDroppableData / droppableData
 }
