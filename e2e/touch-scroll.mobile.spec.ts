@@ -1,7 +1,7 @@
 import { expect, type Locator, test } from '@playwright/test';
 import { DemoPage } from './fixtures/demo.page';
 
-type TouchEventType = 'touchstart' | 'touchmove' | 'touchend';
+type TouchEventType = 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel';
 
 async function dispatchTouch(
   locator: Locator,
@@ -154,6 +154,28 @@ test.describe('Touch Scroll with Drag Delay (Mobile)', () => {
     await expect(first).toHaveAttribute('aria-grabbed', 'false');
     await expect(third).toHaveAttribute('aria-grabbed', 'false');
     await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'false');
+  });
+
+  test('a touch the system cancels mid-drag cancels the drag instead of dropping', async () => {
+    await demoPage.goto();
+
+    const firstId = await demoPage.getItemId('list1', 0);
+    const firstItem = demoPage.list1Items.first();
+    const start = await centerOf(firstItem);
+    const finger = { identifier: 4, clientX: start.x, clientY: start.y };
+    const moved = { ...finger, clientY: start.y + 120 };
+
+    await dispatchMultiTouch(firstItem, 'touchstart', [finger], [finger]);
+    await dispatchMultiTouch(firstItem, 'touchmove', [moved], [moved]);
+    await expect(demoPage.dragPreview).toBeVisible();
+
+    // An incoming call or an OS gesture takes the touch: the finger was never lifted
+    await dispatchMultiTouch(firstItem, 'touchcancel', [], [moved]);
+
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'true');
+    expect(await demoPage.getItemId('list1', 0)).toBe(firstId);
+    await expect(demoPage.countBadge('list1')).toHaveText('50');
   });
 
   test('a touch drag follows the finger that started it, not another finger', async () => {

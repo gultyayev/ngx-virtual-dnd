@@ -46,7 +46,7 @@ export interface PointerDragDeps {
  * - Forwarding moves to the directive (DragSchedulerService coalesces them per frame)
  * - Document-level listener management
  * - Escape key cancellation during pointer drag, and cancellation when the window loses focus
- *   or the page is hidden (the release would never arrive)
+ *   or the page is hidden (the release would never arrive) or the system cancels the touch
  */
 export class PointerDragHandler {
   readonly #deps: PointerDragDeps;
@@ -341,7 +341,9 @@ export class PointerDragHandler {
     // Otherwise, allow native touch behavior (like scroll momentum) to complete
     if (this.#deps.callbacks.isDragging()) {
       event.preventDefault();
-      this.#deps.callbacks.onDragEnd(false);
+      // The system took the touch (an incoming call, an OS gesture, too many fingers): the user
+      // never released, so this is a cancel, not a drop
+      this.#deps.callbacks.onDragEnd(event.type === 'touchcancel');
     }
 
     this.cleanup();
