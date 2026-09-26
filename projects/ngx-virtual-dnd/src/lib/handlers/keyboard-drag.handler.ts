@@ -5,7 +5,7 @@ import { PositionCalculatorService } from '../services/position-calculator.servi
 import { DragIndexCalculatorService } from '../services/drag-index-calculator.service';
 import { ElementCloneService } from '../services/element-clone.service';
 import { OverlayContainerService } from '../services/overlay-container.service';
-import { DragEndEvent, DragStartEvent } from '../models/drag-drop.models';
+import { DragEndEvent, DraggedItem, DragStartEvent } from '../models/drag-drop.models';
 import { queryByAttribute } from '../utils/attribute-selectors';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
 
@@ -61,6 +61,12 @@ export interface KeyboardDragDeps {
 export class KeyboardDragHandler {
   readonly #deps: KeyboardDragDeps;
   #boundKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  /**
+   * The drag this handler started. Keyboard drag state is shared by every draggable, so a key
+   * that reaches another item (one focused by a click during the drag, for example) must not
+   * move, drop or cancel this drag in that item's name.
+   */
+  #ownDrag: DraggedItem | null = null;
 
   constructor(deps: KeyboardDragDeps) {
     this.#deps = deps;
@@ -68,10 +74,14 @@ export class KeyboardDragHandler {
   }
 
   /**
-   * Whether a keyboard drag is currently active.
+   * Whether a keyboard drag this handler started is active.
    */
   isActive(): boolean {
-    return this.#deps.keyboardDrag.isActive();
+    return (
+      this.#ownDrag !== null &&
+      this.#deps.keyboardDrag.isActive() &&
+      this.#deps.dragState.draggedItem() === this.#ownDrag
+    );
   }
 
   /**
@@ -131,6 +141,7 @@ export class KeyboardDragHandler {
       totalItemCount,
       droppableId,
     );
+    this.#ownDrag = this.#deps.dragState.draggedItem();
 
     // Add document-level keyboard listener (since element is hidden with display:none)
     this.#deps.ngZone.runOutsideAngular(() => {
@@ -369,6 +380,12 @@ export class KeyboardDragHandler {
    * Document-level keydown listener active during keyboard drag.
    */
   #onDocumentKeyDown(event: KeyboardEvent): void {
+    // The drag ended without this handler (its state was reset elsewhere): stop listening, or
+    // this listener would also take the keys of the next keyboard drag
+    if (!this.isActive()) {
+      this.#cleanupDocumentListener();
+      return;
+    }
     this.handleKey(event);
   }
 
@@ -376,6 +393,7 @@ export class KeyboardDragHandler {
    * Remove the document-level keyboard listener.
    */
   #cleanupDocumentListener(): void {
+    this.#ownDrag = null;
     // Server rendering destroys the directive without a global document, and never added it
     if (this.#boundKeyDown && typeof document !== 'undefined') {
       document.removeEventListener('keydown', this.#boundKeyDown);

@@ -124,12 +124,38 @@ describe('KeyboardDragHandler', () => {
   });
 
   describe('isActive', () => {
-    it('should delegate to keyboardDrag.isActive', () => {
+    it('should be active for the keyboard drag this handler started', () => {
+      handler.activate();
+
       mockKeyboardDrag.isActive.mockReturnValue(false);
       expect(handler.isActive()).toBe(false);
 
       mockKeyboardDrag.isActive.mockReturnValue(true);
       expect(handler.isActive()).toBe(true);
+    });
+
+    it("should not be active for another item's keyboard drag", () => {
+      mockKeyboardDrag.isActive.mockReturnValue(true);
+
+      expect(handler.isActive()).toBe(false);
+    });
+
+    it('should not be active once its drag was replaced by another', () => {
+      handler.activate();
+      mockKeyboardDrag.isActive.mockReturnValue(true);
+
+      mockDragState.draggedItem.mockReturnValue({ height: 50 });
+
+      expect(handler.isActive()).toBe(false);
+    });
+
+    it('should not be active after its drag completed', () => {
+      handler.activate();
+      mockKeyboardDrag.isActive.mockReturnValue(true);
+
+      handler.complete();
+
+      expect(handler.isActive()).toBe(false);
     });
   });
 
@@ -219,6 +245,7 @@ describe('KeyboardDragHandler', () => {
 
   describe('handleKey', () => {
     beforeEach(() => {
+      handler.activate();
       mockKeyboardDrag.isActive.mockReturnValue(true);
     });
 
@@ -573,6 +600,7 @@ describe('KeyboardDragHandler', () => {
 
   describe('cross-list movement', () => {
     beforeEach(() => {
+      handler.activate();
       mockKeyboardDrag.isActive.mockReturnValue(true);
     });
 
@@ -644,6 +672,27 @@ describe('KeyboardDragHandler', () => {
       expect(mockKeyboardDrag.moveDown).not.toHaveBeenCalled();
     });
 
+    it('should stop listening when its drag ended without it', () => {
+      const addListener = jest.spyOn(document, 'addEventListener');
+      const removeListener = jest.spyOn(document, 'removeEventListener');
+      try {
+        handler.activate();
+        const listener = addListener.mock.calls.find(([type]) => type === 'keydown')?.[1];
+        // The keyboard drag state was reset elsewhere; another item's keyboard drag started
+        mockDragState.draggedItem.mockReturnValue({ height: 50 });
+
+        pressOnDocument('ArrowDown');
+        pressOnDocument('ArrowDown');
+
+        expect(mockKeyboardDrag.moveDown).not.toHaveBeenCalled();
+        expect(listener).toBeDefined();
+        expect(removeListener).toHaveBeenCalledWith('keydown', listener);
+      } finally {
+        addListener.mockRestore();
+        removeListener.mockRestore();
+      }
+    });
+
     it('should stop handling document keys after destroy', () => {
       handler.activate();
       handler.destroy();
@@ -713,8 +762,10 @@ describe('KeyboardDragHandler', () => {
         getContext: () => ({ ...mockContext, groupName: 'test-group' }),
       } as unknown as KeyboardDragDeps);
 
-      // Source list on the left so the target is the right-hand neighbour.
-      makeDroppable('source-list', 0);
+      // Source list on the left so the target is the right-hand neighbour. The dragged item
+      // starts in it.
+      makeDroppable('source-list', 0).appendChild(mockContext.element);
+      localHandler.activate();
     });
 
     afterEach(() => {

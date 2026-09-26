@@ -587,6 +587,50 @@ describe('DraggableDirective', () => {
       expect(component.dragStartEvents).toEqual([]);
     });
 
+    describe("with keys pressed on this item during another item's keyboard drag", () => {
+      let reachedDocument: string[];
+      const recordKey = (event: KeyboardEvent): void => {
+        reachedDocument.push(event.key);
+      };
+
+      beforeEach(() => {
+        reachedDocument = [];
+        // The other item's keyboard drag listens on the document
+        document.addEventListener('keydown', recordKey);
+      });
+
+      afterEach(() => {
+        document.removeEventListener('keydown', recordKey);
+      });
+
+      const keys = [' ', 'Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+
+      describe.each([false, true])('(this item disabled: %s)', (disabled) => {
+        beforeEach(() => {
+          component.disabled.set(disabled);
+          fixture.detectChanges();
+        });
+
+        it.each(keys)('should leave %p to the drag it belongs to', (key) => {
+          startOtherDrag(true);
+          const targetIndexBefore = dragStateService.keyboardTargetIndex();
+
+          draggableNative.dispatchEvent(
+            new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+          );
+          fixture.detectChanges();
+
+          // Not ended, moved or cancelled in this item's name...
+          expect(component.dragEndEvents).toEqual([]);
+          expect(dragStateService.isKeyboardDrag()).toBe(true);
+          expect(dragStateService.draggedItem()?.draggableId).toBe('other-item');
+          expect(dragStateService.keyboardTargetIndex()).toBe(targetIndexBefore);
+          // ...but passed on to the other item's document listener
+          expect(reachedDocument).toEqual([key]);
+        });
+      });
+    });
+
     it('should start a pointer drag again once the other drag has ended', () => {
       startOtherDrag();
       attemptPointerDrag(draggableNative);
