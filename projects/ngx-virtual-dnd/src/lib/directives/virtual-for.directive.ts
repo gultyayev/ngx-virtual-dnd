@@ -13,6 +13,7 @@ import {
   OnInit,
   PLATFORM_ID,
   TemplateRef,
+  untracked,
   ViewContainerRef,
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
@@ -142,8 +143,8 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   /** ResizeObserver for dynamic height measurement */
   #resizeObserver: ResizeObserver | null = null;
 
-  /** Map from observed HTMLElement to its trackBy key */
-  readonly #observedElements = new WeakMap<HTMLElement, unknown>();
+  /** Map from observed HTMLElement to its trackBy key (reset with each new observer) */
+  #observedElements = new WeakMap<HTMLElement, unknown>();
 
   // ========== Inputs ==========
 
@@ -341,6 +342,23 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
       }
     });
 
+    // Measure item heights in dynamic height mode: the directive's own input, or the viewport's
+    // strategy when inherited. Both can change at runtime, and the strategy is replaced when they
+    // do, so this creates, replaces or removes the observer. A new observer reports every
+    // rendered item, so a new strategy gets their heights.
+    effect((onCleanup) => {
+      // Read the strategy first so the effect tracks its replacement even when the input is on
+      const strategy = this.#strategy();
+      const measure =
+        this.vdndVirtualForDynamicItemHeight() || strategy instanceof DynamicHeightStrategy;
+      // No ResizeObserver during server rendering
+      if (!measure || !this.#isBrowser) {
+        return;
+      }
+      untracked(() => this.#startMeasuring());
+      onCleanup(() => this.#stopMeasuring());
+    });
+
     // React to changes and update views
     effect(() => {
       this.#updateViews();
@@ -363,15 +381,6 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
     // Create placeholder element for drag operations
     this.#createPlaceholder();
-
-    // Set up ResizeObserver for dynamic height mode.
-    // Check both the directive's own input and the viewport's strategy (when inherited).
-    if (
-      this.vdndVirtualForDynamicItemHeight() ||
-      this.#strategy() instanceof DynamicHeightStrategy
-    ) {
-      this.#setupResizeObserver();
-    }
   }
 
   ngOnDestroy(): void {
@@ -454,6 +463,21 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
       },
       { injector: this.#injector },
     );
+  }
+
+  /** Create the ResizeObserver and observe the items already rendered. */
+  #startMeasuring(): void {
+    this.#setupResizeObserver();
+    for (const [key, view] of this.#activeViews) {
+      this.#observeViewElements(view, key);
+    }
+  }
+
+  /** Disconnect the ResizeObserver and forget what it observed. */
+  #stopMeasuring(): void {
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
+    this.#observedElements = new WeakMap();
   }
 
   /**

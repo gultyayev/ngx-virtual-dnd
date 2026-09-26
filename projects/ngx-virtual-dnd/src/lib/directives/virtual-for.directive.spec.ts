@@ -1,4 +1,4 @@
-import { ApplicationRef, Component, signal } from '@angular/core';
+import { ApplicationRef, Component, PLATFORM_ID, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { VirtualForDirective } from './virtual-for.directive';
@@ -391,6 +391,207 @@ describe('VirtualForDirective (dynamic height)', () => {
     expect(rendered.map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id'))).toEqual(
       ['item-3', 'item-4', 'item-5'],
     );
+  });
+});
+
+/** ResizeObserver stand-in that records what each instance observes and can report sizes. */
+class RecordingResizeObserver {
+  static instances: RecordingResizeObserver[] = [];
+  readonly observed = new Set<Element>();
+  disconnected = false;
+
+  readonly #callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.#callback = callback;
+    RecordingResizeObserver.instances.push(this);
+  }
+
+  /** Live observers watching list rows (the viewport observes its own size too). */
+  static measuringRows(): RecordingResizeObserver[] {
+    return RecordingResizeObserver.instances.filter(
+      (observer) =>
+        !observer.disconnected &&
+        [...observer.observed].some((element) => element.hasAttribute('data-id')),
+    );
+  }
+
+  observe(element: Element): void {
+    this.observed.add(element);
+  }
+
+  unobserve(element: Element): void {
+    this.observed.delete(element);
+  }
+
+  disconnect(): void {
+    this.observed.clear();
+    this.disconnected = true;
+  }
+
+  /** Report `element` at `height` px, as the browser does after a layout change. */
+  report(element: Element, height: number): void {
+    const entry = { target: element, borderBoxSize: [{ blockSize: height, inlineSize: 100 }] };
+    this.#callback([entry as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+  }
+}
+
+@Component({
+  template: `
+    <vdnd-virtual-viewport [itemHeight]="50" [dynamicItemHeight]="dynamic()" style="height: 200px;">
+      <ng-container *vdndVirtualFor="let item of items; trackBy: trackByFn">
+        <div class="item" [attr.data-id]="item.key">{{ item.key }}</div>
+      </ng-container>
+    </vdnd-virtual-viewport>
+  `,
+  imports: [VirtualViewportComponent, VirtualForDirective],
+})
+class ToggleDynamicHeightHostComponent {
+  readonly dynamic = signal(false);
+  readonly items = Array.from({ length: 3 }, (_, i) => ({ key: `key-${i}` }));
+  readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+}
+
+@Component({
+  template: `
+    <vdnd-virtual-viewport
+      [itemHeight]="itemHeight()"
+      [dynamicItemHeight]="true"
+      style="height: 200px;"
+    >
+      <ng-container
+        *vdndVirtualFor="let item of items; trackBy: trackByFn; dynamicItemHeight: true"
+      >
+        <div class="item" [attr.data-id]="item.key">{{ item.key }}</div>
+      </ng-container>
+    </vdnd-virtual-viewport>
+  `,
+  imports: [VirtualViewportComponent, VirtualForDirective],
+})
+class ChangingEstimateHostComponent {
+  readonly itemHeight = signal(50);
+  readonly items = Array.from({ length: 3 }, (_, i) => ({ key: `key-${i}` }));
+  readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+}
+
+describe('VirtualForDirective (dynamicItemHeight toggled at runtime)', () => {
+  let fixture: ComponentFixture<ToggleDynamicHeightHostComponent>;
+  let originalResizeObserver: typeof ResizeObserver;
+
+  const renderedItems = (): HTMLElement[] =>
+    fixture.debugElement.queryAll(By.css('.item')).map((el) => el.nativeElement as HTMLElement);
+
+  const setDynamic = (dynamic: boolean): void => {
+    fixture.componentInstance.dynamic.set(dynamic);
+    fixture.detectChanges();
+  };
+
+  beforeAll(() => {
+    originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = RecordingResizeObserver as unknown as typeof ResizeObserver;
+  });
+
+  afterAll(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  beforeEach(() => {
+    RecordingResizeObserver.instances = [];
+    TestBed.configureTestingModule({ imports: [ToggleDynamicHeightHostComponent] });
+    fixture = TestBed.createComponent(ToggleDynamicHeightHostComponent);
+    fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+  });
+
+  it('should not measure items while heights are fixed', () => {
+    expect(renderedItems().length).toBe(3);
+    expect(RecordingResizeObserver.measuringRows()).toEqual([]);
+  });
+
+  it('should start measuring the rendered items when dynamic heights are turned on', () => {
+    setDynamic(true);
+
+    const [observer] = RecordingResizeObserver.measuringRows();
+    expect(RecordingResizeObserver.measuringRows().length).toBe(1);
+    expect([...observer.observed]).toEqual(renderedItems());
+
+    // Measurements reach the new dynamic strategy
+    observer.report(renderedItems()[1], 120);
+    const viewport = fixture.debugElement.query(By.directive(VirtualViewportComponent))
+      .componentInstance as VirtualViewportComponent;
+    expect(viewport.strategy.getItemHeight(1)).toBe(120);
+  });
+
+  it('should stop measuring when dynamic heights are turned off', () => {
+    setDynamic(true);
+    const [observer] = RecordingResizeObserver.measuringRows();
+
+    setDynamic(false);
+
+    expect(observer.disconnected).toBe(true);
+    expect(RecordingResizeObserver.measuringRows()).toEqual([]);
+  });
+
+  it('should measure every rendered item again when dynamic heights are turned back on', () => {
+    setDynamic(true);
+    setDynamic(false);
+
+    setDynamic(true);
+
+    const active = RecordingResizeObserver.measuringRows();
+    expect(active.length).toBe(1);
+    expect([...active[0].observed]).toEqual(renderedItems());
+  });
+
+  it('should measure every rendered item into the new strategy when itemHeight changes', () => {
+    // The directive's own dynamicItemHeight input is on, as well as the viewport's
+    const estimateFixture = TestBed.createComponent(ChangingEstimateHostComponent);
+    estimateFixture.detectChanges();
+    const [first] = RecordingResizeObserver.measuringRows();
+
+    estimateFixture.componentInstance.itemHeight.set(80);
+    estimateFixture.detectChanges();
+
+    const rows = estimateFixture.debugElement
+      .queryAll(By.css('[data-id]'))
+      .map((el) => el.nativeElement as HTMLElement);
+    const active = RecordingResizeObserver.measuringRows();
+    expect(first.disconnected).toBe(true);
+    expect(active.length).toBe(1);
+    expect([...active[0].observed]).toEqual(rows);
+
+    active[0].report(rows[0], 120);
+    const viewport = estimateFixture.debugElement.query(By.directive(VirtualViewportComponent))
+      .componentInstance as VirtualViewportComponent;
+    expect(viewport.strategy.getItemHeight(0)).toBe(120);
+    estimateFixture.destroy();
+  });
+
+  it('should not measure during server rendering', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [ToggleDynamicHeightHostComponent],
+      providers: [{ provide: PLATFORM_ID, useValue: 'server' }],
+    });
+    RecordingResizeObserver.instances = [];
+    const serverFixture = TestBed.createComponent(ToggleDynamicHeightHostComponent);
+    serverFixture.componentInstance.dynamic.set(true);
+    serverFixture.detectChanges();
+
+    expect(RecordingResizeObserver.measuringRows()).toEqual([]);
+    serverFixture.destroy();
+  });
+
+  it('should disconnect the observer when destroyed', () => {
+    setDynamic(true);
+    const [observer] = RecordingResizeObserver.measuringRows();
+
+    fixture.destroy();
+
+    expect(observer.disconnected).toBe(true);
   });
 });
 
