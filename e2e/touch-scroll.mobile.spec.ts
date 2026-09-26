@@ -98,6 +98,34 @@ test.describe('Touch Scroll with Drag Delay (Mobile)', () => {
     await expect(demoPage.dragPreview).not.toBeVisible();
   });
 
+  test('a second touch that lands before the drag starts does not replace it', async ({ page }) => {
+    await demoPage.goto();
+
+    const firstId = await demoPage.getItemId('list1', 0);
+    const thirdId = await demoPage.getItemId('list1', 2);
+    const first = page.locator(`[data-draggable-id="${firstId}"]`);
+    const third = page.locator(`[data-draggable-id="${thirdId}"]`);
+    const firstStart = await centerOf(first);
+    const thirdStart = await centerOf(third);
+
+    // Two fingers down on different items, then one move past the threshold: the first item's
+    // press starts the drag, and the third item's press must give up.
+    await dispatchTouch(first, 'touchstart', firstStart.x, firstStart.y);
+    await dispatchTouch(third, 'touchstart', thirdStart.x, thirdStart.y);
+    await dispatchTouch(first, 'touchmove', firstStart.x, firstStart.y + 20);
+
+    await expect(demoPage.dragPreview).toBeVisible();
+    await expect(first).toHaveAttribute('aria-grabbed', 'true');
+    await expect(third).toHaveAttribute('aria-grabbed', 'false');
+    await expect(third).toBeVisible();
+
+    await dispatchTouch(first, 'touchend', firstStart.x, firstStart.y);
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(first).toHaveAttribute('aria-grabbed', 'false');
+    await expect(third).toHaveAttribute('aria-grabbed', 'false');
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'false');
+  });
+
   test('should apply pending class when delay passes and clear it on touchend without drag', async () => {
     await demoPage.goto({ dragDelay: 200 });
 

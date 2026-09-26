@@ -225,6 +225,7 @@ export class DraggableDirective implements OnInit, OnDestroy {
         onDragEnd: (cancelled) => this.#endDrag(cancelled),
         onPendingChange: (pending) => this.#setPending(pending),
         isDragging: () => this.isDragging(),
+        isOtherDragActive: () => this.#dragState.isDragging() && !this.isDragging(),
       },
       getContext: () => ({
         element: this.#elementRef.nativeElement,
@@ -285,8 +286,8 @@ export class DraggableDirective implements OnInit, OnDestroy {
       return;
     }
 
-    // If we're in a pointer drag, ignore
-    if (this.isDragging()) {
+    // A pointer drag (of this item or another) is in progress: don't replace it
+    if (this.#dragState.isDragging()) {
       return;
     }
 
