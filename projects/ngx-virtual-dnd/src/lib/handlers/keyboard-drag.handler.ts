@@ -376,7 +376,8 @@ export class KeyboardDragHandler {
    * Remove the document-level keyboard listener.
    */
   #cleanupDocumentListener(): void {
-    if (this.#boundKeyDown) {
+    // Server rendering destroys the directive without a global document, and never added it
+    if (this.#boundKeyDown && typeof document !== 'undefined') {
       document.removeEventListener('keydown', this.#boundKeyDown);
     }
   }

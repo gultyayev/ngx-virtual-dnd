@@ -215,6 +215,11 @@ export class PointerDragHandler {
     this.#deps.callbacks.onPendingChange(false); // Clear pending state on cleanup
     this.#cancelDelayTimer();
 
+    // Server rendering destroys the directive without a global document, and never added any
+    if (typeof document === 'undefined') {
+      return;
+    }
+
     // Remove event listeners
     if (this.#boundPointerMove) {
       document.removeEventListener('mousemove', this.#boundPointerMove);
