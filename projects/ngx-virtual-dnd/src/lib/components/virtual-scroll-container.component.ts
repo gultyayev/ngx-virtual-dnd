@@ -1,5 +1,6 @@
 import {
   afterNextRender,
+  afterRenderEffect,
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
@@ -164,8 +165,8 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
   #scrollCleanup: (() => void) | null = null;
   #resizeCleanup: (() => void) | null = null;
 
-  /** ResizeObserver for dynamic height measurement */
-  #itemResizeObserver: ResizeObserver | null = null;
+  /** ResizeObserver for dynamic height measurement (only in dynamic height mode) */
+  readonly #itemResizeObserver = signal<ResizeObserver | null>(null);
 
   /** Map from observed HTMLElement to its trackBy key */
   readonly #observedElements = new WeakMap<HTMLElement, unknown>();
@@ -618,10 +619,25 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
   }
 
   ngOnInit(): void {
-    // Set up ResizeObserver for dynamic height measurement (browser only: none on the server)
-    if (this.dynamicItemHeight() && this.#isBrowser) {
-      this.#setupItemResizeObserver();
-    }
+    // Measure rows in dynamic height mode. dynamicItemHeight can change at runtime, and the
+    // strategy is replaced when it (or itemHeight) does, so this creates, replaces or removes the
+    // observer. #observeRenderedItems observes every rendered row with each new observer, so a
+    // new strategy gets their heights.
+    effect(
+      (onCleanup) => {
+        // No ResizeObserver during server rendering
+        if (!this.dynamicItemHeight() || !this.#isBrowser) return;
+        this.#strategy();
+        const observer = untracked(() => this.#createItemResizeObserver());
+        this.#itemResizeObserver.set(observer);
+        onCleanup(() => {
+          observer.disconnect();
+          this.#observedElementByKey.clear();
+          this.#itemResizeObserver.set(null);
+        });
+      },
+      { injector: this.#injector },
+    );
   }
 
   ngAfterViewInit(): void {
@@ -644,9 +660,7 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
     });
 
     // Observe rendered items for dynamic height measurement
-    if (this.dynamicItemHeight()) {
-      this.#observeRenderedItems();
-    }
+    this.#observeRenderedItems();
   }
 
   /**
@@ -697,11 +711,12 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
   ngOnDestroy(): void {
     this.#scrollCleanup?.();
     this.#resizeCleanup?.();
+    const itemResizeObserver = this.#itemResizeObserver();
     for (const element of this.#observedElementByKey.values()) {
-      this.#itemResizeObserver?.unobserve(element);
+      itemResizeObserver?.unobserve(element);
     }
     this.#observedElementByKey.clear();
-    this.#itemResizeObserver?.disconnect();
+    itemResizeObserver?.disconnect();
     this.#shiftAnimator?.cancelAll();
   }
 
@@ -733,40 +748,41 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
   }
 
   /**
-   * Set up ResizeObserver for measuring individual item heights.
+   * Create the ResizeObserver that measures individual item heights.
    */
-  #setupItemResizeObserver(): void {
-    this.#ngZone.runOutsideAngular(() => {
-      this.#itemResizeObserver = new ResizeObserver((entries) => {
-        const strategy = this.#strategy();
-        for (const entry of entries) {
-          const element = entry.target as HTMLElement;
-          const key = this.#observedElements.get(element);
-          if (key === undefined) continue;
+  #createItemResizeObserver(): ResizeObserver {
+    return this.#ngZone.runOutsideAngular(
+      () =>
+        new ResizeObserver((entries) => {
+          const strategy = this.#strategy();
+          for (const entry of entries) {
+            const element = entry.target as HTMLElement;
+            const key = this.#observedElements.get(element);
+            if (key === undefined) continue;
 
-          const height = entry.borderBoxSize?.[0]?.blockSize ?? element.offsetHeight;
-          if (height > 0) {
-            strategy.setMeasuredHeight(key, height);
+            const height = entry.borderBoxSize?.[0]?.blockSize ?? element.offsetHeight;
+            if (height > 0) {
+              strategy.setMeasuredHeight(key, height);
+            }
           }
-        }
-      });
-    });
+        }),
+    );
   }
 
   /**
    * Observe currently rendered items' DOM elements for height changes.
-   * Called after view init and on each render cycle in dynamic mode.
+   * Called after view init; re-observes after each render in dynamic mode, and every rendered
+   * item when a new observer is created.
    */
   #observeRenderedItems(): void {
-    if (!this.#itemResizeObserver) return;
-
-    // Use an effect to re-observe whenever rendered items change
-    effect(
+    // Re-observe whenever rendered items change, once they are in the DOM (a plain effect runs
+    // before the template renders them, so newly rendered rows would be missed)
+    afterRenderEffect(
       () => {
+        const observer = this.#itemResizeObserver();
+        if (!observer) return;
         const rendered = this.renderedItems();
         const idFn = this.itemIdFn();
-        const observer = this.#itemResizeObserver;
-        if (!observer) return;
 
         // Find the content wrapper and observe item elements
         const wrapper = this.#elementRef.nativeElement.querySelector(
