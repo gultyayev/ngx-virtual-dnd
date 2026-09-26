@@ -11,9 +11,11 @@ import {
   NgZone,
   OnDestroy,
   OnInit,
+  PLATFORM_ID,
   TemplateRef,
   ViewContainerRef,
 } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { VDND_SCROLL_CONTAINER } from '../tokens/scroll-container.token';
 import { VDND_OFFSET_ROWS_VIEWPORT, VDND_VIRTUAL_VIEWPORT } from '../tokens/virtual-viewport.token';
 import { DragStateService } from '../services/drag-state.service';
@@ -96,6 +98,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   readonly #scrollContainer = inject(VDND_SCROLL_CONTAINER);
   readonly #injector = inject(Injector);
   readonly #ngZone = inject(NgZone);
+  readonly #isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   readonly #dragState = inject(DragStateService);
   readonly #dragIndexCalculator = inject(DragIndexCalculatorService);
 
@@ -345,6 +348,13 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Server rendering: there is no ResizeObserver, and elements added outside the template
+    // (spacer, placeholder) would not match the client's DOM during hydration. The browser adds
+    // the spacer on init, so the server markup lacks only the list's scroll height until then.
+    if (!this.#isBrowser) {
+      return;
+    }
+
     // Only create spacer when NOT inside a viewport component
     // (viewport provides its own spacer and wrapper positioning)
     if (!this.#useViewportPositioning) {
