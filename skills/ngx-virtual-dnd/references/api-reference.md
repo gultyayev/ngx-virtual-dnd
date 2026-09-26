@@ -357,7 +357,7 @@ interface DropSource {
 
 interface DropDestination {
   droppableId: string;
-  placeholderId: string; // always END_OF_LIST; use index for the position
+  placeholderId: string; // deprecated: always END_OF_LIST; use index for the position
   index: number;         // final insertion index, after removal from the source
   data?: unknown;        // the droppable's vdndDroppableData / droppableData
 }
@@ -443,7 +443,7 @@ function removeAt<T>(list: T[], index: number): T[];
 | `sourceDroppableId` | `Signal<string \| null>` |
 | `sourceIndex` | `Signal<number \| null>` |
 | `activeDroppableId` | `Signal<string \| null>` |
-| `placeholderId` | `Signal<string \| null>` |
+| `placeholderId` | `Signal<string \| null>` — deprecated, always `END_OF_LIST` or `null`; use `placeholderIndex` |
 | `placeholderIndex` | `Signal<number \| null>` |
 | `cursorPosition` | `Signal<CursorPosition \| null>` |
 | `grabOffset` | `Signal<GrabOffset \| null>` |
@@ -607,7 +607,7 @@ interface DragState {
   sourceDroppableId: string | null;
   sourceIndex: number | null;
   activeDroppableId: string | null;
-  placeholderId: string | null;
+  placeholderId: string | null; // deprecated: always END_OF_LIST or null, use placeholderIndex
   placeholderIndex: number | null;
   cursorPosition: CursorPosition | null;
   grabOffset: GrabOffset | null;
@@ -734,6 +734,6 @@ const INITIAL_DRAG_STATE: DragState;
 // All fields null/false — represents idle state
 
 const END_OF_LIST = 'END_OF_LIST';
-// The value of every placeholderId; positions are reported as indexes
+// Deprecated: the value of every placeholderId; positions are reported as indexes
 ```
 

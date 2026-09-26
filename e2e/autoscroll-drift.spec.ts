@@ -4,7 +4,6 @@ import { waitForFrames } from './fixtures/drag-sync';
 import { poll } from './fixtures/polling';
 
 interface DriftSnapshot {
-  placeholder: string;
   actualIndex: number;
   expectedIndex: number;
   scrollTop: number;
@@ -12,7 +11,6 @@ interface DriftSnapshot {
 }
 
 interface DragDebugState {
-  placeholder?: string | null;
   placeholderIndex?: number | null;
   draggedItemHeight?: number | null;
   sourceDroppable?: string | null;
@@ -59,7 +57,6 @@ async function getDriftSnapshot(page: Page, list: ListName): Promise<DriftSnapsh
   const expectedIndex = getExpectedPlaceholderIndex(dragState, metrics);
 
   return {
-    placeholder: dragState.placeholder ?? 'unknown',
     actualIndex,
     expectedIndex,
     scrollTop: metrics.scrollTop,

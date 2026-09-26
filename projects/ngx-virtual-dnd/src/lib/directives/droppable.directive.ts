@@ -118,7 +118,11 @@ export class DroppableDirective implements OnDestroy {
     return activeId === this.vdndDroppable() && !this.disabled();
   });
 
-  /** The current placeholder ID when this droppable is active */
+  /**
+   * `END_OF_LIST` while this droppable is active, otherwise null.
+   * @deprecated It never identifies an item. For the position, use the `placeholderMove` output
+   * (and `DropEvent.destination.index` on drop). Will be removed in the next major version.
+   */
   readonly placeholderId = computed(() => {
     if (!this.isActive()) {
       return null;

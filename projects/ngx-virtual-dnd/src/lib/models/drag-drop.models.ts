@@ -49,7 +49,11 @@ export interface DragState {
   sourceIndex: number | null;
   /** ID of the droppable currently being hovered over */
   activeDroppableId: string | null;
-  /** `END_OF_LIST` while a droppable is targeted, otherwise null. See `placeholderIndex`. */
+  /**
+   * `END_OF_LIST` while a droppable is targeted, otherwise null.
+   * @deprecated It never identifies an item. Use `placeholderIndex`. Will be removed in the next
+   * major version.
+   */
   placeholderId: string | null;
   /** Index where the placeholder should be inserted */
   placeholderIndex: number | null;
@@ -103,7 +107,11 @@ export interface DropSource {
 export interface DropDestination {
   /** ID of the droppable container receiving the item */
   droppableId: string;
-  /** Always `END_OF_LIST`. Use `index` for the insertion position. */
+  /**
+   * The library always sets `END_OF_LIST`.
+   * @deprecated It never identifies an item. Use `index` for the insertion position. Will be
+   * removed in the next major version.
+   */
   placeholderId: string;
   /** Target index in the destination list */
   index: number;
@@ -196,5 +204,7 @@ export const INITIAL_DRAG_STATE: DragState = {
 /**
  * The value of every `placeholderId` the library sets. Positions are reported as indexes
  * (`placeholderIndex`, `DropDestination.index`).
+ * @deprecated Goes with the deprecated `placeholderId` fields. Use the indexes. Will be removed in
+ * the next major version.
  */
 export const END_OF_LIST = 'END_OF_LIST';
