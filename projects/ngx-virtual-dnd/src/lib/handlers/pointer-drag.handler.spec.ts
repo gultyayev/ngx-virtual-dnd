@@ -517,6 +517,36 @@ describe('PointerDragHandler', () => {
       expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(false);
     });
 
+    it('should cancel a touch drag when the touch is cancelled', () => {
+      handler.onPointerDown(createTouchStart(150, 220), true);
+      document.dispatchEvent(createTouchEvent('touchmove', 150, 240));
+
+      const cancel = new TouchEvent('touchcancel', {
+        touches: [],
+        changedTouches: [{ clientX: 150, clientY: 240 } as Touch],
+        bubbles: true,
+      });
+      document.dispatchEvent(cancel);
+
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(true);
+    });
+
+    it('should drop a pending touch press quietly when the touch is cancelled', () => {
+      handler.onPointerDown(createTouchStart(150, 220), true);
+
+      document.dispatchEvent(
+        new TouchEvent('touchcancel', {
+          touches: [],
+          changedTouches: [{ clientX: 150, clientY: 220 } as Touch],
+          bubbles: true,
+        }),
+      );
+      document.dispatchEvent(createTouchEvent('touchmove', 150, 260));
+
+      expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+    });
+
     it('should not end drag on pointer up if not dragging', () => {
       handler.onPointerDown(createMouseDown(150, 220), false);
 
@@ -690,6 +720,24 @@ describe('PointerDragHandler', () => {
       document.dispatchEvent(multiTouch('touchcancel', [dragFinger], [otherFinger]));
 
       expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
+    });
+
+    it('should cancel the drag, not drop, when the dragging finger is cancelled', () => {
+      startTouchDrag();
+
+      // The system took the touch (an incoming call, an OS gesture): the user never released
+      document.dispatchEvent(multiTouch('touchcancel', [otherFinger], [dragFinger]));
+
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledTimes(1);
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(true);
+    });
+
+    it('should drop when the dragging finger lifts while another is down', () => {
+      startTouchDrag();
+
+      document.dispatchEvent(multiTouch('touchend', [otherFinger], [dragFinger]));
+
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(false);
     });
   });
 

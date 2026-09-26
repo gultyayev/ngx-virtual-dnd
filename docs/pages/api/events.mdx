@@ -64,7 +64,7 @@ interface DragEndEvent {
 
 `destinationIndex` is `null` when nothing was dropped:
 
-- the drag was cancelled (<kbd>Escape</kbd>, <kbd>Tab</kbd> during a keyboard drag, or the window losing focus or the page being hidden during a pointer drag, since the release would never reach the page)
+- the drag was cancelled (<kbd>Escape</kbd>, <kbd>Tab</kbd> during a keyboard drag, or, during a pointer drag, the window losing focus or the page being hidden, since the release would never reach the page, or the system cancelling the touch)
 - it was released outside every droppable
 - it was released over a disabled droppable
 

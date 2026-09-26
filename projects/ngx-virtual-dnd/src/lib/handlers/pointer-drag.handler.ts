@@ -341,7 +341,9 @@ export class PointerDragHandler {
     // Otherwise, allow native touch behavior (like scroll momentum) to complete
     if (this.#deps.callbacks.isDragging()) {
       event.preventDefault();
-      this.#deps.callbacks.onDragEnd(false);
+      // The system took the touch (an incoming call, an OS gesture, too many fingers): the user
+      // never released, so this is a cancel, not a drop
+      this.#deps.callbacks.onDragEnd(event.type === 'touchcancel');
     }
 
     this.cleanup();

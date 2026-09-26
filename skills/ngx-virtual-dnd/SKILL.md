@@ -461,7 +461,7 @@ export class TasksComponent {
 | `(drop)`      | `DropEvent`      | `vdndDroppable`, `vdnd-sortable-list` — destination only |
 | `(placeholderMove)` | `PlaceholderMoveEvent` | `vdndDroppable`, `vdnd-sortable-list` — each placeholder move within that list (haptics) |
 
-`DragEndEvent.destinationIndex` is `null` when nothing was dropped: Escape/Tab cancel, a pointer drag cancelled because the window lost focus or the page was hidden, release outside every droppable, or release over a disabled droppable. Branch on `destinationIndex === null` to detect "no drop"; `cancelled` is `true` only when the drag was cancelled (Escape, Tab, focus loss), so it misses the other cases.
+`DragEndEvent.destinationIndex` is `null` when nothing was dropped: Escape/Tab cancel, a pointer drag cancelled because the window lost focus, the page was hidden or the system cancelled the touch, release outside every droppable, or release over a disabled droppable. Branch on `destinationIndex === null` to detect "no drop"; `cancelled` is `true` only when the drag was cancelled (Escape, Tab, focus loss, `touchcancel`), so it misses the other cases.
 
 ## CSS classes
 
