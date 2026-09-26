@@ -11,6 +11,8 @@ export interface PointerDragCallbacks {
   onDragEnd: (cancelled: boolean) => void;
   onPendingChange: (pending: boolean) => void;
   isDragging: () => boolean;
+  /** Whether a drag of another item (pointer or keyboard) is in progress. */
+  isOtherDragActive: () => boolean;
 }
 
 /**
@@ -129,6 +131,13 @@ export class PointerDragHandler {
     }
     event.stopPropagation();
 
+    // Only one drag at a time: a second finger or a press during a keyboard drag must not
+    // replace the drag in progress. The press keeps the default handling above, so a mouse press
+    // still doesn't focus this item (which would take the keys of a keyboard drag).
+    if (this.#deps.callbacks.isOtherDragActive()) {
+      return;
+    }
+
     this.#isTracking = true;
     this.#startPosition = PointerDragHandler.#getPosition(event);
 
@@ -137,9 +146,15 @@ export class PointerDragHandler {
     this.#cancelDelayTimer();
     if (delay > 0) {
       this.#delayTimerId = setTimeout(() => {
+        this.#delayTimerId = null;
+        // Another drag started while this press was held: drop the press rather than show it
+        // as ready to drag during that drag.
+        if (this.#deps.callbacks.isOtherDragActive()) {
+          this.cleanup();
+          return;
+        }
         this.#delayReady = true;
         this.#deps.callbacks.onPendingChange(true); // Emit ready state when delay passes
-        this.#delayTimerId = null;
       }, delay);
     } else {
       this.#delayReady = true;
@@ -219,6 +234,12 @@ export class PointerDragHandler {
       // DON'T call preventDefault() here - let native scrolling take over.
       if (!this.#delayReady) {
         this.#cancelDelayTimer();
+        this.cleanup();
+        return;
+      }
+
+      // Another press won the race and started its drag first: give up this one.
+      if (this.#deps.callbacks.isOtherDragActive()) {
         this.cleanup();
         return;
       }
