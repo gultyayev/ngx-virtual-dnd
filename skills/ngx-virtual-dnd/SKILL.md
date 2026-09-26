@@ -321,7 +321,7 @@ Measurement relies on rules 3 and 7: the measured element is the one whose `data
 ```
 
 - **`dragHandle`** — CSS selector; only pointer-downs inside a matching element start a drag. Make the handle a non-button element (e.g. a `span`), because pointer-downs inside a `<button>` never start a drag (see next point).
-- **Interactive children** — pointer-downs inside a `button`, `input`, `textarea`, `select`, or `[contenteditable]` element never start a drag, so controls inside items keep working. The same applies to an element with class `no-drag`, but only when it is the exact element pressed (its children are not covered). Only the primary mouse button starts a drag. `Space` pressed in such a control (or on a `no-drag` element) inside an item goes to the control instead of starting a keyboard drag, unless the control is the `dragHandle`. Controls inside a web component's shadow DOM and ARIA widgets (e.g. `role="switch"`) are not detected: add `no-drag` to the web component element or the widget.
+- **Interactive children** — pointer-downs inside a `button`, `input`, `textarea`, `select`, or `[contenteditable]` element never start a drag, so controls inside items keep working. The same applies to an element with class `no-drag` and everything inside it. Only the primary mouse button starts a drag. `Space` pressed in such a control (or inside a `no-drag` element) inside an item goes to the control instead of starting a keyboard drag, unless the control is the `dragHandle`. `no-drag` on the draggable element itself stops pointer drags but not `Space` on the item; use `disabled` to turn dragging off. Controls inside a web component's shadow DOM and ARIA widgets (e.g. `role="switch"`) are not detected: add `no-drag` to the web component element or the widget.
 - **`dragThreshold`** (default `5`) — pixels the pointer must move before the drag starts.
 - **`dragDelay`** (default `0`) — ms the pointer must be held first. Moving past the threshold before the delay ends aborts the drag, so touch users can still scroll the list. When the delay has passed the element gets `vdnd-drag-pending` — style it to show the item is ready.
 - **`lockAxis`** — names the axis that is **frozen**: `'x'` → vertical-only movement, `'y'` → horizontal-only. This is the opposite of Angular CDK's `cdkDragLockAxis`.
@@ -491,7 +491,7 @@ export class TasksComponent {
 | Cannot drop into another list                              | Lists are in different groups, or that list has no `(drop)` handler (rule 8)                   |
 | Drop fires but the arrays don't change                     | `moveItem` keys don't match the `droppableId`s                                                 |
 | A gap stays where the item was                             | `vdndDraggable` is nested inside a wrapper element (rule 7)                                    |
-| A custom control inside an item starts a drag instead of working | Add class `no-drag` to the element that receives the press, or use `dragHandle` |
+| A custom control inside an item starts a drag instead of working | Add class `no-drag` to the control (it covers everything inside it), or use `dragHandle` |
 | Preview loses styling                                     | Styles relied on ancestor selectors; the preview lives under `<body>` — target its own classes |
 
 ## API reference
