@@ -164,7 +164,9 @@ export interface DragEndEvent {
   /** ID of the droppable container the item originated from */
   droppableId: string;
   /**
-   * Whether the drag was actively cancelled (Escape key). Releasing over no valid
+   * Whether the drag was cancelled: Escape, Tab during a keyboard drag, or, during a pointer
+   * drag, the window losing focus, the page being hidden or the system cancelling the touch
+   * (`touchcancel`). Releasing over no valid
    * target (outside any droppable, or over a disabled droppable) is NOT a cancel —
    * it reports `cancelled: false` with `destinationIndex: null`. Branch on
    * `destinationIndex === null` to detect "no drop occurred".
