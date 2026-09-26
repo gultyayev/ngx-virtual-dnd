@@ -8,8 +8,10 @@ import {
   inject,
   input,
   NgZone,
+  PLATFORM_ID,
   signal,
 } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { VDND_VIRTUAL_VIEWPORT, VdndVirtualViewport } from '../tokens/virtual-viewport.token';
 import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-container.token';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
@@ -114,6 +116,7 @@ import { ContentHeaderDirective } from '../directives/content-header.directive';
 export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollContainer {
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #ngZone = inject(NgZone);
+  readonly #isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   /**
    * The parent scroll container injected via skip-self to get the actual scrollable element.
@@ -270,6 +273,11 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
       const dir = this.headerDirective();
       if (!dir) {
         this.#measuredHeaderHeight.set(0);
+        return;
+      }
+
+      // Server rendering: no layout to measure, and no ResizeObserver
+      if (!this.#isBrowser) {
         return;
       }
 
