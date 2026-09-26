@@ -47,6 +47,38 @@ test.describe('Keyboard Drag - Basic Operations', () => {
     expect(await demoPage.getItemId('list1', 0)).toBe(firstId);
   });
 
+  test('keys on another focused item go to the keyboard drag, which ends cleanly', async ({
+    page,
+  }) => {
+    await demoPage.goto();
+    const firstId = await demoPage.getItemId('list1', 0);
+    const secondId = await demoPage.getItemId('list1', 1);
+    const thirdId = await demoPage.getItemId('list1', 2);
+    const third = page.locator(`[data-draggable-id="${thirdId}"]`);
+
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+
+    // Focus moves to another item mid-drag (app code, or a click on a disabled item)
+    await third.focus();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'false');
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '1');
+    expect(await demoPage.getItemId('list1', 0)).toBe(secondId);
+    expect(await demoPage.getItemId('list1', 1)).toBe(firstId);
+
+    // The first drag left nothing behind: one ArrowDown in the next keyboard drag moves one slot
+    await demoPage.startKeyboardDrag('list1', 2);
+    await expect(demoPage.dragPreview).toBeVisible();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '3');
+    expect(await demoPage.getItemId('list1', 3)).toBe(thirdId);
+  });
+
   for (const dropKey of ['Space', 'Enter'] as const) {
     test(`should drop item with ${dropKey} key during keyboard drag`, async ({ page }) => {
       await demoPage.goto();
