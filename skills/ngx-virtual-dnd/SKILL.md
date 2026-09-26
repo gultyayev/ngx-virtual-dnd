@@ -127,7 +127,7 @@ export class BoardComponent {
 ```typescript
 interface DropEvent {
   source: { draggableId: string; droppableId: string; index: number; data?: unknown };
-  destination: { droppableId: string; placeholderId: string; index: number; data?: unknown };
+  destination: { droppableId: string; placeholderId: string; index: number; data?: unknown }; // placeholderId is deprecated (always END_OF_LIST): use index
 }
 ```
 

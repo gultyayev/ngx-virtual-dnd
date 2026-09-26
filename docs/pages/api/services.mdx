@@ -21,24 +21,24 @@ protected readonly dragState = inject(DragStateService);
 }
 ```
 
-| Signal                | Type                     | Description                                               |
-| --------------------- | ------------------------ | --------------------------------------------------------- |
-| `isDragging`          | `boolean`                | A drag is in progress                                     |
-| `draggedItem`         | `DraggedItem \| null`    | The dragged item, its element and size                    |
-| `draggedItemId`       | `string \| null`         | ID of the dragged item                                    |
-| `sourceDroppableId`   | `string \| null`         | List the drag started in                                  |
-| `sourceIndex`         | `number \| null`         | Index the drag started at                                 |
-| `activeDroppableId`   | `string \| null`         | List currently targeted                                   |
-| `placeholderId`       | `string \| null`         | `END_OF_LIST` while a list is targeted, otherwise `null`  |
-| `placeholderIndex`    | `number \| null`         | Current drop index                                        |
-| `cursorPosition`      | `CursorPosition \| null` | Pointer position                                          |
-| `grabOffset`          | `GrabOffset \| null`     | Offset between the pointer and the item's top-left corner |
-| `initialPosition`     | `CursorPosition \| null` | Pointer position at drag start                            |
-| `lockAxis`            | `'x' \| 'y' \| null`     | Axis lock of the current drag                             |
-| `isKeyboardDrag`      | `boolean`                | The drag was started with the keyboard                    |
-| `keyboardTargetIndex` | `number \| null`         | Target index during a keyboard drag                       |
-| `wasCancelled`        | `boolean`                | Whether the last drag was cancelled                       |
-| `endedDragState`      | `DragState \| null`      | Snapshot of the last drag, taken just before it was reset |
+| Signal                | Type                     | Description                                                                                      |
+| --------------------- | ------------------------ | ------------------------------------------------------------------------------------------------ |
+| `isDragging`          | `boolean`                | A drag is in progress                                                                            |
+| `draggedItem`         | `DraggedItem \| null`    | The dragged item, its element and size                                                           |
+| `draggedItemId`       | `string \| null`         | ID of the dragged item                                                                           |
+| `sourceDroppableId`   | `string \| null`         | List the drag started in                                                                         |
+| `sourceIndex`         | `number \| null`         | Index the drag started at                                                                        |
+| `activeDroppableId`   | `string \| null`         | List currently targeted                                                                          |
+| `placeholderId`       | `string \| null`         | **Deprecated**, use `placeholderIndex`. `END_OF_LIST` while a list is targeted, otherwise `null` |
+| `placeholderIndex`    | `number \| null`         | Current drop index                                                                               |
+| `cursorPosition`      | `CursorPosition \| null` | Pointer position                                                                                 |
+| `grabOffset`          | `GrabOffset \| null`     | Offset between the pointer and the item's top-left corner                                        |
+| `initialPosition`     | `CursorPosition \| null` | Pointer position at drag start                                                                   |
+| `lockAxis`            | `'x' \| 'y' \| null`     | Axis lock of the current drag                                                                    |
+| `isKeyboardDrag`      | `boolean`                | The drag was started with the keyboard                                                           |
+| `keyboardTargetIndex` | `number \| null`         | Target index during a keyboard drag                                                              |
+| `wasCancelled`        | `boolean`                | Whether the last drag was cancelled                                                              |
+| `endedDragState`      | `DragState \| null`      | Snapshot of the last drag, taken just before it was reset                                        |
 
 For styling a single list, the `vdnd-droppable-active` class is usually simpler.
 

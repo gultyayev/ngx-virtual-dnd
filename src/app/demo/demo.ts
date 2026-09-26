@@ -157,7 +157,6 @@ export class DemoComponent {
     sourceDroppable: this.#dragState.sourceDroppableId(),
     sourceIndex: this.#dragState.sourceIndex(),
     activeDroppable: this.#dragState.activeDroppableId(),
-    placeholder: this.#dragState.placeholderId(),
     placeholderIndex: this.#dragState.placeholderIndex(),
     cursorPosition: this.#dragState.cursorPosition(),
     grabOffset: this.#dragState.grabOffset(),
