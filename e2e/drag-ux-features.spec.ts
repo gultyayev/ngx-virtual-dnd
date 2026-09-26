@@ -21,6 +21,28 @@ test.describe('Drag UX Features - Cursor Management', () => {
     await expect(body).not.toHaveClass(/vdnd-dragging/);
   });
 
+  test('should cancel the drag when the window loses focus mid-drag', async ({ page }) => {
+    const body = page.locator('body');
+    const firstId = await demoPage.getItemId('list1', 0);
+    const first = page.locator(`[data-draggable-id="${firstId}"]`);
+
+    await demoPage.startDrag(first);
+    // What the browser fires when the user switches windows while holding the button
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(body).not.toHaveClass(/vdnd-dragging/);
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'true');
+    await expect(first).toBeVisible();
+    await page.mouse.up();
+
+    // Nothing is left stuck: the next drag starts and drops normally
+    await demoPage.startDrag(first);
+    await page.mouse.up();
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'false');
+  });
+
   test('should inject cursor styles for grabbing cursor', async ({ page }) => {
     const styleElement = page.locator('#vdnd-cursor-styles');
     await expect(styleElement).toBeAttached();
