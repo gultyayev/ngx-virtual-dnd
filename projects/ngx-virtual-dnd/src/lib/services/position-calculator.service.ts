@@ -31,6 +31,11 @@ interface DragSessionSnapshot {
   resizeObserver: ResizeObserver | null;
 }
 
+/** The parent lookups stop below `<body>`: it and `<html>` never count as list or item. */
+function isPageRoot(element: Element): boolean {
+  return element.tagName === 'BODY' || element.tagName === 'HTML';
+}
+
 /**
  * Service for calculating drop positions and finding elements at cursor positions.
  * This is the core algorithm that makes virtual scroll + drag-and-drop work together.
@@ -52,9 +57,6 @@ export class PositionCalculatorService {
 
   /** Data attribute used to identify draggable elements */
   readonly #DRAGGABLE_ID_ATTR = 'data-draggable-id';
-
-  /** Maximum DOM levels to traverse when looking for parent elements */
-  readonly #MAX_PARENT_TRAVERSAL = 15;
 
   /** Reusable result object for getNearEdge (avoids per-frame allocation) */
   readonly #nearEdgeResult = { top: false, bottom: false, left: false, right: false };
@@ -383,18 +385,20 @@ export class PositionCalculatorService {
    * @returns The droppable parent element, or null if none found
    */
   getDroppableParent(element: HTMLElement, groupName: string): HTMLElement | null {
-    let current: HTMLElement | null = element;
-    let count = 0;
+    // An empty group name never matches (an empty attribute value is no group)
+    if (!groupName) {
+      return null;
+    }
 
-    while (current && current.tagName !== 'BODY' && count < this.#MAX_PARENT_TRAVERSAL) {
-      const foundGroup = current.getAttribute(this.#DROPPABLE_GROUP_ATTR);
-
-      if (foundGroup && foundGroup === groupName) {
+    // Match on the attribute's presence and compare the value here, so the group name needs no
+    // selector escaping. Nearer droppables of other groups are skipped.
+    const selector = `[${this.#DROPPABLE_GROUP_ATTR}]`;
+    let current = element.closest<HTMLElement>(selector);
+    while (current && !isPageRoot(current)) {
+      if (current.getAttribute(this.#DROPPABLE_GROUP_ATTR) === groupName) {
         return current;
       }
-
-      current = current.parentElement;
-      count++;
+      current = current.parentElement?.closest<HTMLElement>(selector) ?? null;
     }
 
     return null;
@@ -407,21 +411,9 @@ export class PositionCalculatorService {
    * @returns The draggable parent element, or null if none found
    */
   getDraggableParent(element: HTMLElement): HTMLElement | null {
-    let current: HTMLElement | null = element;
-    let count = 0;
-
-    while (current && current.tagName !== 'BODY' && count < this.#MAX_PARENT_TRAVERSAL) {
-      const draggableId = current.getAttribute(this.#DRAGGABLE_ID_ATTR);
-
-      if (draggableId) {
-        return current;
-      }
-
-      current = current.parentElement;
-      count++;
-    }
-
-    return null;
+    const selector = `[${this.#DRAGGABLE_ID_ATTR}]:not([${this.#DRAGGABLE_ID_ATTR}=""])`;
+    const draggable = element.closest<HTMLElement>(selector);
+    return draggable && !isPageRoot(draggable) ? draggable : null;
   }
 
   /**
