@@ -527,6 +527,172 @@ describe('PointerDragHandler', () => {
     });
   });
 
+  describe('multi-touch', () => {
+    interface TouchPoint {
+      id: number;
+      x: number;
+      y: number;
+    }
+
+    /** A touch event listing `touches` (all fingers down) and `changed` (the ones it is about). */
+    const multiTouch = (type: string, touches: TouchPoint[], changed: TouchPoint[]): TouchEvent => {
+      const toTouch = ({ id, x, y }: TouchPoint) =>
+        ({ identifier: id, clientX: x, clientY: y, target: mockContext.element }) as Touch;
+      const event = new TouchEvent(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'touches', { value: touches.map(toTouch) });
+      Object.defineProperty(event, 'changedTouches', { value: changed.map(toTouch) });
+      Object.defineProperty(event, 'target', { value: mockContext.element });
+      return event;
+    };
+
+    const dragFinger = { id: 7, x: 150, y: 220 };
+    const otherFinger = { id: 3, x: 400, y: 600 };
+
+    /** Press with `dragFinger` and move it past the threshold to start the drag. */
+    const startTouchDrag = (): void => {
+      handler.onPointerDown(multiTouch('touchstart', [dragFinger], [dragFinger]), true);
+      const moved = { ...dragFinger, y: 240 };
+      document.dispatchEvent(multiTouch('touchmove', [moved], [moved]));
+      expect(mockCallbacks.onDragStart).toHaveBeenCalledWith({ x: 150, y: 240 });
+    };
+
+    it('should not start the drag when only another finger moves', () => {
+      handler.onPointerDown(multiTouch('touchstart', [dragFinger], [dragFinger]), true);
+
+      // The other finger comes first in the list and moves far past the threshold
+      const otherMoved = { ...otherFinger, y: 700 };
+      document.dispatchEvent(multiTouch('touchmove', [otherMoved, dragFinger], [otherMoved]));
+
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+    });
+
+    it('should follow the finger that started the drag, not the first one in the list', () => {
+      startTouchDrag();
+
+      const moved = { ...dragFinger, x: 180, y: 260 };
+      document.dispatchEvent(multiTouch('touchmove', [otherFinger, moved], [otherFinger, moved]));
+
+      expect(mockCallbacks.onDragMove).toHaveBeenLastCalledWith({ x: 180, y: 260 });
+      expect(mockCallbacks.onDragMove).not.toHaveBeenCalledWith({ x: 400, y: 600 });
+    });
+
+    it('should keep dragging when another finger lifts', () => {
+      startTouchDrag();
+
+      document.dispatchEvent(multiTouch('touchend', [dragFinger], [otherFinger]));
+
+      expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
+      const moved = { ...dragFinger, y: 300 };
+      document.dispatchEvent(multiTouch('touchmove', [moved], [moved]));
+      expect(mockCallbacks.onDragMove).toHaveBeenLastCalledWith({ x: 150, y: 300 });
+    });
+
+    it('should drop when the finger that started the drag lifts', () => {
+      startTouchDrag();
+
+      document.dispatchEvent(multiTouch('touchend', [otherFinger], [dragFinger]));
+
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(false);
+    });
+
+    it("should keep another finger's move from scrolling the page during the drag", () => {
+      startTouchDrag();
+
+      const otherMoved = { ...otherFinger, y: 650 };
+      const move = multiTouch('touchmove', [otherMoved, { ...dragFinger, y: 240 }], [otherMoved]);
+      document.dispatchEvent(move);
+
+      expect(move.defaultPrevented).toBe(true);
+    });
+
+    it('should let another finger scroll the page while a delayed press is pending', () => {
+      mockContext.dragDelay = 200;
+      handler.onPointerDown(multiTouch('touchstart', [dragFinger], [dragFinger]), true);
+
+      const otherMoved = { ...otherFinger, y: 650 };
+      const move = multiTouch('touchmove', [otherMoved, dragFinger], [otherMoved]);
+      document.dispatchEvent(move);
+
+      expect(move.defaultPrevented).toBe(false);
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+    });
+
+    it('should follow the finger on the draggable when several touches start at once', () => {
+      const elsewhere = document.createElement('div');
+      const toTouch = ({ id, x, y }: TouchPoint, target: Element) =>
+        ({ identifier: id, clientX: x, clientY: y, target }) as unknown as Touch;
+      const start = new TouchEvent('touchstart', { bubbles: true, cancelable: true });
+      const started = [toTouch(otherFinger, elsewhere), toTouch(dragFinger, mockContext.element)];
+      Object.defineProperty(start, 'touches', { value: started });
+      Object.defineProperty(start, 'changedTouches', { value: started });
+      Object.defineProperty(start, 'target', { value: mockContext.element });
+
+      handler.onPointerDown(start, true);
+
+      expect(handler.getStartPosition()).toEqual({ x: dragFinger.x, y: dragFinger.y });
+    });
+
+    it('should keep following the first finger when a second one lands on the same item', () => {
+      handler.onPointerDown(multiTouch('touchstart', [dragFinger], [dragFinger]), true);
+      const second = { id: 9, x: 160, y: 230 };
+      // The browser lists the new finger first
+      handler.onPointerDown(multiTouch('touchstart', [second, dragFinger], [second]), true);
+      expect(handler.getStartPosition()).toEqual({ x: dragFinger.x, y: dragFinger.y });
+
+      const moved = { ...dragFinger, y: 260 };
+      document.dispatchEvent(multiTouch('touchmove', [second, moved], [moved]));
+
+      expect(mockCallbacks.onDragStart).toHaveBeenCalledWith({ x: 150, y: 260 });
+    });
+
+    it('should end the gesture on any release when touches carry no identifier', () => {
+      // Malformed synthetic events: the press and the release list touches without identifiers
+      const touch = { clientX: 150, clientY: 220 };
+      const start = new TouchEvent('touchstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(start, 'touches', { value: [touch] });
+      Object.defineProperty(start, 'changedTouches', { value: [touch] });
+      Object.defineProperty(start, 'target', { value: mockContext.element });
+      handler.onPointerDown(start, true);
+      document.dispatchEvent(createTouchEvent('touchmove', 150, 260));
+
+      const end = new TouchEvent('touchend', { bubbles: true, cancelable: true });
+      Object.defineProperty(end, 'touches', { value: [touch] });
+      Object.defineProperty(end, 'changedTouches', { value: undefined });
+      document.dispatchEvent(end);
+
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(false);
+    });
+
+    it('should not throw on synthetic touch events without changedTouches', () => {
+      const start = new TouchEvent('touchstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(start, 'touches', { value: [{ clientX: 150, clientY: 220 }] });
+      Object.defineProperty(start, 'changedTouches', { value: undefined });
+      Object.defineProperty(start, 'target', { value: mockContext.element });
+      const move = new TouchEvent('touchmove', { bubbles: true, cancelable: true });
+      Object.defineProperty(move, 'touches', { value: [{ clientX: 150, clientY: 260 }] });
+      Object.defineProperty(move, 'changedTouches', { value: undefined });
+      const end = new TouchEvent('touchend', { bubbles: true, cancelable: true });
+      Object.defineProperty(end, 'touches', { value: [] });
+      Object.defineProperty(end, 'changedTouches', { value: undefined });
+
+      expect(() => {
+        handler.onPointerDown(start, true);
+        document.dispatchEvent(move);
+        document.dispatchEvent(end);
+      }).not.toThrow();
+      expect(mockCallbacks.onDragStart).toHaveBeenCalledWith({ x: 150, y: 260 });
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(false);
+    });
+
+    it('should keep the drag when another finger is cancelled', () => {
+      startTouchDrag();
+
+      document.dispatchEvent(multiTouch('touchcancel', [dragFinger], [otherFinger]));
+
+      expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
+    });
+  });
+
   describe('escape key cancellation', () => {
     it('should cancel drag on Escape key', () => {
       handler.onPointerDown(createMouseDown(150, 220), false);

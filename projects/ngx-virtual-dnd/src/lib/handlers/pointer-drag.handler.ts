@@ -57,6 +57,9 @@ export class PointerDragHandler {
   /** Whether we're currently tracking a potential drag */
   #isTracking = false;
 
+  /** Identifier of the finger that pressed, for touch gestures (other fingers are ignored) */
+  #touchId: number | null = null;
+
   /** Bound event handlers for cleanup */
   #boundPointerMove: ((e: MouseEvent | TouchEvent) => void) | null = null;
   #boundPointerUp: ((e: MouseEvent | TouchEvent) => void) | null = null;
@@ -125,6 +128,12 @@ export class PointerDragHandler {
       return;
     }
 
+    // Track the finger that pressed this draggable; the others are ignored for the gesture.
+    const touch = 'touches' in event ? PointerDragHandler.#pressingTouch(event, ctx.element) : null;
+    if ('touches' in event && !touch) {
+      return;
+    }
+
     const delay = ctx.dragDelay;
 
     // For touch events with a delay configured, DON'T call preventDefault() on touchstart.
@@ -136,6 +145,11 @@ export class PointerDragHandler {
     }
     event.stopPropagation();
 
+    // A second finger on this draggable while the first is still down: keep following the first.
+    if ('touches' in event && touch && this.#isTracking && this.#trackedTouch(event.touches)) {
+      return;
+    }
+
     // Only one drag at a time: a second finger or a press during a keyboard drag must not
     // replace the drag in progress. The press keeps the default handling above, so a mouse press
     // still doesn't focus this item (which would take the keys of a keyboard drag).
@@ -144,10 +158,16 @@ export class PointerDragHandler {
     }
 
     this.#isTracking = true;
-    this.#startPosition = PointerDragHandler.#getPosition(event);
+    if (touch) {
+      this.#touchId = touch.identifier;
+      this.#startPosition = { x: touch.clientX, y: touch.clientY };
+    } else {
+      const mouse = event as MouseEvent;
+      this.#startPosition = { x: mouse.clientX, y: mouse.clientY };
+    }
 
-    // Handle drag delay. A repeated press (e.g. a second finger) restarts the delay; the
-    // previous timer must not survive, or it fires after the gesture has ended.
+    // Handle drag delay. A repeated press (e.g. after a release the page never saw) restarts the
+    // delay; the previous timer must not survive, or it fires after the gesture has ended.
     this.#cancelDelayTimer();
     if (delay > 0) {
       this.#delayTimerId = setTimeout(() => {
@@ -191,6 +211,7 @@ export class PointerDragHandler {
   cleanup(): void {
     this.#isTracking = false;
     this.#startPosition = null;
+    this.#touchId = null;
     this.#deps.callbacks.onPendingChange(false); // Clear pending state on cleanup
     this.#cancelDelayTimer();
 
@@ -230,7 +251,22 @@ export class PointerDragHandler {
       return;
     }
 
-    const position = PointerDragHandler.#getPosition(event);
+    let position: CursorPosition;
+    if ('touches' in event) {
+      // `touches` holds every finger's current position, so the tracked finger's is there even
+      // when only another finger moved
+      const touch = this.#trackedTouch(event.touches) ?? this.#trackedTouch(event.changedTouches);
+      if (!touch) {
+        // The tracked finger is gone. While dragging, keep other fingers from scrolling the page.
+        if (this.#deps.callbacks.isDragging()) {
+          event.preventDefault();
+        }
+        return;
+      }
+      position = { x: touch.clientX, y: touch.clientY };
+    } else {
+      position = { x: event.clientX, y: event.clientY };
+    }
     const ctx = this.#deps.getContext();
 
     // Check if we've moved past the threshold
@@ -282,6 +318,17 @@ export class PointerDragHandler {
    */
   #onPointerUp(event: MouseEvent | TouchEvent): void {
     if (!this.#isTracking) {
+      return;
+    }
+
+    // Another finger lifted (or was cancelled) while the tracked one is still down. Touches
+    // without an identifier (malformed synthetic events) can't be told apart: any release ends.
+    if (
+      'touches' in event &&
+      typeof this.#touchId === 'number' &&
+      this.#trackedTouch(event.changedTouches) === null &&
+      this.#trackedTouch(event.touches) !== null
+    ) {
       return;
     }
 
@@ -341,13 +388,23 @@ export class PointerDragHandler {
   }
 
   /**
-   * Get position from mouse or touch event.
+   * The tracked finger in `touches`, or null. Synthetic touch events (e.g. from test tools) can
+   * leave a list undefined, so a missing list counts as empty.
    */
-  static #getPosition(event: MouseEvent | TouchEvent): CursorPosition {
-    if ('touches' in event) {
-      const touch = event.touches[0] ?? event.changedTouches[0];
-      return { x: touch.clientX, y: touch.clientY };
-    }
-    return { x: event.clientX, y: event.clientY };
+  #trackedTouch(touches: TouchList | undefined): Touch | null {
+    return Array.from(touches ?? []).find((touch) => touch.identifier === this.#touchId) ?? null;
+  }
+
+  /**
+   * The finger that pressed this draggable: of the touches that started with this event, the
+   * one on the draggable (several fingers can land in one touchstart).
+   */
+  static #pressingTouch(event: TouchEvent, element: HTMLElement): Touch | null {
+    // Either list can be undefined on synthetic events
+    const started = Array.from((event.changedTouches as TouchList | undefined) ?? []);
+    const onElement = started.find(
+      (touch) => touch.target instanceof Node && element.contains(touch.target),
+    );
+    return onElement ?? started[0] ?? Array.from(event.touches ?? [])[0] ?? null;
   }
 }
