@@ -17,7 +17,7 @@ When rows have different heights, set `[dynamicItemHeight]="true"`. `itemHeight`
 
 - Rendered rows are measured with a `ResizeObserver`. If a row's content changes height later, the list updates.
 - Heights are cached **by item ID** in each list, so they survive reordering. An item moved into another list is measured again there, starting from that list's estimate.
-- Offsets are kept as prefix sums, so finding the row at a scroll position is a binary search (O(log n)).
+- Offsets are kept as prefix sums, so finding the row at a scroll position is a binary search (O(log n)). A measured height only invalidates the offsets after its row, and they are recomputed only as far as a lookup reaches, so measuring rows while scrolling a long list stays cheap.
 - `dynamicItemHeight` and `itemHeight` can change at runtime. The list then starts again from the estimate and measures the rendered rows anew. Turning `dynamicItemHeight` off stops measuring.
 
 Two rules from [Core concepts](/guide/essentials/core-concepts#rules-that-fail-silently) matter most here. The draggable ID must equal the item ID, and `vdndDraggable` must be on the template's root element. The list uses both to find the element it measures.

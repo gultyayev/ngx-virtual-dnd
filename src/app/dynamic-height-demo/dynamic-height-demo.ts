@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { IonCheckbox, IonContent, IonHeader, IonIcon, IonToolbar } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import { reorderThree } from 'ionicons/icons';
@@ -29,6 +30,12 @@ interface DynamicTask {
 }
 
 type CategoryFilter = 'all' | 'work' | 'personal' | 'urgent';
+
+/** The `?count=` list size: a whole number from 1 to 1,000,000, else the default 150. */
+function listSize(param: string | null): number {
+  const count = Number(param);
+  return Number.isInteger(count) && count >= 1 && count <= 1_000_000 ? count : 150;
+}
 
 @Component({
   selector: 'app-dynamic-height-demo',
@@ -69,7 +76,10 @@ export class DynamicHeightDemoComponent {
   // State
   readonly showBanner = signal(true);
   readonly category = signal<CategoryFilter>('all');
-  readonly tasks = signal<DynamicTask[]>(this.#generateTasks(150));
+  // `?count=` sets the list size (the perf benchmarks use a long list)
+  readonly tasks = signal<DynamicTask[]>(
+    this.#generateTasks(listSize(inject(ActivatedRoute).snapshot.queryParamMap.get('count'))),
+  );
 
   // Filtered tasks based on category
   readonly filteredTasks = computed(() => {

@@ -10,6 +10,9 @@ import { aggregate } from '../fixtures/statistics';
 const ITERATIONS = 5;
 const WARMUP_ITERATIONS = 1;
 const CPU_THROTTLE = 4;
+const LONG_LIST_COUNT = 100_000;
+/** Pixels scrolled per run: about 250 rows of the demo's 56-120px rows */
+const LONG_LIST_SCROLL_DISTANCE = 20_000;
 
 test.describe('Dynamic Height Scroll Performance', () => {
   test('scroll through dynamic height list', async ({ page }, testInfo) => {
@@ -85,6 +88,63 @@ test.describe('Dynamic Height Scroll Performance', () => {
     };
 
     testInfo.attach('dynamic-height-scroll', {
+      body: JSON.stringify(report, null, 2),
+      contentType: 'application/json',
+    });
+
+    await collector.dispose();
+  });
+
+  test('scroll through rows never measured in a long dynamic height list', async ({
+    page,
+  }, testInfo) => {
+    const perfPage = new PerfPage(page);
+    const collector = new MetricsCollector(page);
+    await collector.init();
+    await collector.setCpuThrottling(CPU_THROTTLE);
+
+    // Every frame of this scroll measures rows rendered for the first time, then reads the list's
+    // offsets and height: the interleaved measure/lookup pattern of a long list (issue #29).
+    await perfPage.goto(`/dynamic-height?count=${LONG_LIST_COUNT}`);
+
+    const results: ScenarioMetrics[] = [];
+    const totalRuns = WARMUP_ITERATIONS + ITERATIONS;
+
+    for (let i = 0; i < totalRuns; i++) {
+      // Each run starts where the previous one ended, so all but its first screen of rows are
+      // unmeasured
+      const start = i * LONG_LIST_SCROLL_DISTANCE;
+      await page.evaluate((top) => {
+        const scrollable = document.querySelector('[vdndScrollable]') as HTMLElement;
+        scrollable.scrollTop = top;
+      }, start);
+      await page.waitForTimeout(300);
+
+      const metrics = await collector.measureScenario(() =>
+        perfPage.smoothScroll('[vdndScrollable]', start + LONG_LIST_SCROLL_DISTANCE, 2000),
+      );
+
+      if (i >= WARMUP_ITERATIONS) {
+        results.push(metrics);
+      }
+    }
+
+    const report = {
+      scenario: 'dynamic-height-long-list-scroll',
+      metricsSchemaVersion: METRICS_SCHEMA_VERSION,
+      cpuThrottle: CPU_THROTTLE,
+      iterations: ITERATIONS,
+      totalBlockingTime: aggregate(results.map((r) => r.totalBlockingTime)),
+      longTaskCount: aggregate(results.map((r) => r.longTaskCount)),
+      layoutCount: aggregate(results.map((r) => r.layoutCount)),
+      recalcStyleCount: aggregate(results.map((r) => r.recalcStyleCount)),
+      avgFrameTime: aggregate(results.map((r) => r.avgFrameTime)),
+      maxFrameGap: aggregate(results.map((r) => r.maxFrameGap)),
+      droppedFrames: aggregate(results.map((r) => r.droppedFrames)),
+      p99FrameTime: aggregate(results.map((r) => r.p99FrameTime)),
+    };
+
+    testInfo.attach('dynamic-height-long-list-scroll', {
       body: JSON.stringify(report, null, 2),
       contentType: 'application/json',
     });
