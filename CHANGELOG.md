@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.2.1](https://github.com/gultyayev/angular-vdnd/compare/v3.2.0...v3.2.1) (2026-09-27)
+
+### Bug Fixes
+
+- **lib:** account for contentOffset in vdnd-virtual-viewport drops ([a46d3d3](https://github.com/gultyayev/angular-vdnd/commit/a46d3d30d0ec3899e9b9fe10ca1055ef9a9d76e2))
+- **lib:** allow destroying draggables and droppables before their first render ([b42c738](https://github.com/gultyayev/angular-vdnd/commit/b42c738b0a25f0786e7ad8ef9f631922a89e5dc9))
+- **lib:** cancel a pending drag-delay timer when a new press starts ([909bbff](https://github.com/gultyayev/angular-vdnd/commit/909bbffd008d2f784ddc92df1376060c974191d0))
+- **lib:** cancel a pointer drag when the window loses focus ([#77](https://github.com/gultyayev/angular-vdnd/issues/77)) ([19463f2](https://github.com/gultyayev/angular-vdnd/commit/19463f276034f091a2228d79fb8b8ef3424dc2b0))
+- **lib:** cancel a touch drag when the system cancels the touch ([#85](https://github.com/gultyayev/angular-vdnd/issues/85)) ([9c4f2b0](https://github.com/gultyayev/angular-vdnd/commit/9c4f2b076e5575525a8f78e6a75e296aa88779e8))
+- **lib:** deprecate placeholderId, which is always END_OF_LIST ([#82](https://github.com/gultyayev/angular-vdnd/issues/82)) ([84c1a8b](https://github.com/gultyayev/angular-vdnd/commit/84c1a8bb881cf3bab17d496bb945c8559cd94d5b))
+- **lib:** don't let a second drag replace the one in progress ([#76](https://github.com/gultyayev/angular-vdnd/issues/76)) ([73d90cb](https://github.com/gultyayev/angular-vdnd/commit/73d90cb3aab4be72001e46665d219b7da9d53ad3))
+- **lib:** end the scheduler frame when a participant stops the drag ([2a1c5b4](https://github.com/gultyayev/angular-vdnd/commit/2a1c5b4d3bd083143a06415282d85cd06037b703))
+- **lib:** find the droppable and draggable parents at any depth ([#79](https://github.com/gultyayev/angular-vdnd/issues/79)) ([84501ef](https://github.com/gultyayev/angular-vdnd/commit/84501efe48fbb640afad976d92bbe51966eb27be))
+- **lib:** follow the finger that started a touch drag ([#78](https://github.com/gultyayev/angular-vdnd/issues/78)) ([bc5ec2d](https://github.com/gultyayev/angular-vdnd/commit/bc5ec2de4e51c8f05533e2a23dbfd3e0161078ee))
+- **lib:** keep radio buttons checked when the preview clones their row ([6b4a31f](https://github.com/gultyayev/angular-vdnd/commit/6b4a31f434e80139902e3624b64c4b8a0cb0aa0e))
+- **lib:** leave keyboard-drag keys to the item being dragged ([#84](https://github.com/gultyayev/angular-vdnd/issues/84)) ([12c37c6](https://github.com/gultyayev/angular-vdnd/commit/12c37c6af3ee20a023eca067eb27c3f69dd1f226))
+- **lib:** let no-drag cover the elements inside it ([#75](https://github.com/gultyayev/angular-vdnd/issues/75)) ([ac97757](https://github.com/gultyayev/angular-vdnd/commit/ac977575e28c7c67b781281c493d4e5c772405fd))
+- **lib:** let Space reach form controls inside a draggable ([d786f82](https://github.com/gultyayev/angular-vdnd/commit/d786f82d0334a102356a756d48a14b9b5f3284d0))
+- **lib:** make reorderItems ignore a missing source item ([6f093bd](https://github.com/gultyayev/angular-vdnd/commit/6f093bd78c173bd4a7dd19e86d3c58af17866f34))
+- **lib:** read the source list untracked in moveItem ([a42f34e](https://github.com/gultyayev/angular-vdnd/commit/a42f34e7f4520db339217fc5a02f2208b41749c8))
+- **lib:** render and tear down on the server without browser globals ([#81](https://github.com/gultyayev/angular-vdnd/issues/81)) ([0ef9567](https://github.com/gultyayev/angular-vdnd/commit/0ef95675f5d986e9138592dc1323fb73a0d635cf))
+- **lib:** render the rows in view in vdnd-virtual-viewport with a large contentOffset ([7004826](https://github.com/gultyayev/angular-vdnd/commit/7004826df28869183fdb0642477a23aa27f3adb0))
+- **lib:** start and stop measuring rows when dynamicItemHeight changes ([#80](https://github.com/gultyayev/angular-vdnd/issues/80)) ([4090360](https://github.com/gultyayev/angular-vdnd/commit/40903605082af5d7dd98e6fe53a0a379e8ad2b25))
+- **lib:** store the offset the browser applied in VirtualScrollContainer.scrollTo ([ea3bc1a](https://github.com/gultyayev/angular-vdnd/commit/ea3bc1aeb07fd1868f6019e109b132e26af48d9f))
+
 ## [3.2.0](https://github.com/gultyayev/angular-vdnd/compare/v3.2.0-alpha.2...v3.2.0) (2026-09-25)
 
 ## [3.2.0-alpha.2](https://github.com/gultyayev/angular-vdnd/compare/v3.2.0-alpha.1...v3.2.0-alpha.2) (2026-09-25)
