@@ -161,8 +161,13 @@ export class DroppableDirective implements OnDestroy {
    * The terminal drag snapshot this droppable has already processed. `endedDragState`
    * persists until the next drag starts, so this guards against replaying the same drop
    * when the effect re-runs (e.g. `disabled()` toggling) after the drag has ended.
+   *
+   * Seeded with the snapshot current at construction: an instance created after a drag
+   * ended (e.g. re-created with the same ID by the consumer's `drop` handler) did not take
+   * part in that drag and must not replay its drop. A drag in progress has no snapshot
+   * (`startDrag` clears it), so an instance mounted mid-drag still receives its drop.
    */
-  #handledEndedState: DragState | null = null;
+  #handledEndedState: DragState | null = untracked(() => this.#dragState.endedDragState());
 
   /** Whether this droppable has rendered, so its inputs have values */
   #rendered = false;

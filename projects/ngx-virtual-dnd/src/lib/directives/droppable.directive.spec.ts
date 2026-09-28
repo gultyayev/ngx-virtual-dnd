@@ -90,6 +90,35 @@ class ExtendedDroppableDirective extends DroppableDirective implements OnInit {
 })
 class ExtendedDroppableHostComponent {}
 
+// Immutable-state consumer: every drop replaces the list objects with a new revision, so the
+// `@for` destroys the target droppable and creates a new instance with the same ID.
+// (Tracked by `rev` rather than identity only to avoid Angular's NG0956 dev warning.)
+@Component({
+  template: `
+    @for (list of lists(); track list.rev) {
+      <div [vdndDroppable]="list.id" vdndDroppableGroup="test-group" (drop)="onDrop($event)"></div>
+    }
+    @if (showLate()) {
+      <div vdndDroppable="late-list" vdndDroppableGroup="test-group" (drop)="onDrop($event)"></div>
+    }
+  `,
+  imports: [DroppableDirective],
+})
+class RecreatingDroppableHostComponent {
+  lists = signal([{ id: 'recreated-list', rev: 0 }]);
+  showLate = signal(false);
+  dropEvents: DropEvent[] = [];
+
+  onDrop(event: DropEvent): void {
+    this.dropEvents.push(event);
+    this.recreate();
+  }
+
+  recreate(): void {
+    this.lists.update((lists) => lists.map((list) => ({ ...list, rev: list.rev + 1 })));
+  }
+}
+
 describe('DroppableDirective', () => {
   let fixture: ComponentFixture<TestHostComponent>;
   let component: TestHostComponent;
@@ -490,6 +519,148 @@ describe('DroppableDirective', () => {
       fixture.detectChanges();
 
       expect(component.dropEvents.at(-1)?.destination.index).toBe(2);
+    });
+  });
+
+  describe('drop emission with re-created droppables', () => {
+    let host: ComponentFixture<RecreatingDroppableHostComponent>;
+
+    const endDragOn = (targetId: string, sourceId = 'other-list'): void => {
+      dragStateService.startDrag(
+        createMockDraggedItem({ draggableId: 'item-2', droppableId: sourceId }),
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        sourceId,
+        null,
+        null,
+        0,
+      );
+      host.detectChanges();
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 100, y: 100 },
+        activeDroppableId: targetId,
+        placeholderId: END_OF_LIST,
+        placeholderIndex: 0,
+      });
+    };
+
+    const droppableInstance = (id: string): DroppableDirective | undefined =>
+      host.debugElement
+        .queryAll(By.directive(DroppableDirective))
+        .map((el) => el.injector.get(DroppableDirective))
+        .find((instance) => instance.vdndDroppable() === id);
+
+    beforeEach(() => {
+      host = TestBed.createComponent(RecreatingDroppableHostComponent);
+      host.detectChanges();
+    });
+
+    afterEach(() => {
+      host.destroy();
+    });
+
+    it('emits exactly one drop when the drop handler re-creates the target (pointer-up flush)', () => {
+      const original = droppableInstance('recreated-list');
+
+      endDragOn('recreated-list');
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      // The handler replaced the list, so a new instance with the same ID now exists.
+      expect(droppableInstance('recreated-list')).not.toBe(original);
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+      expect(host.componentInstance.dropEvents[0].destination.droppableId).toBe('recreated-list');
+    });
+
+    it('emits exactly one drop when the target was observed active before release', () => {
+      endDragOn('recreated-list');
+      host.detectChanges(); // #wasActive becomes true
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+    });
+
+    it('does not emit a drop from a droppable created after a keyboard drop ended', () => {
+      dragStateService.startDrag(
+        createMockDraggedItem({ draggableId: 'item-2', droppableId: 'late-list' }),
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'late-list',
+        null,
+        0,
+        0,
+        true,
+      );
+      host.detectChanges();
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      // A droppable with the snapshot's target ID mounts after the drag is over.
+      host.componentInstance.showLate.set(true);
+      host.detectChanges();
+
+      expect(droppableInstance('late-list')).toBeDefined();
+      expect(host.componentInstance.dropEvents.length).toBe(0);
+    });
+
+    it('emits the drop on a droppable that mounted during the drag', () => {
+      endDragOn('late-list');
+      host.componentInstance.showLate.set(true);
+      host.detectChanges();
+
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+      expect(host.componentInstance.dropEvents[0].destination.droppableId).toBe('late-list');
+    });
+
+    it('emits the drop on a target re-created with the same ID during the drag', () => {
+      endDragOn('recreated-list');
+      host.detectChanges();
+      const original = droppableInstance('recreated-list');
+
+      host.componentInstance.recreate();
+      host.detectChanges();
+      expect(droppableInstance('recreated-list')).not.toBe(original);
+
+      // The replacement is not the active target until the next pointer move re-resolves it.
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 101, y: 101 },
+        activeDroppableId: 'recreated-list',
+        placeholderId: END_OF_LIST,
+        placeholderIndex: 0,
+      });
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+    });
+
+    it('emits the next drop on a re-created droppable', () => {
+      endDragOn('recreated-list');
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      endDragOn('recreated-list');
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(2);
+    });
+
+    it('does not emit a drop from a droppable created after a cancelled drag', () => {
+      endDragOn('late-list');
+      dragStateService.cancelDrag();
+      host.detectChanges();
+
+      host.componentInstance.showLate.set(true);
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(0);
     });
   });
 
