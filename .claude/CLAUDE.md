@@ -151,6 +151,8 @@ Keep a bound handler in a field so the same reference can be removed, attach pro
 
 9. **Droppables are found through a registry, never a document query**: `DroppableDirective` registers its element (by ID and group) with `DroppableRegistryService` from an effect (in the change detection that creates it, so `afterNextRender` hooks of that render find it) and unregisters on destroy. Hit-testing, keyboard list switching, drop animation and focus restore read the group's droppables from it. It also delivers the drop: `DragStateService.endDrag()` hands the ended state to the target's registered handler, so `drop` fires synchronously right after `dragEnd` (no effect, nothing for a later render to replay or lose). A (un)registration during a drag makes the next hit-test re-read the candidates. Test fixtures that build droppables from raw DOM must register them.
 
+10. **`*vdndVirtualFor` renders only rows whose context changed**: `#updateViews` compares each row's context (`$implicit`, `index`, `first`, `last`, `count`) and calls `detectChanges()` (untracked) on the new, pooled (recycled) or changed rows only. Never `markForCheck()` a row: it marks every ancestor up to the root, so each scroll step and placeholder move would re-render the consumer component, its ancestors and every row. A placeholder move touches no row.
+
 ### Safari Autoscroll
 
 Use direct `element.scrollTop += delta` (not `scrollBy()`) with synchronous callback — no RAF delay. See `.claude/history/safari-autoscroll.md` for details.
