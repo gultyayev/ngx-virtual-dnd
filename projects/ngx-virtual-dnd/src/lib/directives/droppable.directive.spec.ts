@@ -6,6 +6,7 @@ import { DroppableGroupDirective } from './droppable-group.directive';
 import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
+import { DroppableRegistryService } from '../services/droppable-registry.service';
 import {
   DraggedItem,
   DropEvent,
@@ -804,6 +805,54 @@ describe('DroppableDirective', () => {
       expect(dragStateService.activeDroppableId()).toBeNull();
 
       dragStateService.endDrag();
+    });
+  });
+
+  describe('droppable registry', () => {
+    it('registers its element under its ID and group once rendered', () => {
+      const registry = TestBed.inject(DroppableRegistryService);
+
+      expect(registry.getById('test-list')).toBe(droppableNative);
+      expect(registry.getGroup('test-group')).toEqual([droppableNative]);
+    });
+
+    it('does not register before its first render', () => {
+      const registry = TestBed.inject(DroppableRegistryService);
+      const unrendered = TestBed.createComponent(BoundGroupHostComponent);
+
+      expect(registry.getById('grouped-list')).toBeNull();
+
+      unrendered.detectChanges();
+      const element = unrendered.debugElement.query(By.directive(DroppableDirective))
+        .nativeElement as HTMLElement;
+      expect(registry.getById('grouped-list')).toBe(element);
+
+      unrendered.destroy();
+    });
+
+    it('re-registers under the new ID when the droppable ID changes', () => {
+      const registry = TestBed.inject(DroppableRegistryService);
+
+      component.droppableId.set('renamed-list');
+      fixture.detectChanges();
+
+      expect(registry.getById('test-list')).toBeNull();
+      expect(registry.getById('renamed-list')).toBe(droppableNative);
+      expect(registry.getGroup('test-group')).toEqual([droppableNative]);
+    });
+
+    it('unregisters on destroy, even if its element stays in the document', () => {
+      const registry = TestBed.inject(DroppableRegistryService);
+
+      fixture.destroy();
+      // Put the element back to prove it is gone from the registry, not only from the DOM.
+      document.body.appendChild(droppableNative);
+      try {
+        expect(registry.getById('test-list')).toBeNull();
+        expect(registry.getGroup('test-group')).toEqual([]);
+      } finally {
+        droppableNative.remove();
+      }
     });
   });
 

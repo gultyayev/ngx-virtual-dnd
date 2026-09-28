@@ -148,6 +148,8 @@ Keep a bound handler in a field so the same reference can be removed, attach pro
 
 8. **Drop animation is visual-only, after the drop**: The drag state still ends synchronously and `drop`/`dragEnd` are never delayed. `DragPreviewComponent` keeps the preview rendered from `endedDragState()` while settling, and after the next render `DropAnimator` (`lib/utils/drop-animator.ts`) glides it onto the item's rendered element (found by `data-*` attributes in the target list, then the source list) while hiding that element with an `opacity` animation. A new drag cancels it. The settling preview uses `data-testid="vdnd-drag-preview-dropping"`, so E2E `dragPreview` locators see the drag as over immediately.
 
+9. **Droppables are found through a registry, never a document query**: `DroppableDirective` registers its element (by ID and group) with `DroppableRegistryService` once rendered and unregisters on destroy. Hit-testing, keyboard list switching, drop handling, drop animation and focus restore read the group's droppables from it. A (un)registration during a drag makes the next hit-test re-read the candidates. Test fixtures that build droppables from raw DOM must register them.
+
 ### Safari Autoscroll
 
 Use direct `element.scrollTop += delta` (not `scrollBy()`) with synchronous callback — no RAF delay. See `.claude/history/safari-autoscroll.md` for details.

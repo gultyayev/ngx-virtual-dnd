@@ -323,11 +323,7 @@ export class KeyboardDragHandler {
           element.focus();
         } else if (fallbackDroppableId) {
           // Fallback: focus the first draggable in the list the item ended up in
-          const container = queryByAttribute<HTMLElement>(
-            document,
-            'data-droppable-id',
-            fallbackDroppableId,
-          );
+          const container = this.#deps.positionCalculator.getDroppableById(fallbackDroppableId);
           const firstDraggable = container?.querySelector<HTMLElement>('[data-draggable-id]');
           firstDraggable?.focus();
         }

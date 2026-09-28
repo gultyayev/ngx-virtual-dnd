@@ -20,6 +20,7 @@ import { OverlayContainerService } from '../services/overlay-container.service';
 import { CursorPosition, DraggedItem, DragState } from '../models/drag-drop.models';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { DropAnimator, findDropTarget } from '../utils/drop-animator';
+import { DroppableRegistryService } from '../services/droppable-registry.service';
 
 /**
  * Context provided to the drag preview template.
@@ -109,6 +110,7 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
   readonly #overlayContainer = inject(OverlayContainerService);
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #injector = inject(Injector);
+  readonly #droppableRegistry = inject(DroppableRegistryService);
   readonly #dropAnimator = this.#createDropAnimator();
 
   /** Optional custom template for the preview */
@@ -333,7 +335,9 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
           this.#settling.set(null);
           return;
         }
-        const target = findDropTarget(settling.item.draggableId, droppableIds);
+        const target = findDropTarget(settling.item.draggableId, droppableIds, (id) =>
+          this.#droppableRegistry.getById(id),
+        );
         this.#dropAnimator.play(ghost, target, () => {
           if (this.#settling() === settling) {
             this.#settling.set(null);
