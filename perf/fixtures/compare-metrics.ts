@@ -148,3 +148,44 @@ export function evaluateMetric(
     suppressedReason,
   };
 }
+
+/** Why `compare.ts` refused to compare a baseline with the current run. */
+export interface BaselineIncompatibility {
+  /** The two sides were produced by different metrics schemas. */
+  schemaMismatch: boolean;
+  /** One side's results file mixes scenarios from different collector versions. */
+  mixedSchemas: boolean;
+  /** The two sides ran on different Playwright (browser) builds. */
+  playwrightMismatch: boolean;
+}
+
+/**
+ * What to do about an incompatible baseline. CI never reads a saved baseline: it measures each
+ * PR's base commit on the same runner (`.github/workflows/perf.yml`), so only a local saved
+ * baseline is ever regenerated.
+ */
+export function incompatibleBaselineAdvice(reason: BaselineIncompatibility): string[] {
+  if (reason.mixedSchemas) {
+    return [
+      'A results file mixes collector outputs (e.g. a stale file merged with a fresh one). ' +
+        'Re-run `npm run perf` for a clean one (for a saved local baseline, `npm run perf:baseline`).',
+    ];
+  }
+  const advice: string[] = [];
+  if (reason.schemaMismatch) {
+    advice.push(
+      'This is expected on the PR that changes the metrics schema: its base commit still runs ' +
+        'the old harness. CI measures each PR’s base commit afresh, so there is no baseline to ' +
+        'regenerate; the next PR based on a commit with this schema compares normally.',
+    );
+  }
+  if (reason.playwrightMismatch) {
+    advice.push(
+      'CI measures both sides with the head’s Playwright, so this comes from a saved local baseline.',
+    );
+  }
+  advice.push(
+    'Local comparisons: save a new baseline on the current harness (`npm run perf:baseline`).',
+  );
+  return advice;
+}

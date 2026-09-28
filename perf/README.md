@@ -199,7 +199,10 @@ baseline is not comparable to the current run:
 Both versions are printed in the output — along with each run's **git commit and
 date** (embedded by Playwright's JSON reporter) so it is always visible what
 each side was measured from. Mismatches fail the run; pass
-`--allow-baseline-mismatch` to compare anyway (unreliable).
+`--allow-baseline-mismatch` to compare anyway (unreliable). The output says what
+to do about the mismatch (`incompatibleBaselineAdvice` in
+`fixtures/compare-metrics.ts`): only a saved local baseline is ever regenerated,
+because CI never reads one.
 
 The comparison also fails when a scenario or metric present in the baseline is
 **missing** from the current run — a renamed, skipped, or crashed benchmark must
@@ -228,7 +231,9 @@ compares head against base with head's `compare.ts`:
 - Each side runs its own harness. A PR that changes metric **semantics** (bumps
   `metricsSchemaVersion`) will fail the comparison closed — that PR's perf
   check requires human judgment (`--allow-baseline-mismatch` locally) because
-  no automated comparison across semantics is meaningful.
+  no automated comparison across semantics is meaningful. Nothing needs
+  regenerating after it merges: the next PR's base commit already runs the new
+  schema, so its comparison works again.
 
 ## Local baselines
 

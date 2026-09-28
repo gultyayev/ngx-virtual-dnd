@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aggregate } from './statistics.ts';
-import { percentChange, evaluateMetric, GATED_METRICS, MIN_ABS_DELTA } from './compare-metrics.ts';
+import {
+  percentChange,
+  evaluateMetric,
+  incompatibleBaselineAdvice,
+  GATED_METRICS,
+  MIN_ABS_DELTA,
+} from './compare-metrics.ts';
 import { SCENARIO_METRICS } from './metric-math.ts';
 
 test('percentChange handles a zero baseline without dividing by zero', () => {
@@ -197,4 +203,40 @@ test('every gated metric is in the aggregated scenario report', () => {
       `${metric} is in SCENARIO_METRICS`,
     );
   }
+});
+
+test('a schema mismatch tells CI readers there is no baseline to regenerate', () => {
+  // The PR that bumps the schema fails once: its base commit still runs the old harness. CI
+  // measures every PR's base afresh, so the next PR compares normally.
+  const advice = incompatibleBaselineAdvice({
+    schemaMismatch: true,
+    mixedSchemas: false,
+    playwrightMismatch: false,
+  }).join(' ');
+  assert.match(advice, /no baseline to regenerate/);
+  assert.match(advice, /next PR/);
+  // Regenerating is advice for a saved local baseline only
+  assert.match(advice, /[Ll]ocal.*`npm run perf:baseline`/);
+});
+
+test('a Playwright mismatch can only come from a local baseline', () => {
+  // perf.yml measures the base with the head's Playwright
+  const advice = incompatibleBaselineAdvice({
+    schemaMismatch: false,
+    mixedSchemas: false,
+    playwrightMismatch: true,
+  }).join(' ');
+  assert.match(advice, /`npm run perf:baseline`/);
+  assert.doesNotMatch(advice, /next PR/);
+});
+
+test('a results file mixing collector outputs asks for a fresh run', () => {
+  const advice = incompatibleBaselineAdvice({
+    schemaMismatch: true,
+    mixedSchemas: true,
+    playwrightMismatch: false,
+  }).join(' ');
+  assert.match(advice, /`npm run perf`/);
+  // A mixed file is broken on its own; it is not the expected schema-bump case
+  assert.doesNotMatch(advice, /next PR/);
 });
