@@ -181,74 +181,6 @@ describe('DragPreviewComponent', () => {
         // Should use default cursorOffset input: (100-8, 100-8) = (92, 92)
         expect(preview!.style.transform).toBe('translate3d(92px, 92px, 0)');
       });
-
-      it('should update position when cursor moves', () => {
-        const item = createMockDraggedItem();
-        dragStateService.startDrag(item, { x: 100, y: 100 }, { x: 0, y: 0 });
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        let preview = queryPreview('.vdnd-drag-preview');
-        expect(preview!.style.transform).toBe('translate3d(100px, 100px, 0)');
-
-        dragStateService.updateDragPosition({
-          cursorPosition: { x: 200, y: 200 },
-          activeDroppableId: null,
-          placeholderId: null,
-          placeholderIndex: null,
-        });
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        preview = queryPreview('.vdnd-drag-preview');
-        expect(preview!.style.transform).toBe('translate3d(200px, 200px, 0)');
-      });
-    });
-
-    describe('axis locking', () => {
-      it('should lock x axis when configured', () => {
-        const item = createMockDraggedItem();
-        const initialPosition = { x: 100, y: 100 };
-        const grabOffset = { x: 0, y: 0 };
-
-        dragStateService.startDrag(item, initialPosition, grabOffset, 'x');
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        dragStateService.updateDragPosition({
-          cursorPosition: { x: 200, y: 200 },
-          activeDroppableId: null,
-          placeholderId: null,
-          placeholderIndex: null,
-        });
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        const preview = queryPreview('.vdnd-drag-preview');
-        expect(preview!.style.transform).toBe('translate3d(100px, 200px, 0)');
-      });
-
-      it('should lock y axis when configured', () => {
-        const item = createMockDraggedItem();
-        const initialPosition = { x: 100, y: 100 };
-        const grabOffset = { x: 0, y: 0 };
-
-        dragStateService.startDrag(item, initialPosition, grabOffset, 'y');
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        dragStateService.updateDragPosition({
-          cursorPosition: { x: 200, y: 200 },
-          activeDroppableId: null,
-          placeholderId: null,
-          placeholderIndex: null,
-        });
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        const preview = queryPreview('.vdnd-drag-preview');
-        expect(preview!.style.transform).toBe('translate3d(200px, 100px, 0)');
-      });
     });
 
     describe('dimensions', () => {
@@ -458,7 +390,29 @@ describe('DragPreviewComponent', () => {
       expect(preview.style.transform).toBe('translate3d(200px, 150px, 0)');
     });
 
-    it('applies the axis lock to the frame write', () => {
+    it('schedules no render when only the cursor moves', async () => {
+      startPointerDrag();
+      await fixture.whenStable();
+      expect(fixture.isStable()).toBe(true);
+
+      scheduler.queueCursorUpdate({ x: 200, y: 150 });
+      flushRAF();
+
+      // A pending render would mean a full ApplicationRef.tick() on every pointer frame
+      expect(fixture.isStable()).toBe(true);
+    });
+
+    it('locks the x axis in the frame write', () => {
+      startPointerDrag('x');
+      const preview = queryPreview('.vdnd-drag-preview')!;
+
+      scheduler.queueCursorUpdate({ x: 200, y: 300 });
+      flushRAF();
+
+      expect(preview.style.transform).toBe('translate3d(100px, 300px, 0)');
+    });
+
+    it('locks the y axis in the frame write', () => {
       startPointerDrag('y');
       const preview = queryPreview('.vdnd-drag-preview')!;
 
@@ -584,6 +538,27 @@ describe('DragPreviewComponent', () => {
 
       expect(queryPreview('.vdnd-drag-preview')).toBeNull();
       expect(animations.get(landed)!.cancel).toHaveBeenCalled();
+    });
+
+    it('starts the glide from a release position written outside a frame', () => {
+      addListItem('list-1', 'item-1', 120);
+      startDrag();
+
+      // DraggableDirective flushes the release position synchronously, then ends the drag
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 300, y: 250 },
+        activeDroppableId: 'list-1',
+        placeholderId: null,
+        placeholderIndex: 2,
+      });
+      dragStateService.endDrag();
+      render();
+
+      const preview = queryPreview('.vdnd-drag-preview')!;
+      expect(preview.style.transform).toBe('translate3d(290px, 240px, 0)');
+      expect(animations.get(preview)?.keyframes[0]['transform']).toBe(
+        'translate3d(290px, 240px, 0) translate(0px, 0px)',
+      );
     });
 
     it('fades out in place when the dropped item is not rendered', () => {

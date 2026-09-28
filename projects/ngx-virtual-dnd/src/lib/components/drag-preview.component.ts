@@ -1,5 +1,6 @@
 import {
   afterNextRender,
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -18,7 +19,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { DragStateService } from '../services/drag-state.service';
 import { DragSchedulerService } from '../services/drag-scheduler.service';
 import { OverlayContainerService } from '../services/overlay-container.service';
-import { CursorPosition, DraggedItem, DragState } from '../models/drag-drop.models';
+import { CursorPosition, DraggedItem, DragState, GrabOffset } from '../models/drag-drop.models';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { DropAnimator, findDropTarget } from '../utils/drop-animator';
 import { DroppableRegistryService } from '../services/droppable-registry.service';
@@ -33,6 +34,16 @@ export interface DragPreviewContext<T = unknown> {
   draggableId: string;
   /** The source droppable ID */
   droppableId: string;
+}
+
+/** Everything the preview position depends on except the cursor, which moves every frame. */
+interface Placement {
+  /** The position while the preview settles after a drop; null while it follows the cursor */
+  settled: CursorPosition | null;
+  /** Offset from the cursor to the preview's top-left corner */
+  offset: GrabOffset;
+  lockAxis: 'x' | 'y' | null;
+  initialPosition: CursorPosition | null;
 }
 
 /** A preview that outlives its drag while it glides into the drop position. */
@@ -71,7 +82,6 @@ interface SettlingPreview {
         class="vdnd-drag-preview"
         [class.vdnd-drag-preview-dropping]="isSettling()"
         [attr.data-testid]="isSettling() ? 'vdnd-drag-preview-dropping' : 'vdnd-drag-preview'"
-        [style.transform]="transform()"
         [style.width.px]="dimensions().width"
         [style.height.px]="dimensions().height"
       >
@@ -142,21 +152,38 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
   );
 
   /**
-   * Moves the preview inside the drag scheduler's frame (bound for stable add/remove).
-   * The `[style.transform]` binding alone would move it one frame late: a signal write in an
-   * animation frame schedules Angular's render after that frame is painted. The binding
-   * stays for every other path (drag start, keyboard drags, the settle, direct
-   * `DragStateService` updates); both compute the same value from the live state, so the
-   * render that follows only confirms what this already wrote. The first frame after drag
-   * start may find no preview element yet (`@if` creates it in that render); the binding
-   * places it.
+   * Where the preview goes, from everything but the cursor. The template and its effects never
+   * read the cursor: a signal read there would schedule a full application render on every
+   * pointer frame, and that render lands after the frame is painted (one frame late).
+   */
+  readonly #placement = computed((): Placement => {
+    const settling = this.#settling();
+    if (settling && !this.dragState.isDragging()) {
+      return {
+        settled: settling.position,
+        offset: { x: 0, y: 0 },
+        initialPosition: null,
+        lockAxis: null,
+      };
+    }
+    return this.#placementFor({
+      grabOffset: this.dragState.grabOffset(),
+      initialPosition: this.dragState.initialPosition(),
+      lockAxis: this.dragState.lockAxis(),
+    });
+  });
+
+  /**
+   * Moves the preview inside the drag scheduler's frame, right after the hit-test wrote the
+   * cursor (bound for stable add/remove). The render-time write in the constructor covers the
+   * rest: the preview appearing, keyboard drags and the settle.
    */
   readonly #writeFramePosition = (): void => {
     const preview = this.previewElement()?.nativeElement;
     if (!preview || this.#settling() || !this.dragState.isDragging()) {
       return;
     }
-    preview.style.transform = this.transform();
+    this.#place(preview, this.#placement(), this.dragState.cursorPosition());
   };
 
   /** Whether this preview's template registration is currently counted (kept balanced). */
@@ -180,6 +207,19 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
       if (container) {
         container.appendChild(this.#elementRef.nativeElement);
       }
+    });
+
+    // Place the preview when it appears or anything but the cursor changes (drag start,
+    // keyboard drags, the settle). The cursor is read untracked; pointer moves are written by
+    // #writeFramePosition. Runs before the settle's afterNextRender reads the transform.
+    afterRenderEffect({
+      write: () => {
+        const preview = this.previewElement()?.nativeElement;
+        const placement = this.#placement();
+        if (preview) {
+          this.#place(preview, placement, untracked(this.dragState.cursorPosition));
+        }
+      },
     });
 
     // Publish whether this preview renders via a custom template so the drag
@@ -238,41 +278,36 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
     this.#elementRef.nativeElement.remove();
   }
 
-  /** Whether the preview is visible */
+  /**
+   * Whether the preview is visible. A drag shows it once it has a position: `initialPosition`
+   * is set from the drag-start cursor and, unlike `cursorPosition`, does not change per frame.
+   */
   protected readonly isVisible = computed(() => {
     return (
-      (this.dragState.isDragging() && this.dragState.cursorPosition() !== null) || this.isSettling()
+      (this.dragState.isDragging() && this.dragState.initialPosition() !== null) ||
+      this.isSettling()
     );
   });
 
-  /** Position of the preview */
-  protected readonly position = computed(() => {
-    const settling = this.#settling();
-    if (settling && !this.dragState.isDragging()) {
-      return settling.position;
+  #placementFor(state: Pick<DragState, 'grabOffset' | 'initialPosition' | 'lockAxis'>): Placement {
+    return {
+      settled: null,
+      // Use grab offset if available (preserves grab position), otherwise fall back to cursorOffset input
+      offset: state.grabOffset ?? this.cursorOffset(),
+      initialPosition: state.initialPosition,
+      lockAxis: state.lockAxis,
+    };
+  }
+
+  #positionAt(placement: Placement, cursor: CursorPosition | null): CursorPosition {
+    if (placement.settled) {
+      return placement.settled;
     }
-    return this.#positionFor({
-      cursorPosition: this.dragState.cursorPosition(),
-      grabOffset: this.dragState.grabOffset(),
-      initialPosition: this.dragState.initialPosition(),
-      lockAxis: this.dragState.lockAxis(),
-    });
-  });
-
-  #positionFor(
-    state: Pick<DragState, 'cursorPosition' | 'grabOffset' | 'initialPosition' | 'lockAxis'>,
-  ): CursorPosition {
-    const cursor = state.cursorPosition;
-    const initialPosition = state.initialPosition;
-    const lockAxis = state.lockAxis;
-
     if (!cursor) {
       return { x: 0, y: 0 };
     }
 
-    // Use grab offset if available (preserves grab position), otherwise fall back to cursorOffset input
-    const offset = state.grabOffset ?? this.cursorOffset();
-
+    const { offset, initialPosition, lockAxis } = placement;
     let x = cursor.x - offset.x;
     let y = cursor.y - offset.y;
 
@@ -291,10 +326,10 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
   }
 
   /** Transform-based positioning for better performance (avoid layout from left/top). */
-  protected readonly transform = computed(() => {
-    const { x, y } = this.position();
-    return `translate3d(${x}px, ${y}px, 0)`;
-  });
+  #place(preview: HTMLElement, placement: Placement, cursor: CursorPosition | null): void {
+    const { x, y } = this.#positionAt(placement, cursor);
+    preview.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  }
 
   /** Dimensions of the preview */
   protected readonly dimensions = computed(() => {
@@ -338,7 +373,7 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
 
     const settling: SettlingPreview = {
       item: ended.draggedItem,
-      position: this.#positionFor(ended),
+      position: this.#positionAt(this.#placementFor(ended), ended.cursorPosition),
     };
     this.#settling.set(settling);
 
