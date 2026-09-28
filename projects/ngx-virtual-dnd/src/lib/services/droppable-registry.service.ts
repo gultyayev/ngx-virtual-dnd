@@ -1,9 +1,14 @@
 import { Injectable } from '@angular/core';
+import { DragState } from '../models/drag-drop.models';
+
+/** Receives the ended drag state when a drag is dropped on the droppable. */
+export type DropHandler = (endedState: DragState) => void;
 
 interface DroppableRegistration {
   readonly element: HTMLElement;
   readonly id: string;
   readonly group: string;
+  readonly onDrop: DropHandler | null;
 }
 
 /**
@@ -12,7 +17,8 @@ interface DroppableRegistration {
  * `DroppableDirective` registers its element once rendered and unregisters on destroy, so drag
  * code reads the droppables of one group instead of querying the whole document for
  * `data-droppable-*` attributes. That keeps lookups proportional to the group, not the page,
- * and finds droppables a document query cannot reach (inside shadow roots).
+ * and finds droppables a document query cannot reach (inside shadow roots). It also delivers
+ * a drop to its target the moment the drag ends (`DragStateService.endDrag`).
  * @internal
  */
 @Injectable({
@@ -26,11 +32,16 @@ export class DroppableRegistryService {
   readonly #listeners = new Set<(group: string) => void>();
 
   /**
-   * Register a droppable. Returns the function that unregisters it; calling that more than
-   * once is a no-op.
+   * Register a droppable, with the handler that receives drops on it. Returns the function
+   * that unregisters it; calling that more than once is a no-op.
    */
-  register(element: HTMLElement, id: string, group: string): () => void {
-    const registration: DroppableRegistration = { element, id, group };
+  register(
+    element: HTMLElement,
+    id: string,
+    group: string,
+    onDrop: DropHandler | null = null,
+  ): () => void {
+    const registration: DroppableRegistration = { element, id, group, onDrop };
 
     this.#add(this.#byGroup, group, registration);
     if (id) {
@@ -79,18 +90,20 @@ export class DroppableRegistryService {
    * leaves two with the same ID, returns the first in document order.
    */
   getById(id: string): HTMLElement | null {
-    const registrations = this.#byId.get(id);
-    if (!registrations) {
-      return null;
-    }
+    return this.#firstById(id)?.element ?? null;
+  }
 
-    let match: HTMLElement | null = null;
-    for (const { element } of registrations) {
-      if (element.isConnected && (!match || compareElements(element, match) < 0)) {
-        match = element;
-      }
+  /**
+   * Hand an ended drag to the drop handler of its target (`activeDroppableId`), resolved like
+   * `getById`, so a drop reaches exactly one droppable. Does nothing when the drag had no
+   * target or item, or the target is no longer registered.
+   */
+  deliverDrop(endedState: DragState): void {
+    const targetId = endedState.activeDroppableId;
+    if (!targetId || !endedState.draggedItem) {
+      return;
     }
-    return match;
+    this.#firstById(targetId)?.onDrop?.(endedState);
   }
 
   /**
@@ -100,6 +113,25 @@ export class DroppableRegistryService {
   onChange(listener: (group: string) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  /** The registration with this ID that is in the document and first in document order. */
+  #firstById(id: string): DroppableRegistration | null {
+    const registrations = this.#byId.get(id);
+    if (!registrations) {
+      return null;
+    }
+
+    let match: DroppableRegistration | null = null;
+    for (const registration of registrations) {
+      if (
+        registration.element.isConnected &&
+        (!match || compareElements(registration.element, match.element) < 0)
+      ) {
+        match = registration;
+      }
+    }
+    return match;
   }
 
   #add(

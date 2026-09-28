@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { DroppableRegistryService } from './droppable-registry.service';
+import { DragState, INITIAL_DRAG_STATE } from '../models/drag-drop.models';
 
 describe('DroppableRegistryService', () => {
   let registry: DroppableRegistryService;
@@ -165,6 +166,81 @@ describe('DroppableRegistryService', () => {
       unregisterFirst();
 
       expect(registry.getById('dup')).toBe(second);
+    });
+  });
+
+  describe('deliverDrop', () => {
+    const endedOn = (activeDroppableId: string | null): DragState => ({
+      ...INITIAL_DRAG_STATE,
+      isDragging: true,
+      draggedItem: {
+        draggableId: 'item',
+        droppableId: 'source',
+        element: document.createElement('div'),
+        height: 10,
+        width: 10,
+      },
+      activeDroppableId,
+    });
+
+    it('calls the drop handler of the target with the ended state', () => {
+      const onDrop = jest.fn();
+      const other = jest.fn();
+      registry.register(makeElement(), 'target', 'g', onDrop);
+      registry.register(makeElement(), 'other', 'g', other);
+      const state = endedOn('target');
+
+      registry.deliverDrop(state);
+
+      expect(onDrop).toHaveBeenCalledTimes(1);
+      expect(onDrop).toHaveBeenCalledWith(state);
+      expect(other).not.toHaveBeenCalled();
+    });
+
+    it('delivers to one droppable, the first in document order, when an id is duplicated', () => {
+      const first = jest.fn();
+      const second = jest.fn();
+      const firstEl = makeElement();
+      const secondEl = makeElement();
+      registry.register(secondEl, 'dup', 'g', second);
+      registry.register(firstEl, 'dup', 'g', first);
+
+      registry.deliverDrop(endedOn('dup'));
+
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(second).not.toHaveBeenCalled();
+    });
+
+    it('skips a disconnected droppable with the target id', () => {
+      const detached = jest.fn();
+      const connected = jest.fn();
+      const detachedEl = makeElement();
+      registry.register(detachedEl, 'dup', 'g', detached);
+      registry.register(makeElement(), 'dup', 'g', connected);
+      detachedEl.remove();
+
+      registry.deliverDrop(endedOn('dup'));
+
+      expect(detached).not.toHaveBeenCalled();
+      expect(connected).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing without a target, an item, or a registered target', () => {
+      const onDrop = jest.fn();
+      const unregister = registry.register(makeElement(), 'target', 'g', onDrop);
+
+      registry.deliverDrop(endedOn(null));
+      registry.deliverDrop({ ...endedOn('target'), draggedItem: null });
+      unregister();
+      registry.deliverDrop(endedOn('target'));
+
+      expect(onDrop).not.toHaveBeenCalled();
+    });
+
+    it('tolerates a target registered without a drop handler', () => {
+      registry.register(makeElement(), 'target', 'g');
+
+      expect(() => registry.deliverDrop(endedOn('target'))).not.toThrow();
     });
   });
 

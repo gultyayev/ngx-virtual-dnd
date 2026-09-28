@@ -120,7 +120,8 @@ export interface DropDestination {
 }
 
 /**
- * Event emitted when an item is dropped.
+ * Event emitted by the destination droppable when an item is dropped on it: at release,
+ * right after the dragged item's `DragEndEvent` and before the next render.
  */
 export interface DropEvent {
   /** Information about where the item came from */
@@ -179,7 +180,7 @@ export interface DragEndEvent {
   /**
    * Final 0-indexed insertion position, or `null` when there is no valid drop target —
    * a cancelled drag, a release outside every droppable, or a release over a disabled
-   * droppable. A non-null value pairs with a `DropEvent` on the destination.
+   * droppable. A non-null value pairs with the `DropEvent` the destination emits right after.
    */
   destinationIndex: number | null;
 }

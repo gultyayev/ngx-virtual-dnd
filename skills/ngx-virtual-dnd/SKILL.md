@@ -21,7 +21,7 @@ Peer dependencies: `@angular/core` and `@angular/common` `^21 || ^22`. Everythin
 - A **draggable** is an item with an ID (`[vdndDraggable]`).
 - A **group** name links draggables and droppables. Items can only move between droppables of the same group.
 - When a drag starts, the dragged element is hidden (`display: none`), `<vdnd-drag-preview>` renders what follows the pointer, and an empty placeholder (`.vdnd-drag-placeholder`) marks the drop position.
-- On release, the **destination** droppable emits `(drop)` with source/destination indexes. The library never mutates your data — you update your arrays, usually with `moveItem()`.
+- On release, the dragged item emits `(dragEnd)`, then the **destination** droppable emits `(drop)` with source/destination indexes (both before the next render). The library never mutates your data — you update your arrays, usually with `moveItem()`.
 
 ## Rules that fail silently
 
@@ -460,6 +460,8 @@ export class TasksComponent {
 | `(dragEnd)`   | `DragEndEvent`   | `vdndDraggable` — after every drag, dropped or not  |
 | `(drop)`      | `DropEvent`      | `vdndDroppable`, `vdnd-sortable-list` — destination only |
 | `(placeholderMove)` | `PlaceholderMoveEvent` | `vdndDroppable`, `vdnd-sortable-list` — each placeholder move within that list (haptics) |
+
+On release, `(dragEnd)` fires first, then `(drop)` on the destination, both before the next render.
 
 `DragEndEvent.destinationIndex` is `null` when nothing was dropped: Escape/Tab cancel, a pointer drag cancelled because the window lost focus, the page was hidden or the system cancelled the touch, release outside every droppable, or release over a disabled droppable. Branch on `destinationIndex === null` to detect "no drop"; `cancelled` is `true` only when the drag was cancelled (Escape, Tab, focus loss, page hidden, `touchcancel`), so it misses the other cases.
 

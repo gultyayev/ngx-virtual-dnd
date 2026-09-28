@@ -19,7 +19,7 @@ Every setup, from one list to a full board, is made of the same four parts.
 1. The user presses on a draggable and moves past the drag threshold (5 px by default), or presses <kbd>Space</kbd> on a focused draggable.
 2. The dragged element is hidden with `display: none`. The preview appears under the pointer and an empty **placeholder** marks the drop position in the target list.
 3. As the pointer moves, the library works out which droppable is under it and at which index the item would land. Near the edges of a scrollable list it scrolls automatically.
-4. On release, the **destination** droppable emits `(drop)` with the source and destination indexes. The dragged draggable emits `(dragEnd)`, whether the item was dropped or not.
+4. On release, the dragged draggable emits `(dragEnd)`, whether the item was dropped or not. If it was dropped, the **destination** droppable then emits `(drop)` with the source and destination indexes. Both fire before the next render.
 5. Your handler updates the data. The library never changes your arrays.
 
 ```ts

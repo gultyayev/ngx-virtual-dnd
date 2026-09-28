@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { DragStateService } from './drag-state.service';
+import { DroppableRegistryService } from './droppable-registry.service';
 import {
   DraggedItem,
   CursorPosition,
@@ -343,6 +344,64 @@ describe('DragStateService', () => {
           cursorPosition: { x: 110, y: 260 },
         }),
       );
+    });
+  });
+
+  describe('drop delivery', () => {
+    let target: HTMLElement;
+
+    beforeEach(() => {
+      target = document.createElement('div');
+      document.body.appendChild(target);
+    });
+
+    afterEach(() => target.remove());
+
+    const dragOnto = (targetId: string): DraggedItem => {
+      const item = createMockDraggedItem();
+      service.startDrag(item, undefined, undefined, null, 'list-1', null, 0, 0);
+      service.updateDragPosition({
+        cursorPosition: { x: 0, y: 0 },
+        activeDroppableId: targetId,
+        placeholderId: null,
+        placeholderIndex: 4,
+      });
+      return item;
+    };
+
+    it('endDrag hands the ended state to the target, after the reset', () => {
+      const onDrop = jest.fn(() => expect(service.isDragging()).toBe(false));
+      TestBed.inject(DroppableRegistryService).register(target, 'list-2', 'g', onDrop);
+      const item = dragOnto('list-2');
+
+      service.endDrag();
+
+      expect(onDrop).toHaveBeenCalledTimes(1);
+      expect(onDrop).toHaveBeenCalledWith(service.endedDragState());
+      expect(service.endedDragState()).toEqual(
+        expect.objectContaining({ draggedItem: item, activeDroppableId: 'list-2' }),
+      );
+    });
+
+    it('cancelDrag delivers nothing', () => {
+      const onDrop = jest.fn();
+      TestBed.inject(DroppableRegistryService).register(target, 'list-2', 'g', onDrop);
+      dragOnto('list-2');
+
+      service.cancelDrag();
+
+      expect(onDrop).not.toHaveBeenCalled();
+    });
+
+    it('endDrag without a drag in progress delivers nothing', () => {
+      const onDrop = jest.fn();
+      TestBed.inject(DroppableRegistryService).register(target, 'list-2', 'g', onDrop);
+      dragOnto('list-2');
+      service.endDrag();
+
+      service.endDrag();
+
+      expect(onDrop).toHaveBeenCalledTimes(1);
     });
   });
 

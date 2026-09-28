@@ -9,7 +9,7 @@ import { PositionCalculatorService } from '../services/position-calculator.servi
 import { AutoScrollService } from '../services/auto-scroll.service';
 import { ElementCloneService } from '../services/element-clone.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
-import { DragStartEvent, DragEndEvent } from '../models/drag-drop.models';
+import { DragStartEvent, DragEndEvent, DropEvent } from '../models/drag-drop.models';
 
 // A web component whose input lives in its shadow DOM, like the form controls of many UI libraries
 class ShadowInputElement extends HTMLElement {
@@ -29,6 +29,7 @@ if (!customElements.get('test-shadow-input')) {
       vdndDroppable="test-list"
       vdndDroppableGroup="test-group"
       style="height: 400px; overflow: auto; padding-top: 20px; row-gap: 10px;"
+      (drop)="onDrop($event)"
     >
       <div data-draggable-id="preceding-item-1"></div>
       <div data-draggable-id="preceding-item-2"></div>
@@ -69,6 +70,9 @@ class TestHostComponent {
 
   dragStartEvents: DragStartEvent[] = [];
   dragEndEvents: DragEndEvent[] = [];
+  dropEvents: DropEvent[] = [];
+  /** Order in which the end-of-drag outputs fired */
+  endOutputs: string[] = [];
 
   onDragStart(event: DragStartEvent): void {
     this.dragStartEvents.push(event);
@@ -76,6 +80,12 @@ class TestHostComponent {
 
   onDragEnd(event: DragEndEvent): void {
     this.dragEndEvents.push(event);
+    this.endOutputs.push('dragEnd');
+  }
+
+  onDrop(event: DropEvent): void {
+    this.dropEvents.push(event);
+    this.endOutputs.push('drop');
   }
 }
 
@@ -1035,6 +1045,29 @@ describe('DraggableDirective', () => {
       );
 
       expect(keyboardDrag.targetIndex()).toBe(initialIndex - 1);
+    });
+
+    it("emits dragEnd, then the target list's drop, in the keypress that drops", () => {
+      draggableNative.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      fixture.detectChanges();
+      expect(dragStateService.isDragging()).toBe(true);
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+
+      expect(component.endOutputs).toEqual(['dragEnd', 'drop']);
+      expect(component.dropEvents[0]).toEqual(
+        expect.objectContaining({
+          source: expect.objectContaining({ draggableId: 'test-item', droppableId: 'test-list' }),
+          destination: expect.objectContaining({
+            droppableId: 'test-list',
+            index: component.dragEndEvents[0].destinationIndex,
+          }),
+        }),
+      );
     });
 
     it('should cancel drag on escape when dragging', () => {
