@@ -16,16 +16,17 @@ instead of trying to model it.
 
 ## Layout
 
-| Path                            | Purpose                                                            |
-| ------------------------------- | ------------------------------------------------------------------ |
-| `scenarios/*.perf.ts`           | One benchmark per interaction (scroll, drag, autoscroll, dynamic). |
-| `fixtures/metrics-collector.ts` | In-page long-task / frame collection over CDP.                     |
-| `fixtures/metric-math.ts`       | Pure metric derivation (TBT, dropped frames, percentiles, window). |
-| `fixtures/statistics.ts`        | Pure aggregation (mean, median, p95, stddev).                      |
-| `fixtures/compare-metrics.ts`   | Pure regression-gating decision.                                   |
-| `compare.ts`                    | Baseline vs current comparison + Markdown output (CLI).            |
-| `report.ts`                     | Human-readable benchmark report (CLI).                             |
-| `baselines/`                    | Locally captured reference runs (gitignored, nothing committed).   |
+| Path                            | Purpose                                                             |
+| ------------------------------- | ------------------------------------------------------------------- |
+| `scenarios/*.perf.ts`           | One benchmark per interaction (scroll, drag, autoscroll, dynamic).  |
+| `fixtures/perf.page.ts`         | Page object: opens demo pages without drag-state debug output.      |
+| `fixtures/metrics-collector.ts` | In-page long-task / frame collection and CDP counters.              |
+| `fixtures/metric-math.ts`       | Pure metric derivation (TBT, dropped frames, CDP counters, report). |
+| `fixtures/statistics.ts`        | Pure aggregation (mean, median, p95, stddev).                       |
+| `fixtures/compare-metrics.ts`   | Pure regression-gating decision.                                    |
+| `compare.ts`                    | Baseline vs current comparison + Markdown output (CLI).             |
+| `report.ts`                     | Human-readable benchmark report (CLI).                              |
+| `baselines/`                    | Locally captured reference runs (gitignored, nothing committed).    |
 
 ## Commands
 
@@ -42,6 +43,39 @@ npm run perf:baseline   # run perf and save the result as the local baseline
 incompatible-baseline failure to a warning). It exits non-zero — failing CI — on
 a detected regression, a missing scenario/metric, or an incompatible baseline.
 
+## Measured pages
+
+The scenarios run on the demo pages (`/`, `/virtual-viewport`, `/dynamic-height`),
+always opened with `?dragStateDebug=false` (`PerfPage.goto`). That flag removes
+the pages' drag-state debug output, which E2E tests read to synchronize with the
+drag scheduler: the main demo's debug panel and the hidden `app-drag-state-debug`
+mirror elsewhere. Both render the cursor position, so they re-render on every drag
+frame, and the main demo's panel re-renders the whole `DemoComponent` template and
+every rendered row of both lists with it (#97). `PerfPage.goto` fails the run when a
+page still renders that output, so a page that stops honoring the flag can't
+silently skew the numbers again.
+
+For the same reason the main demo subscribes to `placeholderMove` in its
+constructor instead of binding it in the template: a template listener marks the
+demo's view dirty, so each placeholder move (about one every three frames during
+autoscroll) re-rendered the demo and every row. Keep high-frequency outputs out of
+the measured pages' templates.
+
+Measured against the previous page (5 runs before, 3 after, alternated on one
+machine), `drag-within-list-1000` went from 24 layouts to 10 and about 15% less
+main-thread task time, and `drag-between-lists-autoscroll-1000` from 88 layouts
+to 78 and about 10% less task time. What remains is the library's work,
+including the consumer row templates it renders.
+
+| Scenario                             | Page                           | Interaction                                                    |
+| ------------------------------------ | ------------------------------ | -------------------------------------------------------------- |
+| `scroll-2000-items`                  | `/`                            | Smooth-scroll a `vdnd-virtual-scroll` list                     |
+| `drag-within-list-1000`              | `/`                            | Drag within a `vdnd-virtual-scroll` list                       |
+| `drag-between-lists-autoscroll-1000` | `/`                            | Drag to the other list and hold at its edge (autoscroll)       |
+| `drag-within-virtual-for-list`       | `/virtual-viewport`            | Drag within a `vdnd-virtual-viewport` list (`*vdndVirtualFor`) |
+| `dynamic-height-scroll`              | `/dynamic-height`              | Smooth-scroll a dynamic-height `*vdndVirtualFor` list          |
+| `dynamic-height-long-list-scroll`    | `/dynamic-height?count=100000` | Scroll through rows never measured before                      |
+
 ## Measurement methodology
 
 Each scenario runs `1` warmup + `5` measured iterations under `4x` CPU
@@ -57,6 +91,17 @@ throttling. For every iteration the collector:
 3. Classifies a frame as **dropped only when the interval exceeds ~25 ms**
    (`DROPPED_FRAME_THRESHOLD_MS`, ≈1.5× the 16.67 ms vsync interval). Ordinary
    60 Hz scheduling jitter (16.8 ms) is not counted the same as a real stall.
+4. Reads the renderer's cumulative counters from CDP `Performance.getMetrics`
+   before and after the scenario and reports the deltas: `layoutCount`,
+   `recalcStyleCount`, and main-thread time, `taskDuration` (`TaskDuration`, all
+   main-thread tasks: script, style, layout, paint, …) and `scriptDuration`
+   (`ScriptDuration`), converted to ms. These are wall times of the tasks (CDP's
+   default `timeTicks` domain), which include the CPU throttling. The frame
+   metrics only move when a frame misses its budget; task time also counts extra
+   work that still fits in the frame, but only a change beyond the percent
+   threshold gates it. It includes the harness's own page calls (Playwright's
+   waits, the frame tracker), which differ little between the two sides. A
+   missing counter fails the run instead of reading as 0.
 
 ## Regression gating
 
@@ -83,6 +128,14 @@ An over-threshold change that fails one of the guards is reported as
 informational with the guard that suppressed it: `noise (below floor)` or
 `noise (within band)`.
 
+`scriptDuration` is reported but **not gated**: every iteration reloads the page,
+so JIT compilation and GC timing vary, and runs of the same code on one machine
+differed by up to 26% (past the 25% threshold). `taskDuration`, which includes
+script time, drifted at most 19% between those runs and is gated. The one
+larger task-time difference (+27%) had the first benchmark run in a fresh
+container as the slower side; CI measures the base first, so a cold start there
+slows the base, not the head.
+
 `p99FrameTime` is reported but **not gated**: the scenarios collect fewer than
 ~300 frame intervals, so nearest-rank p99 resolves to (or right next to) the
 maximum — gating it would evaluate the same noisy value as `maxFrameGap` a
@@ -103,14 +156,20 @@ rather than gating. A floor must guard small baselines **without exceeding
 typical baseline medians themselves** — layout/style-recalc counts are
 near-deterministic (MAD ≈ 0), and their original floor of 25 was larger than the
 drag-within-list layout baseline (24), which let a full doubling of layout work
-slip through as "noise". Current floors:
+slip through as "noise". Without the debug panel (schema 3) the drag layout
+baselines are 10 (drag-within-list) and 6 (drag-within-virtual-for-list), so the
+layout floor is 3: one forced layout per placeholder move adds 4 layouts to the
+`*vdndVirtualFor` drag. The task-time floor sits above run-to-run drift on the
+smallest baseline (up to 28 ms on the ~200 ms drag-within-virtual-for-list) and
+at 25% of it; the percent threshold covers the larger baselines. Current floors:
 
 | Metric            | Floor | Unit   |
 | ----------------- | ----- | ------ |
 | totalBlockingTime | 20    | ms     |
 | longTaskCount     | 2     | tasks  |
-| layoutCount       | 10    | count  |
+| layoutCount       | 3     | count  |
 | recalcStyleCount  | 10    | count  |
+| taskDuration      | 50    | ms     |
 | avgFrameTime      | 1.5   | ms     |
 | maxFrameGap       | 15    | ms     |
 | droppedFrames     | 3     | frames |
@@ -123,10 +182,13 @@ baseline is not comparable to the current run:
 
 - **Metrics schema.** Each scenario report records `metricsSchemaVersion`
   (`fixtures/metric-math.ts`). Bump it whenever a change alters what a number
-  _means_ (long-task window, dropped-frame threshold, aggregation). The pre-#42
-  harness — leaking observer, `buffered: true`, `>16.7ms` dropped frames — is
-  schema 1; this collector is schema 2. Comparing across schemas would attribute
-  a **semantics** change (e.g. dropped frames 60 → 0) to the library.
+  _means_ (long-task window, dropped-frame threshold, aggregation, the page a
+  scenario measures). The pre-#42 harness — leaking observer, `buffered: true`,
+  `>16.7ms` dropped frames — is schema 1; schema 2 measured the main demo with
+  its debug panel re-rendering every drag frame; this collector is schema 3
+  (pages without drag-state debug output, plus main-thread time, #97). Comparing across
+  schemas would attribute a **semantics** change (e.g. dropped frames 60 → 0)
+  to the library.
 - **Playwright version.** Embedded in each side's JSON report; different
   browser builds produce different numbers.
 - **Mixed or partially unversioned runs.** A results file is only healthy when

@@ -25,13 +25,17 @@ import type { AggregatedMetrics } from './statistics.ts';
  * deliberately absent: with the <300 frame intervals our scenarios collect,
  * nearest-rank p99 resolves to (or next to) the maximum, so it duplicates
  * `maxFrameGap` — the same noisy value must not be gated twice with different
- * floors. It stays in the benchmark report as informational context.
+ * floors. `scriptDuration` is absent too: runs of the same code drifted by up to
+ * 26% (pages reload each iteration, so JIT and GC timing vary), past the percent
+ * threshold; `taskDuration` includes script time and drifted at most 19%. Both stay
+ * in the benchmark report as informational context.
  */
 export const GATED_METRICS = [
   'totalBlockingTime',
   'longTaskCount',
   'layoutCount',
   'recalcStyleCount',
+  'taskDuration',
   'avgFrameTime',
   'maxFrameGap',
   'droppedFrames',
@@ -57,9 +61,16 @@ export const MIN_ABS_DELTA: Record<string, number> = {
   // Layout/style-recalc counts are near-deterministic (baseline MAD ≈ 0), so the
   // floor only needs to guard genuinely small baselines. 25 was larger than the
   // drag-within-list baseline median (24) — a full doubling of layout work slipped
-  // under it as "noise".
-  layoutCount: 10, // count
+  // under it as "noise". Without the demo's debug panel (#97) the drag layout
+  // baselines are 10 (drag-within-list) and 6 (drag-within-virtual-for-list, where
+  // one forced layout per placeholder move adds 4).
+  layoutCount: 3, // count
   recalcStyleCount: 10, // count
+  // Main-thread task time over the whole scenario, under 4x CPU throttling. Runs of
+  // the same code on one machine differed by up to 28 ms on the ~200 ms
+  // drag-within-virtual-for-list baseline (25% of it is 50 ms); the percent
+  // threshold covers larger baselines (at most +19% drift, 68 ms on ~360 ms).
+  taskDuration: 50, // ms
   avgFrameTime: 1.5, // ms
   maxFrameGap: 15, // ms
   droppedFrames: 3, // frames

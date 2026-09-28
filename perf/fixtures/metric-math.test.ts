@@ -3,15 +3,74 @@ import assert from 'node:assert/strict';
 import {
   DROPPED_FRAME_THRESHOLD_MS,
   METRICS_SCHEMA_VERSION,
+  SCENARIO_METRICS,
+  aggregateScenarioMetrics,
   computeTotalBlockingTime,
   countDroppedFrames,
   filterLongTasksSince,
   percentile,
+  readPerfCounters,
   type LongTask,
+  type ScenarioMetrics,
 } from './metric-math.ts';
 
 test('metrics schema version is a positive integer (bumped when semantics change)', () => {
-  assert.ok(Number.isInteger(METRICS_SCHEMA_VERSION) && METRICS_SCHEMA_VERSION >= 2);
+  // Schema 3 (#97): CPU-time metrics, and no drag-state debug output on the measured pages.
+  assert.ok(Number.isInteger(METRICS_SCHEMA_VERSION) && METRICS_SCHEMA_VERSION >= 3);
+});
+
+test('readPerfCounters converts CDP durations from seconds to milliseconds', () => {
+  const counters = readPerfCounters([
+    { name: 'LayoutCount', value: 12 },
+    { name: 'RecalcStyleCount', value: 30 },
+    { name: 'ScriptDuration', value: 0.25 },
+    { name: 'TaskDuration', value: 1.5 },
+    { name: 'Nodes', value: 900 },
+  ]);
+  assert.deepEqual(counters, {
+    layoutCount: 12,
+    recalcStyleCount: 30,
+    scriptDuration: 250,
+    taskDuration: 1500,
+  });
+});
+
+test('readPerfCounters fails when CDP stops reporting a counter', () => {
+  // Reading it as 0 on both sides would pass the gate without measuring anything.
+  assert.throws(
+    () =>
+      readPerfCounters([
+        { name: 'LayoutCount', value: 12 },
+        { name: 'RecalcStyleCount', value: 30 },
+        { name: 'ScriptDuration', value: 0.25 },
+      ]),
+    /TaskDuration/,
+  );
+});
+
+test('aggregateScenarioMetrics aggregates every reported metric, main-thread time included', () => {
+  const sample = (scriptDuration: number): ScenarioMetrics => ({
+    durationMs: 1000,
+    longTaskCount: 0,
+    totalBlockingTime: 0,
+    layoutCount: 4,
+    recalcStyleCount: 20,
+    scriptDuration,
+    taskDuration: scriptDuration * 2,
+    frameCount: 60,
+    avgFrameTime: 16.7,
+    maxFrameGap: 20,
+    droppedFrames: 0,
+    p99FrameTime: 20,
+  });
+  const report = aggregateScenarioMetrics([sample(100), sample(120), sample(110)]);
+
+  assert.deepEqual(Object.keys(report), [...SCENARIO_METRICS]);
+  assert.ok(SCENARIO_METRICS.includes('scriptDuration'));
+  assert.ok(SCENARIO_METRICS.includes('taskDuration'));
+  assert.equal(report.scriptDuration.median, 110);
+  assert.equal(report.taskDuration.median, 220);
+  assert.equal(report.layoutCount.samples, 3);
 });
 
 test('filterLongTasksSince drops tasks that started before the scenario window', () => {

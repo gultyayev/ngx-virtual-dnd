@@ -237,6 +237,23 @@ test.describe('placeholderMove event', () => {
     await expect(host).toHaveAttribute('data-placeholder-move-count', '3');
   });
 
+  test('fires for vdnd-sortable-list (simplified API)', async ({ page }) => {
+    const demoPage = new DemoPage(page);
+    await demoPage.goto({ api: 'simplified' });
+    const host = demoPage.host;
+
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+    await expect(host).toHaveAttribute('data-placeholder-move-count', '0');
+
+    await demoPage.keyboardMoveDown();
+    await expect(host).toHaveAttribute('data-last-placeholder-move', 'list-1:0->1');
+    await expect(host).toHaveAttribute('data-placeholder-move-count', '1');
+
+    await demoPage.keyboardCancel();
+    await expect(demoPage.dragPreview).toBeHidden();
+  });
+
   test('fires during pointer drags', async ({ page }) => {
     const demoPage = new DemoPage(page);
     await demoPage.goto();

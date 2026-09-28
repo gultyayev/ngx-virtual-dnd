@@ -5,6 +5,8 @@
  * `node --test` (see `metric-math.test.ts`).
  */
 
+import { aggregate, type AggregatedMetrics } from './statistics.ts';
+
 export interface LongTask {
   startTime: number;
   duration: number;
@@ -13,12 +15,14 @@ export interface LongTask {
 /**
  * Version of the metric *semantics* produced by the collector. Bump this whenever
  * a change alters what a number means (long-task attribution window, dropped-frame
- * threshold, aggregation, …). `compare.ts` fails closed when a baseline was
- * produced by a different schema, because old and new numbers are then not
- * comparable — the pre-#42 harness (leaking observer, `buffered: true`, >16.7ms
- * dropped frames) is schema 1; this collector is schema 2.
+ * threshold, aggregation, the page a scenario measures, …). `compare.ts` fails closed
+ * when a baseline was produced by a different schema, because old and new numbers are
+ * then not comparable — the pre-#42 harness (leaking observer, `buffered: true`,
+ * >16.7ms dropped frames) is schema 1; schema 2 measured the main demo with its debug
+ * panel, which re-rendered the whole demo every drag frame (#97); this collector is
+ * schema 3 (pages without drag-state debug output, plus main-thread time).
  */
-export const METRICS_SCHEMA_VERSION = 2;
+export const METRICS_SCHEMA_VERSION = 3;
 
 /**
  * Frame intervals below this are treated as ordinary 60Hz scheduling jitter.
@@ -55,4 +59,78 @@ export function percentile(values: number[], p: number): number {
   const sorted = [...values].sort((a, b) => a - b);
   const index = Math.ceil(sorted.length * p) - 1;
   return sorted[Math.min(Math.max(index, 0), sorted.length - 1)];
+}
+
+/** One entry of CDP `Performance.getMetrics`. */
+export interface CdpMetric {
+  name: string;
+  value: number;
+}
+
+/** Cumulative renderer counters; a scenario's value is the delta across it. */
+export interface PerfCounters {
+  layoutCount: number;
+  recalcStyleCount: number;
+  /** Main-thread wall time spent running script, in ms. */
+  scriptDuration: number;
+  /** Main-thread wall time spent in tasks (script, style, layout, paint, …), in ms. */
+  taskDuration: number;
+}
+
+/**
+ * Read the counters from CDP `Performance.getMetrics`, which reports durations in seconds.
+ * Throws when a counter is missing: reading it as 0 on both sides of a comparison would pass
+ * the gate without measuring anything.
+ */
+export function readPerfCounters(metrics: CdpMetric[]): PerfCounters {
+  const get = (name: string) => {
+    const metric = metrics.find((m) => m.name === name);
+    if (!metric) {
+      throw new Error(`CDP Performance.getMetrics did not report ${name}`);
+    }
+    return metric.value;
+  };
+  return {
+    layoutCount: get('LayoutCount'),
+    recalcStyleCount: get('RecalcStyleCount'),
+    scriptDuration: get('ScriptDuration') * 1000,
+    taskDuration: get('TaskDuration') * 1000,
+  };
+}
+
+/** What one measured iteration of a scenario produced. */
+export interface ScenarioMetrics extends PerfCounters {
+  durationMs: number;
+  longTaskCount: number;
+  totalBlockingTime: number;
+  frameCount: number;
+  avgFrameTime: number;
+  maxFrameGap: number;
+  droppedFrames: number;
+  p99FrameTime: number;
+}
+
+/** The metrics every scenario report carries, in report order. */
+export const SCENARIO_METRICS = [
+  'totalBlockingTime',
+  'longTaskCount',
+  'layoutCount',
+  'recalcStyleCount',
+  'scriptDuration',
+  'taskDuration',
+  'avgFrameTime',
+  'maxFrameGap',
+  'droppedFrames',
+  'p99FrameTime',
+] as const satisfies readonly (keyof ScenarioMetrics)[];
+
+export type ScenarioMetricName = (typeof SCENARIO_METRICS)[number];
+
+/** Aggregate each reported metric over a scenario's measured iterations. */
+export function aggregateScenarioMetrics(
+  results: ScenarioMetrics[],
+): Record<ScenarioMetricName, AggregatedMetrics> {
+  return Object.fromEntries(
+    SCENARIO_METRICS.map((metric) => [metric, aggregate(results.map((r) => r[metric]))]),
+  ) as Record<ScenarioMetricName, AggregatedMetrics>;
 }

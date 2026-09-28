@@ -248,7 +248,9 @@ a placeholder from drag start.
 Every demo page exposes the processed state via `data-testid="drag-state-debug"`
 (visible debug panel on the main demo, hidden `DragStateDebugComponent` on the
 task demos). The shared implementation lives in `e2e/fixtures/drag-sync.ts` and
-is exposed on both page objects (`DemoPage`, `TaskDemoPage`).
+is exposed on both page objects (`DemoPage`, `TaskDemoPage`). The
+`?dragStateDebug=false` URL flag removes that element (it re-renders every drag
+frame); only the perf benchmarks use it, so never pass it from an E2E test.
 
 Caveats: the processed cursor is the EFFECTIVE position — do not settle with
 axis locking enabled, and with constrain-to-container only when the release

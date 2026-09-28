@@ -1,15 +1,19 @@
 import { CDPSession, Page } from '@playwright/test';
 import {
+  aggregateScenarioMetrics,
   computeTotalBlockingTime,
   countDroppedFrames,
   filterLongTasksSince,
   percentile,
+  readPerfCounters,
   METRICS_SCHEMA_VERSION,
   type LongTask,
+  type PerfCounters,
+  type ScenarioMetrics,
 } from './metric-math';
 
-export type { LongTask };
-export { METRICS_SCHEMA_VERSION };
+export type { LongTask, ScenarioMetrics };
+export { aggregateScenarioMetrics, METRICS_SCHEMA_VERSION };
 
 /** Page globals shared between injectObservers() and collectObserverResults(). */
 interface PerfWindow extends Window {
@@ -21,23 +25,8 @@ interface PerfWindow extends Window {
   __perfScenarioStart?: number;
 }
 
-export interface PerfSnapshot {
+export interface PerfSnapshot extends PerfCounters {
   timestamp: number;
-  layoutCount: number;
-  recalcStyleCount: number;
-}
-
-export interface ScenarioMetrics {
-  durationMs: number;
-  longTaskCount: number;
-  totalBlockingTime: number;
-  layoutCount: number;
-  recalcStyleCount: number;
-  frameCount: number;
-  avgFrameTime: number;
-  maxFrameGap: number;
-  droppedFrames: number;
-  p99FrameTime: number;
 }
 
 export class MetricsCollector {
@@ -63,12 +52,7 @@ export class MetricsCollector {
 
   async getSnapshot(): Promise<PerfSnapshot> {
     const { metrics } = await this.#cdp!.send('Performance.getMetrics');
-    const get = (name: string) => metrics.find((m) => m.name === name)?.value ?? 0;
-    return {
-      timestamp: Date.now(),
-      layoutCount: get('LayoutCount'),
-      recalcStyleCount: get('RecalcStyleCount'),
-    };
+    return { timestamp: Date.now(), ...readPerfCounters(metrics) };
   }
 
   /**
@@ -174,6 +158,8 @@ export class MetricsCollector {
       totalBlockingTime,
       layoutCount: after.layoutCount - before.layoutCount,
       recalcStyleCount: after.recalcStyleCount - before.recalcStyleCount,
+      scriptDuration: after.scriptDuration - before.scriptDuration,
+      taskDuration: after.taskDuration - before.taskDuration,
       frameCount,
       avgFrameTime,
       maxFrameGap,

@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChildren,
+} from '@angular/core';
 import { JsonPipe } from '@angular/common';
 import { ActivatedRoute, ParamMap } from '@angular/router';
 import {
@@ -38,6 +46,7 @@ interface DemoSettings {
   useSimplifiedApi: boolean;
   constrainToContainer: boolean;
   list2DroppableDisabled: boolean;
+  dragStateDebug: boolean;
 }
 
 /**
@@ -113,6 +122,13 @@ export class DemoComponent {
   /** Whether settings panel is expanded */
   readonly settingsExpanded = signal(true);
 
+  /**
+   * Whether the debug panel is rendered. It re-renders the whole demo (every row included) on
+   * each drag frame, so the perf benchmarks open the page with `?dragStateDebug=false`.
+   * E2E tests read its `drag-state-debug` element.
+   */
+  readonly dragStateDebug = this.#initial.dragStateDebug;
+
   /** Whether debug panel is expanded */
   readonly debugExpanded = signal(false);
 
@@ -149,6 +165,12 @@ export class DemoComponent {
     return draggedItem ? [draggedItem.draggableId] : [];
   });
 
+  /** The verbose API's lists, whose `placeholderMove` the constructor subscribes to. */
+  private readonly droppables = viewChildren(DroppableDirective);
+
+  /** The simplified API's lists, whose `placeholderMove` the constructor subscribes to. */
+  private readonly sortableLists = viewChildren(VirtualSortableListComponent);
+
   /** Debug state for display */
   readonly debugState = computed(() => ({
     isDragging: this.#dragState.isDragging(),
@@ -164,6 +186,16 @@ export class DemoComponent {
 
   constructor() {
     this.regenerateItems();
+
+    // Subscribe instead of binding `(placeholderMove)` in the template: a template listener marks
+    // this view dirty, so every placeholder move re-rendered the whole demo and every row, which
+    // the perf benchmarks that drag on this page would measure (#97).
+    effect((onCleanup) => {
+      const subscriptions = [...this.droppables(), ...this.sortableLists()].map((list) =>
+        list.placeholderMove.subscribe((event) => this.onPlaceholderMove(event)),
+      );
+      onCleanup(() => subscriptions.forEach((subscription) => subscription.unsubscribe()));
+    });
   }
 
   /** Toggle settings panel */
@@ -335,5 +367,6 @@ function readDemoSettings(params: ParamMap): DemoSettings {
     useSimplifiedApi: params.get('api') === 'simplified',
     constrainToContainer: flag('constrainToContainer', false),
     list2DroppableDisabled: flag('list2Disabled', false),
+    dragStateDebug: flag('dragStateDebug', true),
   };
 }
