@@ -1,7 +1,11 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { AggregatedMetrics } from './fixtures/statistics.ts';
-import { evaluateMetric, GATED_METRICS } from './fixtures/compare-metrics.ts';
+import {
+  evaluateMetric,
+  incompatibleBaselineAdvice,
+  GATED_METRICS,
+} from './fixtures/compare-metrics.ts';
 import { extractScenarios, type ScenarioReport } from './fixtures/extract-scenarios.ts';
 
 function parseArg(args: string[], flag: string): string | undefined {
@@ -186,7 +190,13 @@ function main(): void {
       );
     }
     emit(`\n> ⚠️ **Incompatible baseline:** ${reasons.join('; ')}.`);
-    emit('> Regenerate the baseline on the current harness (`npm run perf:baseline`).');
+    for (const line of incompatibleBaselineAdvice({
+      schemaMismatch,
+      mixedSchemas: hasMixedSchemas,
+      playwrightMismatch: versionMismatch,
+    })) {
+      emit(`> ${line}`);
+    }
 
     if (!allowMismatch) {
       emit('');
