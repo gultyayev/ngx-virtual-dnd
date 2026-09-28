@@ -268,4 +268,67 @@ describe('DragSchedulerService', () => {
       expect(participant).toHaveBeenCalledTimes(1); // not called again
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // frame writers
+  // ---------------------------------------------------------------------------
+  describe('frame writers', () => {
+    it('should call writers after onTick in the same frame', () => {
+      const calls: string[] = [];
+      service.addParticipant(() => calls.push('participant'));
+      service.addFrameWriter(() => calls.push('writer'));
+      service.start(() => calls.push('tick'));
+
+      flushRAF();
+      expect(calls).toEqual(['participant', 'tick', 'writer']);
+    });
+
+    it('should call writers every frame while running', () => {
+      const writer = jest.fn();
+      service.addFrameWriter(writer);
+      service.start(jest.fn());
+
+      flushRAF();
+      flushRAF();
+      expect(writer).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not call writers when the scheduler is not running', () => {
+      const writer = jest.fn();
+      service.addFrameWriter(writer);
+
+      flushRAF();
+      expect(writer).not.toHaveBeenCalled();
+    });
+
+    it('should not call writers when onTick stops the scheduler', () => {
+      const writer = jest.fn();
+      service.addFrameWriter(writer);
+      service.start(() => service.stop());
+
+      flushRAF();
+      expect(writer).not.toHaveBeenCalled();
+    });
+
+    it('should not register the same writer twice', () => {
+      const writer = jest.fn();
+      service.addFrameWriter(writer);
+      service.addFrameWriter(writer);
+      service.start(jest.fn());
+
+      flushRAF();
+      expect(writer).toHaveBeenCalledTimes(1);
+    });
+
+    it('should stop calling a removed writer', () => {
+      const writer = jest.fn();
+      service.addFrameWriter(writer);
+      service.start(jest.fn());
+
+      flushRAF();
+      service.removeFrameWriter(writer);
+      flushRAF();
+      expect(writer).toHaveBeenCalledTimes(1);
+    });
+  });
 });

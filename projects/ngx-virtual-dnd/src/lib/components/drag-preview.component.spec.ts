@@ -4,6 +4,7 @@ import { DragPreviewComponent, DragPreviewContext } from './drag-preview.compone
 import { DragStateService } from '../services/drag-state.service';
 import { OverlayContainerService } from '../services/overlay-container.service';
 import { DroppableRegistryService } from '../services/droppable-registry.service';
+import { DragSchedulerService } from '../services/drag-scheduler.service';
 import { CursorPosition, DraggedItem, GrabOffset } from '../models/drag-drop.models';
 import { VDND_ANIMATION_CONFIG, VdndAnimationConfig } from '../tokens/animation-config.token';
 
@@ -375,6 +376,118 @@ describe('DragPreviewComponent', () => {
 
       expect(cloneContainer).toBeNull();
       expect(customPreview).not.toBeNull();
+    });
+  });
+
+  describe('frame writes', () => {
+    const originalRAF = globalThis.requestAnimationFrame;
+    const originalCancelRAF = globalThis.cancelAnimationFrame;
+    let rafCallbacks: Map<number, FrameRequestCallback>;
+    let rafId: number;
+    let fixture: ComponentFixture<DefaultTestHostComponent>;
+    let dragStateService: DragStateService;
+    let scheduler: DragSchedulerService;
+    let overlayContainerService: OverlayContainerService;
+
+    /** Run the queued animation frames, without any change detection. */
+    const flushRAF = (): void => {
+      const batch = [...rafCallbacks.values()];
+      rafCallbacks.clear();
+      batch.forEach((cb) => cb(performance.now()));
+    };
+
+    /** Start a drag the way DraggableDirective does: the scheduler tick writes the cursor. */
+    const startPointerDrag = (lockAxis: 'x' | 'y' | null = null): void => {
+      dragStateService.startDrag(
+        createMockDraggedItem(),
+        { x: 100, y: 100 },
+        { x: 0, y: 0 },
+        lockAxis,
+      );
+      fixture.detectChanges();
+      fixture.detectChanges();
+      scheduler.start((cursor, cursorDirty) => {
+        if (cursorDirty && cursor) {
+          dragStateService.updateDragPosition({
+            cursorPosition: cursor,
+            activeDroppableId: null,
+            placeholderId: null,
+            placeholderIndex: null,
+          });
+        }
+      });
+    };
+
+    beforeEach(() => {
+      rafCallbacks = new Map();
+      rafId = 0;
+      globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+        rafCallbacks.set(++rafId, cb);
+        return rafId;
+      }) as typeof requestAnimationFrame;
+      globalThis.cancelAnimationFrame = (id: number) => {
+        rafCallbacks.delete(id);
+      };
+
+      TestBed.configureTestingModule({ imports: [DefaultTestHostComponent] });
+      fixture = TestBed.createComponent(DefaultTestHostComponent);
+      dragStateService = TestBed.inject(DragStateService);
+      scheduler = TestBed.inject(DragSchedulerService);
+      overlayContainerService = TestBed.inject(OverlayContainerService);
+      fixture.detectChanges();
+      fixture.detectChanges();
+    });
+
+    afterEach(() => {
+      scheduler.stop();
+      dragStateService.endDrag();
+      fixture.destroy();
+      overlayContainerService.ngOnDestroy();
+      globalThis.requestAnimationFrame = originalRAF;
+      globalThis.cancelAnimationFrame = originalCancelRAF;
+    });
+
+    it('moves the preview inside the scheduler frame, before change detection runs', () => {
+      startPointerDrag();
+      const preview = queryPreview('.vdnd-drag-preview')!;
+      expect(preview.style.transform).toBe('translate3d(100px, 100px, 0)');
+
+      scheduler.queueCursorUpdate({ x: 200, y: 150 });
+      flushRAF();
+
+      expect(preview.style.transform).toBe('translate3d(200px, 150px, 0)');
+    });
+
+    it('applies the axis lock to the frame write', () => {
+      startPointerDrag('y');
+      const preview = queryPreview('.vdnd-drag-preview')!;
+
+      scheduler.queueCursorUpdate({ x: 200, y: 300 });
+      flushRAF();
+
+      expect(preview.style.transform).toBe('translate3d(200px, 100px, 0)');
+    });
+
+    it('agrees with the rendered position once change detection catches up', () => {
+      startPointerDrag();
+      scheduler.queueCursorUpdate({ x: 200, y: 150 });
+      flushRAF();
+      fixture.detectChanges();
+
+      expect(queryPreview('.vdnd-drag-preview')!.style.transform).toBe(
+        'translate3d(200px, 150px, 0)',
+      );
+    });
+
+    it('stops writing once destroyed', () => {
+      startPointerDrag();
+      const preview = queryPreview('.vdnd-drag-preview')!;
+      fixture.destroy();
+
+      scheduler.queueCursorUpdate({ x: 200, y: 150 });
+      flushRAF();
+
+      expect(preview.style.transform).toBe('translate3d(100px, 100px, 0)');
     });
   });
 

@@ -16,6 +16,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { DragStateService } from '../services/drag-state.service';
+import { DragSchedulerService } from '../services/drag-scheduler.service';
 import { OverlayContainerService } from '../services/overlay-container.service';
 import { CursorPosition, DraggedItem, DragState } from '../models/drag-drop.models';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
@@ -111,6 +112,7 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #injector = inject(Injector);
   readonly #droppableRegistry = inject(DroppableRegistryService);
+  readonly #scheduler = inject(DragSchedulerService);
   readonly #dropAnimator = this.#createDropAnimator();
 
   /** Optional custom template for the preview */
@@ -139,6 +141,24 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
     () => this.dragState.draggedItem() ?? this.#settling()?.item ?? null,
   );
 
+  /**
+   * Moves the preview inside the drag scheduler's frame (bound for stable add/remove).
+   * The `[style.transform]` binding alone would move it one frame late: a signal write in an
+   * animation frame schedules Angular's render after that frame is painted. The binding
+   * stays for every other path (drag start, keyboard drags, the settle, direct
+   * `DragStateService` updates); both compute the same value from the live state, so the
+   * render that follows only confirms what this already wrote. The first frame after drag
+   * start may find no preview element yet (`@if` creates it in that render); the binding
+   * places it.
+   */
+  readonly #writeFramePosition = (): void => {
+    const preview = this.previewElement()?.nativeElement;
+    if (!preview || this.#settling() || !this.dragState.isDragging()) {
+      return;
+    }
+    preview.style.transform = this.transform();
+  };
+
   /** Whether this preview's template registration is currently counted (kept balanced). */
   #templateRegistered = false;
 
@@ -151,6 +171,8 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
   });
 
   constructor() {
+    this.#scheduler.addFrameWriter(this.#writeFramePosition);
+
     // Teleport host element into the body-level overlay container after first render.
     // This escapes any ancestor CSS transforms that would break position: fixed.
     afterNextRender(() => {
@@ -207,6 +229,7 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.#scheduler.removeFrameWriter(this.#writeFramePosition);
     this.#dropAnimator?.cancel();
     if (this.#templateRegistered) {
       this.#overlayContainer.setTemplatePreviewActive(false);

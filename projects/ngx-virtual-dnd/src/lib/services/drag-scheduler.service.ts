@@ -20,6 +20,10 @@ export type SchedulerTickFn = (cursor: CursorPosition | null, cursorDirty: boole
  *      latest cursor and a `cursorDirty` flag. Callers skip their hit-test when
  *      the flag is false, so autoscroll-only frames (cursor stationary) incur
  *      zero hit-test work.
+ *   3. Frame writer phase (WRITE): registered writers apply the state computed this
+ *      frame to the DOM. DragPreviewComponent writes the preview transform here, so
+ *      the preview moves in the frame that processed the pointer instead of waiting
+ *      for a change detection tick, which Angular schedules after this frame.
  *
  * PointerDragHandler calls `queueCursorUpdate()` instead of managing its own
  * RAF per pointermove. This coalesces all moves within a frame into one update
@@ -41,6 +45,9 @@ export class DragSchedulerService {
 
   /** Tick participants called before the main compute phase each frame. */
   readonly #participants: (() => void)[] = [];
+
+  /** Frame writers called after the main compute phase each frame. */
+  readonly #frameWriters: (() => void)[] = [];
 
   /**
    * Start the scheduler RAF loop.
@@ -103,6 +110,28 @@ export class DragSchedulerService {
     }
   }
 
+  /**
+   * Register a function to be called at the end of each frame, after the main tick.
+   * DragPreviewComponent registers here to move the preview within the same frame.
+   * No-op if the same function reference is already registered.
+   */
+  addFrameWriter(fn: () => void): void {
+    if (!this.#frameWriters.includes(fn)) {
+      this.#frameWriters.push(fn);
+    }
+  }
+
+  /**
+   * Unregister a previously added frame writer.
+   * No-op if the function was not registered.
+   */
+  removeFrameWriter(fn: () => void): void {
+    const idx = this.#frameWriters.indexOf(fn);
+    if (idx !== -1) {
+      this.#frameWriters.splice(idx, 1);
+    }
+  }
+
   #scheduleNextTick(): void {
     this.#rafId = requestAnimationFrame(() => this.#tick());
   }
@@ -137,7 +166,17 @@ export class DragSchedulerService {
     // Phase 2 — main compute (cursor-based hit-test + signal write)
     onTick(this.#pendingCursor, cursorDirty);
 
-    // Reschedule only if still active (stop() may have been called by onTick).
+    // stop() may have been called by onTick (the drag ended): nothing left to write.
+    if (this.#onTick === null) {
+      return;
+    }
+
+    // Phase 3 — frame writers (apply this frame's state to the DOM)
+    for (const writer of this.#frameWriters) {
+      writer();
+    }
+
+    // Reschedule only if still active (a writer is not expected to stop it, but may).
     if (this.#onTick !== null) {
       this.#scheduleNextTick();
     }
