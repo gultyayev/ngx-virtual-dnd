@@ -1,5 +1,5 @@
-import { inject, Injectable, NgZone } from '@angular/core';
-import { queryAllByAttribute, queryByAttribute } from '../utils/attribute-selectors';
+import { DestroyRef, inject, Injectable, NgZone } from '@angular/core';
+import { DroppableRegistryService } from './droppable-registry.service';
 
 /**
  * Snapshot of the candidate droppables for an active drag session.
@@ -45,6 +45,7 @@ function isPageRoot(element: Element): boolean {
 })
 export class PositionCalculatorService {
   readonly #ngZone = inject(NgZone);
+  readonly #registry = inject(DroppableRegistryService);
 
   /** Data attribute used to identify droppable elements */
   readonly #DROPPABLE_ID_ATTR = 'data-droppable-id';
@@ -63,6 +64,16 @@ export class PositionCalculatorService {
 
   /** Active drag session rect snapshot, or null when no drag is in progress. */
   #session: DragSessionSnapshot | null = null;
+
+  constructor() {
+    // A droppable (un)registering mid-drag makes the next hit-test re-read the candidates.
+    // Removed on destroy in case the service is provided below root.
+    const removeListener = this.#registry.onChange((group) => this.notifyCandidatesChanged(group));
+    inject(DestroyRef).onDestroy(() => {
+      removeListener();
+      this.endDragSession();
+    });
+  }
 
   /**
    * Begin a drag session: snapshot the candidate droppables for `groupName` and
@@ -136,10 +147,11 @@ export class PositionCalculatorService {
   }
 
   /**
-   * Re-query the candidate droppable *list* for the active session and re-read their
-   * rects. Unlike {@link invalidateDroppableRects} (which only refreshes rects), this
-   * picks up droppables added or removed since the snapshot was captured at drag start —
-   * the frozen candidate list is otherwise blind to mid-drag mounts/unmounts.
+   * Re-read the candidate droppable *list* for the active session from the registry and
+   * re-read their rects. Unlike {@link invalidateDroppableRects} (which only refreshes
+   * rects), this picks up droppables added or removed since the snapshot was captured at
+   * drag start. Registration changes already trigger it on the next hit-test; this is the
+   * manual escape hatch.
    *
    * Safe to call when no session is active (no-op).
    */
@@ -157,12 +169,11 @@ export class PositionCalculatorService {
 
   /**
    * Signal that the set of droppables for `groupName` may have changed (a droppable
-   * registered or unregistered mid-drag). Defers the actual re-query to the next
-   * hit-test — where a removed element is already gone from the DOM and a newly added
-   * one has its data attributes applied — keeping this notification path cheap.
+   * registered or unregistered mid-drag). Defers the re-read to the next hit-test, keeping
+   * this notification path cheap.
    *
-   * Called by {@link DroppableDirective} lifecycle hooks. No-op when the active session
-   * belongs to a different group or no session is active.
+   * Called for every droppable registry change. No-op when the active session belongs to
+   * a different group or no session is active.
    */
   notifyCandidatesChanged(groupName: string): void {
     if (this.#session && this.#session.groupName === groupName) {
@@ -214,8 +225,8 @@ export class PositionCalculatorService {
   /**
    * Look up a droppable element by its ID.
    *
-   * When a drag session is active, searches the cached candidate list (O(n), avoids a DOM
-   * query). Falls back to `document.querySelector` when no session is active.
+   * When a drag session is active, searches the cached candidate list. Otherwise looks the
+   * ID up in the droppable registry. Neither queries the document.
    *
    * Intended for the autoscroll scroll-only fast path, where the active droppable is already
    * known and only the placeholder index needs recalculation.
@@ -230,14 +241,11 @@ export class PositionCalculatorService {
       return null;
     }
 
-    if (typeof document === 'undefined') {
-      return null;
-    }
-    return queryByAttribute<HTMLElement>(document, this.#DROPPABLE_ID_ATTR, id);
+    return this.#registry.getById(id);
   }
 
   /**
-   * Query all droppable elements belonging to a group, in document order.
+   * All rendered droppables belonging to a group, in document order, from the registry.
    *
    * All group members are included — the disabled check happens per-frame in
    * {@link #hitTest} rather than here, because a droppable can be disabled or
@@ -245,10 +253,7 @@ export class PositionCalculatorService {
    * `(dragStart)` handler, which fires AFTER the candidate snapshot is captured).
    */
   #queryDroppables(groupName: string): HTMLElement[] {
-    if (typeof document === 'undefined') {
-      return [];
-    }
-    return queryAllByAttribute<HTMLElement>(document, this.#DROPPABLE_GROUP_ATTR, groupName);
+    return this.#registry.getGroup(groupName);
   }
 
   /**
@@ -510,11 +515,7 @@ export class PositionCalculatorService {
     // current container — otherwise a container disabled mid-drag (its own index becomes
     // -1) would trap the drag with no reachable neighbour. Disabled droppables are skipped
     // as *targets* during the outward scan below instead.
-    const allDroppables = queryAllByAttribute<HTMLElement>(
-      document,
-      this.#DROPPABLE_GROUP_ATTR,
-      groupName,
-    );
+    const allDroppables = this.#registry.getGroup(groupName);
 
     if (allDroppables.length <= 1) {
       return null;
@@ -525,14 +526,13 @@ export class PositionCalculatorService {
       [];
 
     allDroppables.forEach((el) => {
-      const htmlEl = el as HTMLElement;
-      const id = htmlEl.getAttribute(this.#DROPPABLE_ID_ATTR);
+      const id = el.getAttribute(this.#DROPPABLE_ID_ATTR);
       if (id) {
         droppableInfos.push({
-          element: htmlEl,
+          element: el,
           id,
-          rect: htmlEl.getBoundingClientRect(),
-          disabled: this.#isDroppableDisabled(htmlEl),
+          rect: el.getBoundingClientRect(),
+          disabled: this.#isDroppableDisabled(el),
         });
       }
     });

@@ -59,9 +59,9 @@ Edge scrolling during drags. It is normally configured through component inputs.
 
 These are exported for advanced customization. Most apps never need them.
 
-| Service                     | Purpose                                                                                             |
-| --------------------------- | --------------------------------------------------------------------------------------------------- |
-| `PositionCalculatorService` | Hit-testing and drop-index math. `refreshCandidates()` re-reads the drop targets of an active drag. |
-| `ElementCloneService`       | Clones an element with its computed styles inlined; used for the default preview.                   |
-| `KeyboardDragService`       | Keyboard drag state.                                                                                |
-| `OverlayContainerService`   | The body-level container that hosts the drag preview.                                               |
+| Service                     | Purpose                                                                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PositionCalculatorService` | Hit-testing and drop-index math over the lists rendered with `vdndDroppable`. `refreshCandidates()` re-reads the drop targets of an active drag. |
+| `ElementCloneService`       | Clones an element with its computed styles inlined; used for the default preview.                                                                |
+| `KeyboardDragService`       | Keyboard drag state.                                                                                                                             |
+| `OverlayContainerService`   | The body-level container that hosts the drag preview.                                                                                            |

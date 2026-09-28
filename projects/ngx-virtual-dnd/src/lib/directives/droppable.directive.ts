@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
-import { PositionCalculatorService } from '../services/position-calculator.service';
+import { DroppableRegistryService } from '../services/droppable-registry.service';
 import {
   DraggedItem,
   DragState,
@@ -23,7 +23,6 @@ import {
 import { VDND_GROUP_TOKEN } from './droppable-group.directive';
 import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
-import { queryByAttribute } from '../utils/attribute-selectors';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
 
 /**
@@ -64,7 +63,7 @@ export class DroppableDirective implements OnDestroy {
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #dragState = inject(DragStateService);
   readonly #autoScroll = inject(AutoScrollService);
-  readonly #positionCalculator = inject(PositionCalculatorService);
+  readonly #registry = inject(DroppableRegistryService);
   readonly #parentGroup = inject(VDND_GROUP_TOKEN, { optional: true });
 
   /** Unique identifier for this droppable */
@@ -180,15 +179,25 @@ export class DroppableDirective implements OnDestroy {
       canRegister: () => Boolean(this.effectiveGroup()),
     });
 
-    // Notify the calculator once this droppable is rendered (host data attributes applied).
-    // Matters when it mounts DURING an active drag — the candidate snapshot was frozen at
-    // drag start, so without this a conditionally rendered list would never become a target.
-    afterNextRender(() => {
-      this.#rendered = true;
+    afterNextRender(() => (this.#rendered = true));
+
+    // Register with the droppable registry, and again under the new key when the ID or group
+    // changes. Drag code finds drop targets through the registry instead of querying the
+    // document; a registration during an active drag makes this droppable a target from the
+    // next hit-test. The cleanup unregisters it, including on destroy.
+    //
+    // Not deferred to afterNextRender: this runs in the change detection that creates the
+    // droppable (inputs are set by then), so afterNextRender hooks of that same render (drop
+    // animation, keyboard focus restore) already find it, and so does a view refreshed only
+    // by its own detectChanges(). Nothing reads the registry before change detection ends.
+    effect((onCleanup) => {
       const group = this.effectiveGroup();
-      if (group) {
-        this.#positionCalculator.notifyCandidatesChanged(group);
+      if (!group) {
+        return;
       }
+      onCleanup(
+        this.#registry.register(this.#elementRef.nativeElement, this.vdndDroppable(), group),
+      );
     });
 
     effect(() => {
@@ -236,9 +245,9 @@ export class DroppableDirective implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // Destroyed before it rendered: its inputs may have no values yet, and it never became a
-    // drop target or a candidate the calculator knows about. (Not an ngOnInit flag: a subclass
-    // with its own ngOnInit would skip it.)
+    // Destroyed before it rendered: its inputs may have no values yet and it never became the
+    // active drop target. (Not an ngOnInit flag: a subclass with its own ngOnInit would skip
+    // it.) A registry registration, if any, is removed by its effect's cleanup.
     if (!this.#rendered) {
       return;
     }
@@ -248,14 +257,7 @@ export class DroppableDirective implements OnDestroy {
       this.#dragState.setActiveDroppable(null);
     }
 
-    // Auto-scroll unregisters itself on destroy (see createAutoScrollRegistration).
-
-    // If this droppable unmounts mid-drag, tell the calculator so it drops it from the
-    // frozen candidate list (deferred re-query runs once the element has left the DOM).
-    const group = untracked(() => this.effectiveGroup());
-    if (group) {
-      this.#positionCalculator.notifyCandidatesChanged(group);
-    }
+    // Auto-scroll and the droppable registry unregister through their effects' cleanup.
   }
 
   /**
@@ -350,7 +352,7 @@ export class DroppableDirective implements OnDestroy {
    */
   #getItemIndex(draggableId: string, droppableId: string): number {
     // Find all draggables in the source droppable
-    const droppable = queryByAttribute<HTMLElement>(document, 'data-droppable-id', droppableId);
+    const droppable = this.#registry.getById(droppableId);
     if (!droppable) {
       return 0;
     }

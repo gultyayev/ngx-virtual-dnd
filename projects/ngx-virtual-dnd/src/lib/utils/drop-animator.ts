@@ -113,16 +113,17 @@ export class DropAnimator {
  * Find the rendered element of a dropped item: first in the droppable it was dropped on, then
  * in the one it came from (a drop the consumer rejected or has not committed yet leaves it
  * there). Returns null when it is not rendered, or rendered but scrolled out of its list's view.
+ *
+ * `getDroppable` resolves a droppable ID to its element (the droppable registry lookup).
  */
 export function findDropTarget(
   draggableId: string,
   droppableIds: readonly (string | null | undefined)[],
+  getDroppable: (droppableId: string) => HTMLElement | null,
 ): DropAnimationTarget | null {
-  if (typeof document === 'undefined') return null;
-
   for (const droppableId of droppableIds) {
     if (!droppableId) continue;
-    const droppable = queryByAttribute<HTMLElement>(document, 'data-droppable-id', droppableId);
+    const droppable = getDroppable(droppableId);
     const element = droppable
       ? queryByAttribute<HTMLElement>(droppable, 'data-draggable-id', draggableId)
       : null;
