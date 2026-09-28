@@ -739,6 +739,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     let viewContainerIndex = 0;
     let placeholderDomPosition = -1;
     const renderedKeys = new Set<unknown>();
+    const changedViews: EmbeddedViewRef<VirtualForContext<T>>[] = [];
 
     for (const entry of itemsToRender) {
       if (entry.type === 'placeholder') {
@@ -752,7 +753,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
       }
       renderedKeys.add(entry.key);
 
-      const view = this.#getOrCreateView(entry.key, entry.context!);
+      const view = this.#getOrCreateView(entry.key, entry.context!, changedViews);
 
       // Ensure view is at correct position in ViewContainerRef
       const currentIndex = this.#viewContainer.indexOf(view);
@@ -780,6 +781,8 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
       viewContainerIndex++;
     }
+
+    this.#renderChangedViews(changedViews);
 
     return placeholderDomPosition;
   }
@@ -814,30 +817,62 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
   /**
    * Get an existing view or create/recycle one from the pool.
+   * Adds the view to `changedViews` when its context changed and it needs rendering.
    */
   #getOrCreateView(
     key: unknown,
     context: VirtualForContext<T>,
+    changedViews: EmbeddedViewRef<VirtualForContext<T>>[],
   ): EmbeddedViewRef<VirtualForContext<T>> {
-    let view = this.#activeViews.get(key);
+    let view = this.#activeViews.get(key) ?? this.#viewPool.pop();
 
     if (view) {
-      // Update existing view context
-      Object.assign(view.context, context);
-      view.markForCheck();
-    } else {
-      // Try pool first, then create new
-      view = this.#viewPool.pop();
-      if (view) {
-        Object.assign(view.context, context);
-        view.markForCheck();
-      } else {
-        view = this.#templateRef.createEmbeddedView(context);
+      if (this.#updateContext(view.context, context)) {
+        changedViews.push(view);
       }
-      this.#activeViews.set(key, view);
+    } else {
+      view = this.#templateRef.createEmbeddedView(context);
+      changedViews.push(view);
     }
+    this.#activeViews.set(key, view);
 
     return view;
+  }
+
+  /** Copy the fields of `next` into `context`. Returns whether any of them changed. */
+  #updateContext(context: VirtualForContext<T>, next: VirtualForContext<T>): boolean {
+    if (
+      Object.is(context.$implicit, next.$implicit) &&
+      context.index === next.index &&
+      context.first === next.first &&
+      context.last === next.last &&
+      context.count === next.count
+    ) {
+      return false;
+    }
+    context.$implicit = next.$implicit;
+    context.index = next.index;
+    context.first = next.first;
+    context.last = next.last;
+    context.count = next.count;
+    return true;
+  }
+
+  /**
+   * Render the views whose context changed, and only those. `markForCheck()` would mark every
+   * ancestor view up to the root as well, re-rendering all of them (and every row of the list)
+   * on each scroll step. Untracked, so the rows' signal reads do not become this effect's
+   * dependencies.
+   */
+  #renderChangedViews(changedViews: EmbeddedViewRef<VirtualForContext<T>>[]): void {
+    if (changedViews.length === 0) return;
+    untracked(() => {
+      for (const view of changedViews) {
+        if (!view.destroyed) {
+          view.detectChanges();
+        }
+      }
+    });
   }
 
   /**

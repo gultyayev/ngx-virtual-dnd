@@ -1,4 +1,10 @@
-import { ApplicationRef, Component, PLATFORM_ID, signal } from '@angular/core';
+import {
+  ApplicationRef,
+  ChangeDetectionStrategy,
+  Component,
+  PLATFORM_ID,
+  signal,
+} from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { VirtualForDirective } from './virtual-for.directive';
@@ -815,5 +821,155 @@ describe('VirtualForDirective (content offset)', () => {
       expect(renderedIds(fixture)).toEqual(itemIds(1, 13));
       fixture.destroy();
     });
+  });
+});
+
+@Component({
+  template: `
+    <div class="host-render" [attr.data-count]="countHostRender()"></div>
+    <div class="scroller">
+      <ng-container
+        *vdndVirtualFor="
+          let item of items;
+          let i = index;
+          itemHeight: 50;
+          trackBy: trackByFn;
+          droppableId: 'list'
+        "
+      >
+        <div class="item" [attr.data-id]="item.key" [attr.data-index]="i">
+          {{ countRowRender(item.key) }}
+        </div>
+      </ng-container>
+    </div>
+  `,
+  imports: [VirtualForDirective],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [{ provide: VDND_SCROLL_CONTAINER, useExisting: RenderCountingHostComponent }],
+})
+class RenderCountingHostComponent implements VdndScrollContainer {
+  readonly items = Array.from({ length: 30 }, (_, i) => ({ key: `k${i}` }));
+  readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+
+  hostRenders = 0;
+  readonly rowRenders: string[] = [];
+
+  // 200px of 50px rows: 4 in view, plus 3 overscan on each side
+  scrollTop = signal(0);
+  containerHeight = signal(200);
+  nativeElement = document.createElement('div');
+  scrollTo = jest.fn();
+
+  countHostRender(): number {
+    return ++this.hostRenders;
+  }
+
+  countRowRender(key: string): string {
+    this.rowRenders.push(key);
+    return key;
+  }
+}
+
+describe('VirtualForDirective (change detection scope)', () => {
+  let fixture: ComponentFixture<RenderCountingHostComponent>;
+  let host: RenderCountingHostComponent;
+  let dragState: DragStateService;
+  let appRef: ApplicationRef;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  const renderedIds = (): string[] =>
+    fixture.debugElement
+      .queryAll(By.css('.item'))
+      .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id') ?? '');
+
+  const resetCounts = (): void => {
+    host.hostRenders = 0;
+    host.rowRenders.length = 0;
+  };
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    TestBed.configureTestingModule({ imports: [RenderCountingHostComponent] });
+    fixture = TestBed.createComponent(RenderCountingHostComponent);
+    host = fixture.componentInstance;
+    dragState = TestBed.inject(DragStateService);
+    appRef = TestBed.inject(ApplicationRef);
+    fixture.detectChanges();
+    appRef.tick();
+    resetCounts();
+  });
+
+  afterEach(() => {
+    dragState.endDrag();
+    fixture.destroy();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  const movePlaceholder = (placeholderIndex: number): void => {
+    dragState.updateDragPosition({
+      cursorPosition: { x: 0, y: 0 },
+      activeDroppableId: 'list',
+      placeholderId: END_OF_LIST,
+      placeholderIndex,
+    });
+    appRef.tick();
+  };
+
+  it('renders the rows in range', () => {
+    expect(renderedIds()).toEqual(Array.from({ length: 8 }, (_, i) => `k${i}`));
+  });
+
+  it('re-renders neither the host nor any row when only the placeholder moves', () => {
+    dragState.startDrag(
+      {
+        draggableId: 'k0',
+        droppableId: 'list',
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      null,
+      'list',
+      END_OF_LIST,
+      1,
+      0,
+    );
+    appRef.tick();
+    resetCounts();
+
+    movePlaceholder(3);
+    movePlaceholder(5);
+
+    expect(fixture.nativeElement.querySelector('.vdnd-drag-placeholder')).not.toBeNull();
+    expect(host.hostRenders).toBe(0);
+    expect(host.rowRenders).toEqual([]);
+  });
+
+  it('re-renders only the rows whose context changed when scrolling', () => {
+    // First row in view goes from 0 to 4: the range goes from 0-7 to 1-11
+    host.scrollTop.set(200);
+    appRef.tick();
+
+    expect(renderedIds()).toEqual(Array.from({ length: 11 }, (_, i) => `k${i + 1}`));
+    expect(host.hostRenders).toBe(0);
+    // k1 becomes the first row and k7 stops being the last; k8-k11 are new or recycled
+    expect([...new Set(host.rowRenders)].sort()).toEqual(
+      ['k1', 'k7', 'k8', 'k9', 'k10', 'k11'].sort(),
+    );
+  });
+
+  it('shows the new item and index in a recycled row', () => {
+    host.scrollTop.set(200);
+    appRef.tick();
+
+    const rows = fixture.debugElement
+      .queryAll(By.css('.item'))
+      .map((el) => el.nativeElement as HTMLElement);
+    expect(rows.map((row) => row.getAttribute('data-index'))).toEqual(
+      Array.from({ length: 11 }, (_, i) => `${i + 1}`),
+    );
+    expect(rows.map((row) => row.textContent?.trim())).toEqual(renderedIds());
   });
 });
