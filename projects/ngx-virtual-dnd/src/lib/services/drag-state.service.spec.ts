@@ -370,7 +370,11 @@ describe('DragStateService', () => {
     };
 
     it('endDrag hands the ended state to the target, after the reset', () => {
-      const onDrop = jest.fn(() => expect(service.isDragging()).toBe(false));
+      let draggingDuringDrop: boolean | null = null;
+      const onDrop = jest.fn(() => {
+        draggingDuringDrop = service.isDragging();
+        return true;
+      });
       TestBed.inject(DroppableRegistryService).register(target, 'list-2', 'g', onDrop);
       const item = dragOnto('list-2');
 
@@ -378,13 +382,14 @@ describe('DragStateService', () => {
 
       expect(onDrop).toHaveBeenCalledTimes(1);
       expect(onDrop).toHaveBeenCalledWith(service.endedDragState());
+      expect(draggingDuringDrop).toBe(false);
       expect(service.endedDragState()).toEqual(
         expect.objectContaining({ draggedItem: item, activeDroppableId: 'list-2' }),
       );
     });
 
     it('cancelDrag delivers nothing', () => {
-      const onDrop = jest.fn();
+      const onDrop = jest.fn(() => true);
       TestBed.inject(DroppableRegistryService).register(target, 'list-2', 'g', onDrop);
       dragOnto('list-2');
 
@@ -393,15 +398,31 @@ describe('DragStateService', () => {
       expect(onDrop).not.toHaveBeenCalled();
     });
 
-    it('endDrag without a drag in progress delivers nothing', () => {
-      const onDrop = jest.fn();
+    it('endDrag without a drag in progress delivers nothing and keeps the ended drag', () => {
+      const onDrop = jest.fn(() => true);
       TestBed.inject(DroppableRegistryService).register(target, 'list-2', 'g', onDrop);
-      dragOnto('list-2');
+      const item = dragOnto('list-2');
       service.endDrag();
 
       service.endDrag();
+      service.cancelDrag();
 
       expect(onDrop).toHaveBeenCalledTimes(1);
+      // The drop animation reads the last real drag from endedDragState
+      expect(service.endedDragState()?.draggedItem).toBe(item);
+      expect(service.wasCancelled()).toBe(false);
+    });
+
+    it('keeps the ended drag when the drop handler ends a drag again', () => {
+      const item = dragOnto('list-2');
+      TestBed.inject(DroppableRegistryService).register(target, 'list-2', 'g', () => {
+        service.endDrag();
+        return true;
+      });
+
+      service.endDrag();
+
+      expect(service.endedDragState()?.draggedItem).toBe(item);
     });
   });
 

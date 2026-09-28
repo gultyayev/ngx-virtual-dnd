@@ -40,10 +40,10 @@ During same-list drag, the strategy's excluded index (`setExcludedIndex`) closes
 
 ## Reading State After the Drag Ends
 
-The live drag state is reset before effects observe the drag end. `DragStateService.endDrag()` / `cancelDrag()` capture `endedDragState()` immediately before the reset, so read that instead of caching snapshots in effects:
+The live drag state is reset the moment the drag ends. `DragStateService.endDrag()` / `cancelDrag()` capture `endedDragState()` immediately before the reset, so code that runs after the end (the drop animation, for example) reads that instead of caching snapshots in effects. The drop itself needs no read: `endDrag()` passes the ended state to the target droppable's registered handler:
 
 ```typescript
-#handleDrop(): void {
-  const state = untracked(() => this.#dragState.endedDragState());
+#handleDrop(state: DragState): boolean {
+  // state is endedDragState(): the final placeholderIndex, activeDroppableId, ...
 }
 ```

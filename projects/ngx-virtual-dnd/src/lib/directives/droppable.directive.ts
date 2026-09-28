@@ -257,12 +257,13 @@ export class DroppableDirective implements OnDestroy {
 
   /**
    * Emit `drop` for a drag that ended on this droppable. Called by the registry from
-   * `DragStateService.endDrag()`, with the state captured just before the reset.
+   * `DragStateService.endDrag()`, with the state captured just before the reset. Returns
+   * whether it emitted.
    */
-  #handleDrop(state: DragState): void {
+  #handleDrop(state: DragState): boolean {
     // A target disabled at release is not a valid drop (dragEnd reports no destination).
     if (this.disabled() || !state.draggedItem || state.activeDroppableId !== this.vdndDroppable()) {
-      return;
+      return false;
     }
 
     const sourceDroppableId = state.sourceDroppableId ?? '';
@@ -307,6 +308,7 @@ export class DroppableDirective implements OnDestroy {
     // inside the zone for the consumer's handler (and async work it starts) to render. A
     // no-op when zoneless.
     this.#ngZone.run(() => this.drop.emit(event));
+    return true;
   }
 
   /**

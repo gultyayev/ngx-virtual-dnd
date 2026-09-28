@@ -184,8 +184,8 @@ describe('DroppableRegistryService', () => {
     });
 
     it('calls the drop handler of the target with the ended state', () => {
-      const onDrop = jest.fn();
-      const other = jest.fn();
+      const onDrop = jest.fn(() => true);
+      const other = jest.fn(() => true);
       registry.register(makeElement(), 'target', 'g', onDrop);
       registry.register(makeElement(), 'other', 'g', other);
       const state = endedOn('target');
@@ -198,8 +198,8 @@ describe('DroppableRegistryService', () => {
     });
 
     it('delivers to one droppable, the first in document order, when an id is duplicated', () => {
-      const first = jest.fn();
-      const second = jest.fn();
+      const first = jest.fn(() => true);
+      const second = jest.fn(() => true);
       const firstEl = makeElement();
       const secondEl = makeElement();
       registry.register(secondEl, 'dup', 'g', second);
@@ -211,9 +211,47 @@ describe('DroppableRegistryService', () => {
       expect(second).not.toHaveBeenCalled();
     });
 
+    it('offers the drop to the next droppable with the id when one declines it', () => {
+      // A disabled droppable declines; pointer hit-testing targeted the enabled one
+      const disabled = jest.fn(() => false);
+      const enabled = jest.fn(() => true);
+      registry.register(makeElement(), 'dup', 'g', disabled);
+      registry.register(makeElement(), 'dup', 'g', enabled);
+
+      registry.deliverDrop(endedOn('dup'));
+
+      expect(disabled).toHaveBeenCalledTimes(1);
+      expect(enabled).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops at the first droppable that takes the drop', () => {
+      const first = jest.fn(() => true);
+      const second = jest.fn(() => true);
+      registry.register(makeElement(), 'dup', 'g', first);
+      registry.register(makeElement(), 'dup', 'g', second);
+
+      registry.deliverDrop(endedOn('dup'));
+
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(second).not.toHaveBeenCalled();
+    });
+
+    it("prefers the droppable with the id in the source list's group", () => {
+      const inOtherGroup = jest.fn(() => true);
+      const inDragGroup = jest.fn(() => true);
+      registry.register(makeElement(), 'todo', 'board-a', inOtherGroup);
+      registry.register(makeElement(), 'todo', 'board-b', inDragGroup);
+      registry.register(makeElement(), 'source', 'board-b');
+
+      registry.deliverDrop({ ...endedOn('todo'), sourceDroppableId: 'source' });
+
+      expect(inDragGroup).toHaveBeenCalledTimes(1);
+      expect(inOtherGroup).not.toHaveBeenCalled();
+    });
+
     it('skips a disconnected droppable with the target id', () => {
-      const detached = jest.fn();
-      const connected = jest.fn();
+      const detached = jest.fn(() => true);
+      const connected = jest.fn(() => true);
       const detachedEl = makeElement();
       registry.register(detachedEl, 'dup', 'g', detached);
       registry.register(makeElement(), 'dup', 'g', connected);
@@ -226,7 +264,7 @@ describe('DroppableRegistryService', () => {
     });
 
     it('does nothing without a target, an item, or a registered target', () => {
-      const onDrop = jest.fn();
+      const onDrop = jest.fn(() => true);
       const unregister = registry.register(makeElement(), 'target', 'g', onDrop);
 
       registry.deliverDrop(endedOn(null));

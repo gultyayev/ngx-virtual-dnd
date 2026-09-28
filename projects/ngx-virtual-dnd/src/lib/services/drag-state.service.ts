@@ -254,6 +254,12 @@ export class DragStateService {
    * droppable (`activeDroppableId`) emits `drop` before this returns.
    */
   endDrag(): void {
+    // Only a drag in progress ends. Again (e.g. from a drop handler) it would overwrite the
+    // ended drag, which the drop animation reads, with an empty one.
+    if (!this.#state().isDragging) {
+      return;
+    }
+
     const endedState = this.getStateSnapshot();
     this.#endedDragState.set(endedState);
     this.#wasCancelled.set(false);
@@ -272,6 +278,10 @@ export class DragStateService {
    * Cancel the drag operation (escape key, disabled, etc.).
    */
   cancelDrag(): void {
+    if (!this.#state().isDragging) {
+      return;
+    }
+
     this.#endedDragState.set(this.getStateSnapshot());
     this.#wasCancelled.set(true);
     this.#resetHighFrequencySignals();

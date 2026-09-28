@@ -1,8 +1,11 @@
 import { Injectable } from '@angular/core';
 import { DragState } from '../models/drag-drop.models';
 
-/** Receives the ended drag state when a drag is dropped on the droppable. */
-export type DropHandler = (endedState: DragState) => void;
+/**
+ * Receives the ended drag state when a drag is dropped on the droppable. Returns whether it
+ * took the drop (false when it declines, e.g. because it is disabled).
+ */
+export type DropHandler = (endedState: DragState) => boolean;
 
 interface DroppableRegistration {
   readonly element: HTMLElement;
@@ -94,16 +97,34 @@ export class DroppableRegistryService {
   }
 
   /**
-   * Hand an ended drag to the drop handler of its target (`activeDroppableId`), resolved like
-   * `getById`, so a drop reaches exactly one droppable. Does nothing when the drag had no
-   * target or item, or the target is no longer registered.
+   * Hand an ended drag to the drop handler of its target (`activeDroppableId`), so a drop
+   * reaches exactly one droppable. IDs should be unique; if several connected droppables share
+   * it (briefly, while re-rendering), those in the source list's group come first, then
+   * document order, and the first that takes the drop gets it. Does nothing when the drag had
+   * no target or item, or the target is no longer registered.
    */
   deliverDrop(endedState: DragState): void {
     const targetId = endedState.activeDroppableId;
-    if (!targetId || !endedState.draggedItem) {
+    const registrations = targetId ? this.#byId.get(targetId) : undefined;
+    if (!registrations || !endedState.draggedItem) {
       return;
     }
-    this.#firstById(targetId)?.onDrop?.(endedState);
+
+    const sourceId = endedState.sourceDroppableId;
+    const dragGroup = sourceId ? this.#firstById(sourceId)?.group : undefined;
+    const candidates = registrations
+      .filter((registration) => registration.onDrop && registration.element.isConnected)
+      .sort(
+        (a, b) =>
+          Number(b.group === dragGroup) - Number(a.group === dragGroup) ||
+          compareElements(a.element, b.element),
+      );
+
+    for (const { onDrop } of candidates) {
+      if (onDrop?.(endedState)) {
+        return;
+      }
+    }
   }
 
   /**

@@ -177,6 +177,7 @@ class DragOnlyDropZoneHostComponent {
       vdndDroppable="dup-list"
       vdndDroppableGroup="test-group"
       [vdndDroppableData]="'first'"
+      [disabled]="firstDisabled()"
       (drop)="onDrop($event)"
     ></div>
     <div
@@ -189,6 +190,7 @@ class DragOnlyDropZoneHostComponent {
   imports: [DroppableDirective],
 })
 class DuplicateIdDroppablesHostComponent {
+  firstDisabled = signal(false);
   dropEvents: DropEvent[] = [];
 
   onDrop(event: DropEvent): void {
@@ -694,6 +696,31 @@ describe('DroppableDirective', () => {
       // The first in document order, as the drop animation and focus restore resolve the ID
       expect(host.componentInstance.dropEvents[0].destination.data).toBe('first');
       host.destroy();
+    });
+
+    it('delivers to the enabled one when the first droppable sharing the ID is disabled', () => {
+      // Pointer hit-testing skips the disabled one and targets the enabled one
+      const host = TestBed.createComponent(DuplicateIdDroppablesHostComponent);
+      host.componentInstance.firstDisabled.set(true);
+      host.detectChanges();
+
+      dragOntoFrom('dup-list', () => host.detectChanges());
+      dragStateService.endDrag();
+
+      expect(host.componentInstance.dropEvents.map((e) => e.destination.data)).toEqual(['second']);
+      host.destroy();
+    });
+
+    it('follows the rendered disabled state when disabled changes without a render', () => {
+      // Hit-testing and dragEnd read the rendered data-droppable-disabled attribute, so the
+      // drop follows it too: a pending disable does not suppress the drop dragEnd reported.
+      dragOntoFrom('test-list', () => fixture.detectChanges());
+      component.disabled.set(true);
+
+      dragStateService.endDrag();
+
+      expect(droppableNative.hasAttribute('data-droppable-disabled')).toBe(false);
+      expect(component.dropEvents.length).toBe(1);
     });
 
     it('does not deliver a cancelled drag', () => {
