@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, input, output, TemplateRef } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  Directive,
+  inject,
+  input,
+  output,
+  TemplateRef,
+} from '@angular/core';
 import {
   VirtualScrollContainerComponent,
   VirtualScrollItemContext,
@@ -6,6 +14,26 @@ import {
 import { DroppableDirective } from '../directives/droppable.directive';
 import { AutoScrollConfig } from '../services/auto-scroll.service';
 import { DropEvent, PlaceholderMoveEvent } from '../models/drag-drop.models';
+
+/**
+ * Forwards the inner droppable's `drop` and `placeholderMove` to the sortable list's outputs.
+ *
+ * Not template listeners: Angular marks the listening view and every ancestor up to the root
+ * dirty before running one, so each placeholder move would re-render the consumer's whole
+ * component chain even when nothing listens to `placeholderMove`. A subscription marks nothing;
+ * a consumer's own listener on the sortable list marks only its own view. Subscribed in the
+ * constructor, before the droppable's first change detection can emit; both outputs drop their
+ * listeners when the element is destroyed.
+ */
+@Directive({ selector: '[vdndSortableListOutputs]' })
+class SortableListOutputsDirective {
+  constructor() {
+    const droppable = inject(DroppableDirective);
+    const list = inject(VirtualSortableListComponent);
+    droppable.drop.subscribe((event) => list.drop.emit(event));
+    droppable.placeholderMove.subscribe((event) => list.placeholderMove.emit(event));
+  }
+}
 
 /**
  * A high-level component that combines droppable, virtual scroll, and placeholder
@@ -47,7 +75,7 @@ import { DropEvent, PlaceholderMoveEvent } from '../models/drag-drop.models';
 @Component({
   selector: 'vdnd-sortable-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [VirtualScrollContainerComponent, DroppableDirective],
+  imports: [VirtualScrollContainerComponent, DroppableDirective, SortableListOutputsDirective],
   host: {
     class: 'vdnd-sortable-list',
   },
@@ -59,8 +87,7 @@ import { DropEvent, PlaceholderMoveEvent } from '../models/drag-drop.models';
       [vdndDroppableData]="droppableData()"
       [disabled]="disabled()"
       [constrainToContainer]="constrainToContainer()"
-      (drop)="drop.emit($event)"
-      (placeholderMove)="placeholderMove.emit($event)"
+      vdndSortableListOutputs
     >
       <vdnd-virtual-scroll
         [items]="items()"

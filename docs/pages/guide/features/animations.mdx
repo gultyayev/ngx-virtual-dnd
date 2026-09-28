@@ -112,3 +112,5 @@ The event fires when the placeholder enters the list and on every move inside it
 Both indexes follow the same convention as [`DropEvent.destination.index`](/api/events#dropevent): the index the item would get if it were dropped now. For the first move in the source list, `previousIndex` is the item's original index.
 
 Each event reports one placeholder update. During a fast pointer drag the placeholder can skip rows between updates, so `currentIndex` may differ from `previousIndex` by more than one. Keep the handler cheap: it runs during the drag.
+
+Listening costs a change detection pass: like any Angular template listener, `(placeholderMove)` marks your component and its ancestors for check each time it fires. Bind it only where you use it; a list without the listener does not re-render your component on placeholder moves.

@@ -153,6 +153,8 @@ Keep a bound handler in a field so the same reference can be removed, attach pro
 
 10. **`*vdndVirtualFor` renders only rows whose context changed**: `#updateViews` compares each row's context (`$implicit`, `index`, `first`, `last`, `count`) and calls `detectChanges()` (untracked) on the new, pooled (recycled) or changed rows only. Never `markForCheck()` a row: it marks every ancestor up to the root, so each scroll step and placeholder move would re-render the consumer component, its ancestors and every row. A placeholder move touches no row.
 
+11. **Library templates never forward high-frequency outputs with template listeners**: Angular marks the listening view and every ancestor dirty before running a template listener, so `(placeholderMove)="placeholderMove.emit($event)"` would re-render the consumer's whole component chain on every placeholder move. `VirtualSortableListComponent` forwards its inner droppable's `drop` and `placeholderMove` by subscribing (`SortableListOutputsDirective`, in its constructor).
+
 ### Safari Autoscroll
 
 Use direct `element.scrollTop += delta` (not `scrollBy()`) with synchronous callback — no RAF delay. See `.claude/history/safari-autoscroll.md` for details.
