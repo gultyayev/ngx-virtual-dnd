@@ -1,11 +1,11 @@
 import { test } from '@playwright/test';
 import {
+  aggregateScenarioMetrics,
   MetricsCollector,
   ScenarioMetrics,
   METRICS_SCHEMA_VERSION,
 } from '../fixtures/metrics-collector';
 import { PerfPage } from '../fixtures/perf.page';
-import { aggregate } from '../fixtures/statistics';
 
 const ITERATIONS = 5;
 const WARMUP_ITERATIONS = 1;
@@ -81,14 +81,7 @@ test.describe('Drag Between Lists Performance', () => {
       cpuThrottle: CPU_THROTTLE,
       iterations: ITERATIONS,
       autoscrollHoldMs: AUTOSCROLL_HOLD_MS,
-      totalBlockingTime: aggregate(results.map((r) => r.totalBlockingTime)),
-      longTaskCount: aggregate(results.map((r) => r.longTaskCount)),
-      layoutCount: aggregate(results.map((r) => r.layoutCount)),
-      recalcStyleCount: aggregate(results.map((r) => r.recalcStyleCount)),
-      avgFrameTime: aggregate(results.map((r) => r.avgFrameTime)),
-      maxFrameGap: aggregate(results.map((r) => r.maxFrameGap)),
-      droppedFrames: aggregate(results.map((r) => r.droppedFrames)),
-      p99FrameTime: aggregate(results.map((r) => r.p99FrameTime)),
+      ...aggregateScenarioMetrics(results),
     };
 
     testInfo.attach('drag-between-lists-autoscroll-1000', {

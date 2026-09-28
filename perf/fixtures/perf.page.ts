@@ -1,5 +1,14 @@
 import { expect, Page } from '@playwright/test';
 
+/**
+ * Query flag that removes the demo pages' drag-state debug output (`data-testid="drag-state-debug"`):
+ * the main demo's debug panel and the hidden `app-drag-state-debug` mirror. Both re-render on
+ * every drag frame, and the panel re-renders the whole main demo and every row with it (#97), so
+ * the drag numbers measured the demo instead of the library. E2E needs that output; the
+ * benchmarks never read it.
+ */
+const NO_DRAG_STATE_DEBUG = 'dragStateDebug=false';
+
 export class PerfPage {
   readonly page: Page;
 
@@ -7,10 +16,14 @@ export class PerfPage {
     this.page = page;
   }
 
+  /** Open a demo page without its drag-state debug output. */
   async goto(route = '/'): Promise<void> {
-    await this.page.goto(route);
+    const separator = route.includes('?') ? '&' : '?';
+    await this.page.goto(`${route}${separator}${NO_DRAG_STATE_DEBUG}`);
     await this.page.waitForLoadState('networkidle');
     await this.page.locator('[data-draggable-id]').first().waitFor({ state: 'visible' });
+    // Fail instead of silently measuring the debug output again if a page stops honoring the flag
+    await expect(this.page.getByTestId('drag-state-debug')).toHaveCount(0);
   }
 
   /**
@@ -122,7 +135,11 @@ export class PerfPage {
    * Get bounding box of a specific draggable item.
    */
   async getItemBox(list: 'list1' | 'list2', index: number) {
-    const droppableId = list === 'list1' ? 'list-1' : 'list-2';
+    return this.getDraggableBox(list === 'list1' ? 'list-1' : 'list-2', index);
+  }
+
+  /** Get bounding box of the `index`-th rendered draggable in a droppable. */
+  async getDraggableBox(droppableId: string, index: number) {
     const items = this.page.locator(`[data-droppable-id="${droppableId}"] [data-draggable-id]`);
     return items.nth(index).boundingBox();
   }

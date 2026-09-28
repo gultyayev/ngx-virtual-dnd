@@ -8,6 +8,8 @@ const METRIC_LABELS: Record<string, { label: string; unit: string }> = {
   longTaskCount: { label: 'Long Tasks (>50ms)', unit: '' },
   layoutCount: { label: 'Layouts', unit: '' },
   recalcStyleCount: { label: 'Style Recalcs', unit: '' },
+  scriptDuration: { label: 'Script Time', unit: 'ms' },
+  taskDuration: { label: 'Main-Thread Task Time', unit: 'ms' },
   avgFrameTime: { label: 'Avg Frame Time', unit: 'ms' },
   maxFrameGap: { label: 'Max Frame Gap', unit: 'ms' },
   droppedFrames: { label: 'Dropped Frames (>25ms)', unit: '' },

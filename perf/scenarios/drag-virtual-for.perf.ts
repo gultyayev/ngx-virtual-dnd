@@ -9,30 +9,32 @@ import { PerfPage } from '../fixtures/perf.page';
 
 const ITERATIONS = 5;
 const WARMUP_ITERATIONS = 1;
-const ITEM_COUNT = 1000;
 const CPU_THROTTLE = 4;
+/** The 300px viewport shows rows 0-5 (50px rows), so row 4 is on screen without scrolling. */
+const TARGET_INDEX = 4;
 
-test.describe('Drag Within List Performance', () => {
-  test('drag item 0 to item 7 - 1000 items', async ({ page }, testInfo) => {
+/**
+ * The other drag scenarios drag in `vdnd-virtual-scroll` lists. This one drags in a
+ * `vdnd-virtual-viewport` that renders its rows with `*vdndVirtualFor` (#93), crossing a few
+ * rows so placeholder moves and cursor-only frames are both measured.
+ */
+test.describe('Drag Within *vdndVirtualFor List Performance', () => {
+  test('drag row 0 to row 4 in a vdnd-virtual-viewport list', async ({ page }, testInfo) => {
     const perfPage = new PerfPage(page);
     const collector = new MetricsCollector(page);
     await collector.init();
     await collector.setCpuThrottling(CPU_THROTTLE);
 
-    await perfPage.goto();
-    await perfPage.setItemCount(ITEM_COUNT);
-
     const results: ScenarioMetrics[] = [];
     const totalRuns = WARMUP_ITERATIONS + ITERATIONS;
 
     for (let i = 0; i < totalRuns; i++) {
-      // Reload page to get a clean state for each drag iteration
-      await perfPage.goto();
-      await perfPage.setItemCount(ITEM_COUNT);
+      // Reload for the original row order (each drop reorders the list)
+      await perfPage.goto('/virtual-viewport');
       await page.waitForTimeout(300);
 
-      const sourceBox = await perfPage.getItemBox('list1', 0);
-      const targetBox = await perfPage.getItemBox('list1', 7);
+      const sourceBox = await perfPage.getDraggableBox('viewport-a', 0);
+      const targetBox = await perfPage.getDraggableBox('viewport-a', TARGET_INDEX);
 
       if (!sourceBox || !targetBox) {
         throw new Error('Could not get bounding boxes');
@@ -42,7 +44,6 @@ test.describe('Drag Within List Performance', () => {
         await perfPage.simulateDrag({
           startX: sourceBox.x + sourceBox.width / 2,
           startY: sourceBox.y + sourceBox.height / 2,
-          // Target item ~7 visible positions down (items 0-7 in viewport)
           endX: targetBox.x + targetBox.width / 2,
           endY: targetBox.y + targetBox.height / 2,
           steps: 20,
@@ -55,14 +56,14 @@ test.describe('Drag Within List Performance', () => {
     }
 
     const report = {
-      scenario: 'drag-within-list-1000',
+      scenario: 'drag-within-virtual-for-list',
       metricsSchemaVersion: METRICS_SCHEMA_VERSION,
       cpuThrottle: CPU_THROTTLE,
       iterations: ITERATIONS,
       ...aggregateScenarioMetrics(results),
     };
 
-    testInfo.attach('drag-within-list-1000', {
+    testInfo.attach('drag-within-virtual-for-list', {
       body: JSON.stringify(report, null, 2),
       contentType: 'application/json',
     });

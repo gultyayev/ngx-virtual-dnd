@@ -15,7 +15,8 @@ import { expect, Page } from '@playwright/test';
  * move" failure mode (E2E.md rule #6).
  *
  * Reads the `drag-state-debug` element, present on every demo page (visible debug panel on the
- * main demo, hidden DragStateDebugComponent on the task demos).
+ * main demo, hidden DragStateDebugComponent on the task demos) unless it is opened with
+ * `?dragStateDebug=false`, which only the perf benchmarks do.
  *
  * The processed cursor is the EFFECTIVE position: do not use with axis locking, and with
  * constrain-to-container it only matches when (x, y) lies inside the constraint bounds.

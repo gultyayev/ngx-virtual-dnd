@@ -32,6 +32,8 @@ export const GATED_METRICS = [
   'longTaskCount',
   'layoutCount',
   'recalcStyleCount',
+  'scriptDuration',
+  'taskDuration',
   'avgFrameTime',
   'maxFrameGap',
   'droppedFrames',
@@ -57,9 +59,15 @@ export const MIN_ABS_DELTA: Record<string, number> = {
   // Layout/style-recalc counts are near-deterministic (baseline MAD ≈ 0), so the
   // floor only needs to guard genuinely small baselines. 25 was larger than the
   // drag-within-list baseline median (24) — a full doubling of layout work slipped
-  // under it as "noise".
-  layoutCount: 10, // count
+  // under it as "noise". Without the demo's debug panel (#97) the drag layout
+  // baselines are 10 (drag-within-list) and 6 (drag-within-virtual-for-list).
+  layoutCount: 5, // count
   recalcStyleCount: 10, // count
+  // Main-thread time over the whole scenario, under 4x CPU throttling. Two runs of
+  // the same code on one machine differed by up to 18 ms of script time on the
+  // ~80 ms drag-within-list baseline; the percent threshold covers larger baselines.
+  scriptDuration: 25, // ms
+  taskDuration: 50, // ms
   avgFrameTime: 1.5, // ms
   maxFrameGap: 15, // ms
   droppedFrames: 3, // frames

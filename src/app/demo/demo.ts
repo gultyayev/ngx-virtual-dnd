@@ -38,6 +38,7 @@ interface DemoSettings {
   useSimplifiedApi: boolean;
   constrainToContainer: boolean;
   list2DroppableDisabled: boolean;
+  dragStateDebug: boolean;
 }
 
 /**
@@ -112,6 +113,13 @@ export class DemoComponent {
 
   /** Whether settings panel is expanded */
   readonly settingsExpanded = signal(true);
+
+  /**
+   * Whether the debug panel is rendered. It re-renders the whole demo (every row included) on
+   * each drag frame, so the perf benchmarks open the page with `?dragStateDebug=false`.
+   * E2E tests read its `drag-state-debug` element.
+   */
+  readonly dragStateDebug = this.#initial.dragStateDebug;
 
   /** Whether debug panel is expanded */
   readonly debugExpanded = signal(false);
@@ -335,5 +343,6 @@ function readDemoSettings(params: ParamMap): DemoSettings {
     useSimplifiedApi: params.get('api') === 'simplified',
     constrainToContainer: flag('constrainToContainer', false),
     list2DroppableDisabled: flag('list2Disabled', false),
+    dragStateDebug: flag('dragStateDebug', true),
   };
 }
