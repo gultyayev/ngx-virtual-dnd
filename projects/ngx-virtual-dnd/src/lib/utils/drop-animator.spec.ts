@@ -175,7 +175,7 @@ describe('findDropTarget', () => {
     expect(findDropTarget('item-1', ['target', 'source'], getDroppable)?.element).toBe(original);
   });
 
-  it('finds the item in a list inside a shadow root', () => {
+  it('finds the item in a list the lookup returns from inside a shadow root', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });

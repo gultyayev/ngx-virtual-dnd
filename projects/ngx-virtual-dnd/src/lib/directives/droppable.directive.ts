@@ -8,7 +8,6 @@ import {
   input,
   OnDestroy,
   output,
-  signal,
   untracked,
 } from '@angular/core';
 import { DragStateService } from '../services/drag-state.service';
@@ -165,7 +164,7 @@ export class DroppableDirective implements OnDestroy {
   #handledEndedState: DragState | null = null;
 
   /** Whether this droppable has rendered, so its inputs have values */
-  readonly #rendered = signal(false);
+  #rendered = false;
 
   constructor() {
     createAutoScrollRegistration({
@@ -180,17 +179,18 @@ export class DroppableDirective implements OnDestroy {
       canRegister: () => Boolean(this.effectiveGroup()),
     });
 
-    afterNextRender(() => this.#rendered.set(true));
+    afterNextRender(() => (this.#rendered = true));
 
-    // Register with the droppable registry once rendered (host data attributes applied), and
-    // again under the new key when the ID or group changes. Drag code finds drop targets
-    // through the registry instead of querying the document; a registration during an active
-    // drag makes this droppable a target from the next hit-test. The cleanup unregisters it,
-    // including on destroy.
+    // Register with the droppable registry, and again under the new key when the ID or group
+    // changes. Drag code finds drop targets through the registry instead of querying the
+    // document; a registration during an active drag makes this droppable a target from the
+    // next hit-test. The cleanup unregisters it, including on destroy.
+    //
+    // Not deferred to afterNextRender: this runs in the change detection that creates the
+    // droppable (inputs are set by then), so afterNextRender hooks of that same render (drop
+    // animation, keyboard focus restore) already find it, and so does a view refreshed only
+    // by its own detectChanges(). Nothing reads the registry before change detection ends.
     effect((onCleanup) => {
-      if (!this.#rendered()) {
-        return;
-      }
       const group = this.effectiveGroup();
       if (!group) {
         return;
@@ -245,10 +245,10 @@ export class DroppableDirective implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // Destroyed before it rendered: its inputs may have no values yet, and it never became a
-    // drop target or a candidate the calculator knows about. (Not an ngOnInit flag: a subclass
-    // with its own ngOnInit would skip it.)
-    if (!untracked(this.#rendered)) {
+    // Destroyed before it rendered: its inputs may have no values yet and it never became the
+    // active drop target. (Not an ngOnInit flag: a subclass with its own ngOnInit would skip
+    // it.) A registry registration, if any, is removed by its effect's cleanup.
+    if (!this.#rendered) {
       return;
     }
 

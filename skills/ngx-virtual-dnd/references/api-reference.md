@@ -475,7 +475,7 @@ Controls edge auto-scrolling during drag operations. Usually configured via comp
 
 **Injectable:** `providedIn: 'root'` (singleton)
 
-Internal service for DOM hit-testing and drop position calculation. Exported for advanced customization.
+Internal service for DOM hit-testing and drop position calculation. Exported for advanced customization. Its droppable lookups (`findDroppableAtPoint`, `getDroppableById`, `findAdjacentDroppable`) only see droppables rendered with `vdndDroppable`, which register themselves; an element that merely carries `data-droppable-*` attributes is ignored.
 
 **Key Methods:**
 
