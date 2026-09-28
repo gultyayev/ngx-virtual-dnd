@@ -302,9 +302,10 @@ export class DroppableDirective implements OnDestroy {
         data: this.vdndDroppableData(),
       },
     };
-    // Delivered from the pointer/keyboard listener, which runs outside Angular's zone. Emit
-    // inside it so async work the consumer's handler starts is tracked in zone.js apps (a
-    // no-op when zoneless).
+    // Delivered from the pointer/keyboard listener, which runs outside Angular's zone. With
+    // zone.js a template listener marks its view dirty without scheduling a render, so emit
+    // inside the zone for the consumer's handler (and async work it starts) to render. A
+    // no-op when zoneless.
     this.#ngZone.run(() => this.drop.emit(event));
   }
 

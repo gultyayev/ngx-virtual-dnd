@@ -243,25 +243,27 @@ export class KeyboardDragHandler {
     // Clear droppable metadata cache from this drag session
     this.#deps.dragIndexCalculator.clearCache();
 
-    // Emit drag end event
-    this.#deps.callbacks.onDragEnd({
+    const event: DragEndEvent = {
       draggableId: ctx.draggableId,
       droppableId: this.#deps.callbacks.getParentDroppableId() ?? '',
       cancelled: false,
       data: ctx.data,
       sourceIndex,
       destinationIndex,
-    });
+    };
 
     // The item stays in its source list when there is no valid target
     const fallbackDroppableId = hasValidTarget
       ? activeDroppableId
       : this.#deps.dragState.sourceDroppableId();
 
-    this.#deps.keyboardDrag.completeKeyboardDrag();
-
-    // Restore focus to the moved element after state updates
-    this.#restoreFocus(ctx.draggableId, fallbackDroppableId);
+    this.#endInZone(() => {
+      this.#deps.callbacks.onDragEnd(event);
+      // Ends the drag state, which delivers the drop
+      this.#deps.keyboardDrag.completeKeyboardDrag();
+      // Restore focus to the moved element after state updates
+      this.#restoreFocus(ctx.draggableId, fallbackDroppableId);
+    });
   }
 
   /**
@@ -279,20 +281,32 @@ export class KeyboardDragHandler {
     // Clear droppable metadata cache from this drag session
     this.#deps.dragIndexCalculator.clearCache();
 
-    // Emit drag end event
-    this.#deps.callbacks.onDragEnd({
+    const event: DragEndEvent = {
       draggableId: ctx.draggableId,
       droppableId: this.#deps.callbacks.getParentDroppableId() ?? '',
       cancelled: true,
       data: ctx.data,
       sourceIndex,
       destinationIndex: null,
+    };
+
+    this.#endInZone(() => {
+      this.#deps.callbacks.onDragEnd(event);
+      this.#deps.keyboardDrag.cancelKeyboardDrag();
+      // Restore focus to the original element after state updates
+      this.#restoreFocus(ctx.draggableId, sourceDroppableId);
     });
+  }
 
-    this.#deps.keyboardDrag.cancelKeyboardDrag();
-
-    // Restore focus to the original element after state updates
-    this.#restoreFocus(ctx.draggableId, sourceDroppableId);
+  /**
+   * Run a drag end (dragEnd, the state reset that delivers drop, the focus restore) in one
+   * entry into Angular's zone. The document listener runs outside it; with zone.js a
+   * template listener marks its view dirty but schedules no render, and each entry renders
+   * when it is left, so this renders the end once, with focus restored in that render. A
+   * no-op when zoneless.
+   */
+  #endInZone(end: () => void): void {
+    this.#deps.ngZone.run(end);
   }
 
   /**

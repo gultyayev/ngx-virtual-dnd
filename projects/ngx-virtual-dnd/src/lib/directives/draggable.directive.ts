@@ -199,7 +199,8 @@ export class DraggableDirective implements OnInit, OnDestroy {
       ngZone: this.#ngZone,
       envInjector: this.#envInjector,
       callbacks: {
-        onDragStart: (event) => this.dragStart.emit(event),
+        onDragStart: (event) => this.#ngZone.run(() => this.dragStart.emit(event)),
+        // The keyboard handler ends the drag inside the zone (dragEnd, drop, focus restore)
         onDragEnd: (event) => this.dragEnd.emit(event),
         getParentDroppableId: () => this.#getParentDroppableId(),
         calculateSourceIndex: (el, droppable) => this.#calculateSourceIndex(el, droppable),
@@ -479,13 +480,16 @@ export class DraggableDirective implements OnInit, OnDestroy {
     this.#autoScroll.startMonitoring(() => this.#recalculatePlaceholder());
 
     // Emit drag start event
-    this.dragStart.emit({
+    // Pointer listeners run outside Angular's zone. With zone.js a template listener marks
+    // its view dirty but schedules no render, so emit inside the zone (a no-op when zoneless).
+    const event: DragStartEvent = {
       draggableId: this.vdndDraggable(),
       droppableId: parentDroppableId ?? '',
       data: this.vdndDraggableData(),
       position,
       sourceIndex,
-    });
+    };
+    this.#ngZone.run(() => this.dragStart.emit(event));
   }
 
   /**
@@ -736,22 +740,28 @@ export class DraggableDirective implements OnInit, OnDestroy {
           activeDroppableId: this.#dragState.activeDroppableId(),
         });
 
-    // Emit drag end event
-    this.dragEnd.emit({
+    const event: DragEndEvent = {
       draggableId: this.vdndDraggable(),
       droppableId: this.#getParentDroppableId() ?? '',
       cancelled,
       data: this.vdndDraggableData(),
       sourceIndex,
       destinationIndex,
-    });
+    };
 
-    // Clear drag state - this triggers isDragging computed to become false
-    if (cancelled) {
-      this.#dragState.cancelDrag();
-    } else {
-      this.#dragState.endDrag();
-    }
+    // dragEnd, then the state reset that delivers drop, in ONE zone entry: listeners run
+    // outside Angular's zone, and with zone.js each entry renders when it is left, so
+    // separate entries would render the drag end twice. A no-op when zoneless.
+    this.#ngZone.run(() => {
+      this.dragEnd.emit(event);
+
+      // Clear drag state - this triggers isDragging computed to become false
+      if (cancelled) {
+        this.#dragState.cancelDrag();
+      } else {
+        this.#dragState.endDrag();
+      }
+    });
   }
 
   /**

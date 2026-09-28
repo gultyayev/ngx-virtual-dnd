@@ -1,4 +1,4 @@
-import { Component, DebugElement, Directive, OnInit, signal } from '@angular/core';
+import { Component, DebugElement, Directive, NgZone, OnInit, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DraggableDirective } from './draggable.directive';
@@ -1096,6 +1096,65 @@ describe('DraggableDirective', () => {
           destinationIndex: null,
         }),
       ]);
+    });
+  });
+
+  describe('outputs inside the Angular zone', () => {
+    // The pointer and keyboard listeners run outside Angular's zone. With zone.js, a template
+    // listener marks its view dirty but schedules no render, so the outputs must be emitted
+    // inside the zone for the consumer's handler to render.
+    let emittedInZone: string[];
+
+    beforeEach(() => {
+      const zone = TestBed.inject(NgZone);
+      const run = zone.run.bind(zone);
+      let insideRun = false;
+      jest.spyOn(zone, 'run').mockImplementation(<T>(fn: () => T): T => {
+        const wasInside = insideRun;
+        insideRun = true;
+        try {
+          return run(fn);
+        } finally {
+          insideRun = wasInside;
+        }
+      });
+      emittedInZone = [];
+      const draggable = fixture.debugElement
+        .query(By.directive(DraggableDirective))
+        .injector.get(DraggableDirective);
+      draggable.dragStart.subscribe(() => emittedInZone.push(`dragStart:${insideRun}`));
+      draggable.dragEnd.subscribe(() => emittedInZone.push(`dragEnd:${insideRun}`));
+    });
+
+    it('emits dragStart and dragEnd of a pointer drag inside the zone', () => {
+      attemptPointerDrag(draggableNative);
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 100, clientY: 120 }));
+
+      expect(emittedInZone).toEqual(['dragStart:true', 'dragEnd:true']);
+    });
+
+    it('emits dragStart and dragEnd of a keyboard drop inside the zone', () => {
+      draggableNative.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      fixture.detectChanges();
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+
+      expect(emittedInZone).toEqual(['dragStart:true', 'dragEnd:true']);
+    });
+
+    it('emits dragEnd of a cancelled keyboard drag inside the zone', () => {
+      draggableNative.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      fixture.detectChanges();
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+
+      expect(emittedInZone.at(-1)).toBe('dragEnd:true');
     });
   });
 

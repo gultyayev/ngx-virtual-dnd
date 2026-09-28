@@ -54,6 +54,7 @@ Design tokens for the demo and docs live in `src/styles/tokens.css`.
 - Use `runOutsideAngular` for RAF loops, programmatic event listeners, and `ResizeObserver`
 - Avoid template/host event bindings (`(event)`, `host: { '(event)' }`) for high-frequency DOM events (`mousemove`, `pointermove`, `touchmove`, `scroll`, `resize`, `dragover`) — Angular marks the view dirty on every emission, even with OnPush. Use programmatic `addEventListener` inside `runOutsideAngular` instead. Low-frequency initiation events (`mousedown`, `touchstart`, `keydown`, `click`) are fine as template/host bindings.
 - Signal updates do NOT need `ngZone.run()` - signals work across zone boundaries
+- Outputs emitted from listeners outside the zone (drag start/end, drop) DO need `ngZone.run()`: with zone.js, a template listener marks its view dirty but schedules no render
 - Never use hand made `ngDevMode`. Use `isDevMode()` instead
 
 ### Components

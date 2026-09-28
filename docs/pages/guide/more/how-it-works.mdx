@@ -33,7 +33,7 @@ While an item is dragged within its own list it is hidden with `display: none`, 
 
 ## Rendering
 
-Pointer moves are coalesced into a single `requestAnimationFrame` loop that reads layout, computes the new state and then writes styles, in that order. Drag state lives in signals, so only the parts of the page that depend on it update. The loop and all high-frequency listeners run outside Angular's zone.
+Pointer moves are coalesced into a single `requestAnimationFrame` loop that reads layout, computes the new state and then writes styles, in that order. Drag state lives in signals, so only the parts of the page that depend on it update. The loop and all high-frequency listeners run outside Angular's zone. The `dragStart`, `dragEnd` and `drop` outputs are emitted inside it, so handlers that change plain fields still render in zone.js apps.
 
 ## Known limitations
 
