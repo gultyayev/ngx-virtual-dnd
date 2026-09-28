@@ -91,6 +91,7 @@ describe('KeyboardDragHandler', () => {
 
     mockNgZone = {
       runOutsideAngular: jest.fn((fn: () => void) => fn()),
+      run: jest.fn((fn: () => void) => fn()),
     };
 
     mockEnvInjector = {};

@@ -241,7 +241,7 @@ Marks an element as a drop target.
 
 | Output | Type | Description |
 |--------|------|-------------|
-| `drop` | `DropEvent` | Item dropped into this droppable (destination only) |
+| `drop` | `DropEvent` | Item dropped into this droppable (destination only; at release, right after the item's `dragEnd`) |
 | `placeholderMove` | `PlaceholderMoveEvent` | Placeholder moved within this droppable during a drag (every item displacement) |
 
 ---

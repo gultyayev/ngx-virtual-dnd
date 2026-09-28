@@ -158,8 +158,8 @@ export class MidDragMountDemoComponent {
 
   /**
    * Whether the target list is rendered. It starts hidden (proving the droppable is absent
-   * before any drag) and mounts the moment a drag begins. It stays mounted afterwards so the
-   * drop effect isn't torn down mid-release and a completed drop remains visible.
+   * before any drag) and mounts the moment a drag begins. It stays mounted afterwards so a
+   * completed drop remains visible.
    */
   readonly showTarget = signal(false);
 

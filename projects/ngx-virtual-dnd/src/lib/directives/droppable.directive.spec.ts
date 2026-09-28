@@ -6,6 +6,8 @@ import {
   DebugElement,
   Directive,
   EnvironmentInjector,
+  inject,
+  NgZone,
   OnInit,
   signal,
 } from '@angular/core';
@@ -120,6 +122,81 @@ class ExtendedDroppableDirective extends DroppableDirective implements OnInit {
   imports: [ExtendedDroppableDirective],
 })
 class ExtendedDroppableHostComponent {}
+
+// Immutable-state consumer: every drop replaces the list objects with a new revision, so the
+// `@for` destroys the target droppable and creates a new instance with the same ID.
+// (Tracked by `rev` rather than identity only to avoid Angular's NG0956 dev warning.)
+@Component({
+  template: `
+    @for (list of lists(); track list.rev) {
+      <div [vdndDroppable]="list.id" vdndDroppableGroup="test-group" (drop)="onDrop($event)"></div>
+    }
+    @if (showLate()) {
+      <div vdndDroppable="late-list" vdndDroppableGroup="test-group" (drop)="onDrop($event)"></div>
+    }
+  `,
+  imports: [DroppableDirective],
+})
+class RecreatingDroppableHostComponent {
+  lists = signal([{ id: 'recreated-list', rev: 0 }]);
+  showLate = signal(false);
+  dropEvents: DropEvent[] = [];
+
+  onDrop(event: DropEvent): void {
+    this.dropEvents.push(event);
+    this.recreate();
+  }
+
+  recreate(): void {
+    this.lists.update((lists) => lists.map((list) => ({ ...list, rev: list.rev + 1 })));
+  }
+}
+
+// A drop zone rendered only while an item is dragged (e.g. a trash can)
+@Component({
+  template: `
+    @if (dragState.isDragging()) {
+      <div vdndDroppable="trash" vdndDroppableGroup="test-group" (drop)="onDrop($event)"></div>
+    }
+  `,
+  imports: [DroppableDirective],
+})
+class DragOnlyDropZoneHostComponent {
+  readonly dragState = inject(DragStateService);
+  dropEvents: DropEvent[] = [];
+
+  onDrop(event: DropEvent): void {
+    this.dropEvents.push(event);
+  }
+}
+
+// Two droppables that briefly share an ID (e.g. mid re-render)
+@Component({
+  template: `
+    <div
+      vdndDroppable="dup-list"
+      vdndDroppableGroup="test-group"
+      [vdndDroppableData]="'first'"
+      [disabled]="firstDisabled()"
+      (drop)="onDrop($event)"
+    ></div>
+    <div
+      vdndDroppable="dup-list"
+      vdndDroppableGroup="test-group"
+      [vdndDroppableData]="'second'"
+      (drop)="onDrop($event)"
+    ></div>
+  `,
+  imports: [DroppableDirective],
+})
+class DuplicateIdDroppablesHostComponent {
+  firstDisabled = signal(false);
+  dropEvents: DropEvent[] = [];
+
+  onDrop(event: DropEvent): void {
+    this.dropEvents.push(event);
+  }
+}
 
 describe('DroppableDirective', () => {
   let fixture: ComponentFixture<TestHostComponent>;
@@ -362,7 +439,7 @@ describe('DroppableDirective', () => {
       // The dragged item originates from another list; this droppable is never the active
       // target DURING the drag — it becomes active only in the same synchronous block as
       // endDrag (the pointer-up flush processes the final position, then clears state), so
-      // the effect never observes isActive() === true and #wasActive stays false.
+      // no change detection ever renders it active.
       const item = createMockDraggedItem({ draggableId: 'item-2', droppableId: 'other-list' });
 
       dragStateService.startDrag(
@@ -375,7 +452,7 @@ describe('DroppableDirective', () => {
         null,
         0,
       );
-      fixture.detectChanges(); // effect observes active=false; #wasActive stays false
+      fixture.detectChanges(); // rendered inactive
 
       // Flush + end in one task, with no change detection in between.
       dragStateService.updateDragPosition({
@@ -446,8 +523,8 @@ describe('DroppableDirective', () => {
 
       expect(component.dropEvents.length).toBe(1);
 
-      // endedDragState still names this droppable, but the drop was already consumed.
-      // Toggling disabled re-runs the effect — it must NOT re-emit the historical drop.
+      // endedDragState still names this droppable until the next drag; a later input change
+      // must NOT re-emit that historical drop.
       component.disabled.set(true);
       fixture.detectChanges();
       component.disabled.set(false);
@@ -456,7 +533,7 @@ describe('DroppableDirective', () => {
       expect(component.dropEvents.length).toBe(1);
     });
 
-    it('does not emit a drop when an active target is disabled just before release', () => {
+    it('does not emit a drop when the active target is disabled before release', () => {
       const item = createMockDraggedItem({ draggableId: 'item-2', droppableId: 'other-list' });
 
       dragStateService.startDrag(
@@ -471,7 +548,6 @@ describe('DroppableDirective', () => {
       );
       fixture.detectChanges();
 
-      // Become the active target during the drag so #wasActive becomes true.
       dragStateService.updateDragPosition({
         cursorPosition: { x: 100, y: 100 },
         activeDroppableId: 'test-list',
@@ -481,9 +557,9 @@ describe('DroppableDirective', () => {
       fixture.detectChanges();
       expect(directive.isActive()).toBe(true);
 
-      // Disable and end in the same task (no change detection in between), so the effect
-      // sees isDragging=false with a stale #wasActive=true and a live disabled()=true.
+      // Disabled after it became the target, with no pointer move since to re-resolve it
       component.disabled.set(true);
+      fixture.detectChanges();
       dragStateService.endDrag();
       fixture.detectChanges();
 
@@ -524,48 +600,293 @@ describe('DroppableDirective', () => {
     });
   });
 
-  describe('performance: signal splitting', () => {
-    it('does not re-run the drop effect on placeholder-only updates while active', () => {
-      // The active droppable reads the terminal drop state from endedDragState at drag end,
-      // NOT by polling every frame. Its effect must therefore stay keyed on the low-frequency
-      // fields (active/dragging/draggedItem) and NOT re-run as the placeholder marches across
-      // items at 60fps. See issue #28.
-      const item = createMockDraggedItem();
-      dragStateService.startDrag(item);
+  describe('drop delivery at release', () => {
+    const dragOntoFrom = (
+      targetId: string,
+      detectChanges: () => void,
+      sourceId = 'other-list',
+    ): void => {
+      dragStateService.startDrag(
+        createMockDraggedItem({ draggableId: 'item-2', droppableId: sourceId }),
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        sourceId,
+        null,
+        null,
+        0,
+      );
+      detectChanges();
       dragStateService.updateDragPosition({
         cursorPosition: { x: 100, y: 100 },
-        activeDroppableId: 'test-list',
-        placeholderId: 'item-1',
-        placeholderIndex: 0,
+        activeDroppableId: targetId,
+        placeholderId: END_OF_LIST,
+        placeholderIndex: 1,
       });
-      fixture.detectChanges();
-      expect(directive.isActive()).toBe(true);
+    };
 
-      // The drop effect reads endedDragState() on every run and nothing else does during a
-      // live drag, so it is a faithful proxy for "the effect re-ran". Count reads triggered
-      // purely by placeholder movement (activeDroppableId held constant).
-      const effectRunSpy = jest.spyOn(dragStateService, 'endedDragState');
+    it('emits the drop inside endDrag, before any change detection', () => {
+      dragOntoFrom('test-list', () => fixture.detectChanges());
 
-      for (let i = 1; i <= 5; i++) {
-        dragStateService.updateDragPosition({
-          cursorPosition: { x: 100, y: 100 + i },
-          activeDroppableId: 'test-list',
-          placeholderId: `item-${i}`,
-          placeholderIndex: i,
-        });
-        fixture.detectChanges();
-      }
-
-      expect(effectRunSpy).not.toHaveBeenCalled();
-
-      // Sanity check: the probe does see the effect run on a low-frequency change
       dragStateService.endDrag();
-      fixture.detectChanges();
-      expect(effectRunSpy).toHaveBeenCalled();
 
-      effectRunSpy.mockRestore();
+      expect(component.dropEvents.length).toBe(1);
+      expect(component.dropEvents[0].destination).toEqual({
+        droppableId: 'test-list',
+        placeholderId: END_OF_LIST,
+        index: 1,
+        data: { listId: 'list-1' },
+      });
     });
 
+    it('lets the drop handler see the drag as over', () => {
+      let draggingDuringDrop: boolean | null = null;
+      directive.drop.subscribe(() => (draggingDuringDrop = dragStateService.isDragging()));
+      dragOntoFrom('test-list', () => fixture.detectChanges());
+
+      dragStateService.endDrag();
+
+      expect(draggingDuringDrop).toBe(false);
+    });
+
+    it('emits the drop inside NgZone.run, so zone.js apps track what the handler starts', () => {
+      // Release is handled by listeners outside Angular's zone
+      const zone = TestBed.inject(NgZone);
+      const run = zone.run.bind(zone);
+      let insideRun = false;
+      jest.spyOn(zone, 'run').mockImplementation(<T>(fn: () => T): T => {
+        insideRun = true;
+        try {
+          return run(fn);
+        } finally {
+          insideRun = false;
+        }
+      });
+      let emittedInsideRun = false;
+      directive.drop.subscribe(() => (emittedInsideRun = insideRun));
+      dragOntoFrom('test-list', () => fixture.detectChanges());
+
+      dragStateService.endDrag();
+
+      expect(emittedInsideRun).toBe(true);
+    });
+
+    it('delivers the drop to a drop zone that is rendered only while dragging', () => {
+      const host = TestBed.createComponent(DragOnlyDropZoneHostComponent);
+      host.detectChanges();
+
+      dragOntoFrom('trash', () => host.detectChanges());
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+      expect(host.componentInstance.dropEvents[0].destination.droppableId).toBe('trash');
+      host.destroy();
+    });
+
+    it('delivers exactly one drop when two droppables share the target ID', () => {
+      const host = TestBed.createComponent(DuplicateIdDroppablesHostComponent);
+      host.detectChanges();
+
+      dragOntoFrom('dup-list', () => host.detectChanges());
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+      // The first in document order, as the drop animation and focus restore resolve the ID
+      expect(host.componentInstance.dropEvents[0].destination.data).toBe('first');
+      host.destroy();
+    });
+
+    it('delivers to the enabled one when the first droppable sharing the ID is disabled', () => {
+      // Pointer hit-testing skips the disabled one and targets the enabled one
+      const host = TestBed.createComponent(DuplicateIdDroppablesHostComponent);
+      host.componentInstance.firstDisabled.set(true);
+      host.detectChanges();
+
+      dragOntoFrom('dup-list', () => host.detectChanges());
+      dragStateService.endDrag();
+
+      expect(host.componentInstance.dropEvents.map((e) => e.destination.data)).toEqual(['second']);
+      host.destroy();
+    });
+
+    it('follows the rendered disabled state when disabled changes without a render', () => {
+      // Hit-testing and dragEnd read the rendered data-droppable-disabled attribute, so the
+      // drop follows it too: a pending disable does not suppress the drop dragEnd reported.
+      dragOntoFrom('test-list', () => fixture.detectChanges());
+      component.disabled.set(true);
+
+      dragStateService.endDrag();
+
+      expect(droppableNative.hasAttribute('data-droppable-disabled')).toBe(false);
+      expect(component.dropEvents.length).toBe(1);
+    });
+
+    it('does not deliver a cancelled drag', () => {
+      dragOntoFrom('test-list', () => fixture.detectChanges());
+
+      dragStateService.cancelDrag();
+      fixture.detectChanges();
+
+      expect(component.dropEvents.length).toBe(0);
+    });
+  });
+
+  describe('drop emission with re-created droppables', () => {
+    let host: ComponentFixture<RecreatingDroppableHostComponent>;
+
+    const dragOnto = (targetId: string, sourceId = 'other-list'): void => {
+      dragStateService.startDrag(
+        createMockDraggedItem({ draggableId: 'item-2', droppableId: sourceId }),
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        sourceId,
+        null,
+        null,
+        0,
+      );
+      host.detectChanges();
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 100, y: 100 },
+        activeDroppableId: targetId,
+        placeholderId: END_OF_LIST,
+        placeholderIndex: 0,
+      });
+    };
+
+    const droppableInstance = (id: string): DroppableDirective | undefined =>
+      host.debugElement
+        .queryAll(By.directive(DroppableDirective))
+        .map((el) => el.injector.get(DroppableDirective))
+        .find((instance) => instance.vdndDroppable() === id);
+
+    beforeEach(() => {
+      host = TestBed.createComponent(RecreatingDroppableHostComponent);
+      host.detectChanges();
+    });
+
+    afterEach(() => {
+      host.destroy();
+    });
+
+    it('emits exactly one drop when the drop handler re-creates the target', () => {
+      const original = droppableInstance('recreated-list');
+
+      dragOnto('recreated-list');
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      // The handler replaced the list, so a new instance with the same ID now exists.
+      expect(droppableInstance('recreated-list')).not.toBe(original);
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+      expect(host.componentInstance.dropEvents[0].destination.droppableId).toBe('recreated-list');
+    });
+
+    it('emits exactly one drop when the target was rendered active before release', () => {
+      dragOnto('recreated-list');
+      host.detectChanges();
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+    });
+
+    it('does not emit a drop from a droppable created after a keyboard drop ended', () => {
+      dragStateService.startDrag(
+        createMockDraggedItem({ draggableId: 'item-2', droppableId: 'late-list' }),
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'late-list',
+        null,
+        0,
+        0,
+        true,
+      );
+      host.detectChanges();
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      // A droppable with the snapshot's target ID mounts after the drag is over.
+      host.componentInstance.showLate.set(true);
+      host.detectChanges();
+
+      expect(droppableInstance('late-list')).toBeDefined();
+      expect(host.componentInstance.dropEvents.length).toBe(0);
+    });
+
+    it('delivers the drop to a target whose re-creation is pending at release', () => {
+      // E.g. a (dragEnd) handler replaces the lists; the swap renders only after the drop.
+      dragOnto('recreated-list');
+      host.componentInstance.recreate();
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+      expect(host.componentInstance.dropEvents[0].destination.droppableId).toBe('recreated-list');
+    });
+
+    it('emits the drop on a droppable that mounted during the drag', () => {
+      dragOnto('late-list');
+      host.componentInstance.showLate.set(true);
+      host.detectChanges();
+
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+      expect(host.componentInstance.dropEvents[0].destination.droppableId).toBe('late-list');
+    });
+
+    it('emits the drop on a target re-created with the same ID during the drag', () => {
+      dragOnto('recreated-list');
+      host.detectChanges();
+      const original = droppableInstance('recreated-list');
+
+      host.componentInstance.recreate();
+      host.detectChanges();
+      expect(droppableInstance('recreated-list')).not.toBe(original);
+
+      // The replacement is not the active target until the next pointer move re-resolves it.
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 101, y: 101 },
+        activeDroppableId: 'recreated-list',
+        placeholderId: END_OF_LIST,
+        placeholderIndex: 0,
+      });
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(1);
+    });
+
+    it('emits the next drop on a re-created droppable', () => {
+      dragOnto('recreated-list');
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      dragOnto('recreated-list');
+      dragStateService.endDrag();
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(2);
+    });
+
+    it('does not emit a drop from a droppable created after a cancelled drag', () => {
+      dragOnto('late-list');
+      dragStateService.cancelDrag();
+      host.detectChanges();
+
+      host.componentInstance.showLate.set(true);
+      host.detectChanges();
+
+      expect(host.componentInstance.dropEvents.length).toBe(0);
+    });
+  });
+
+  describe('final placeholder index', () => {
     it('still emits the final placeholder index after placeholder-only updates', () => {
       // Removing per-frame caching must not lose the last placeholder position: endDrag()
       // snapshots the live signals, so the drop still carries the final index. Cross-list

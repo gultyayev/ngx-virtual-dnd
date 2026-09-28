@@ -6,6 +6,7 @@ import {
   ElementRef,
   inject,
   input,
+  NgZone,
   OnDestroy,
   output,
   untracked,
@@ -64,6 +65,7 @@ export class DroppableDirective implements OnDestroy {
   readonly #dragState = inject(DragStateService);
   readonly #autoScroll = inject(AutoScrollService);
   readonly #registry = inject(DroppableRegistryService);
+  readonly #ngZone = inject(NgZone);
   readonly #parentGroup = inject(VDND_GROUP_TOKEN, { optional: true });
 
   /** Unique identifier for this droppable */
@@ -101,7 +103,7 @@ export class DroppableDirective implements OnDestroy {
   /** Constrain drag preview and placeholder to container boundaries */
   constrainToContainer = input<boolean>(false);
 
-  /** Emits when an item is dropped on this droppable */
+  /** Emits when an item is dropped on this droppable: at release, right after its `dragEnd` */
   // eslint-disable-next-line @angular-eslint/no-output-native
   drop = output<DropEvent>();
 
@@ -153,16 +155,6 @@ export class DroppableDirective implements OnDestroy {
   /** Drag whose initial placeholder position has already been seen by this droppable */
   #placeholderTrackedDrag: DraggedItem | null = null;
 
-  /** Track previous active state to detect the drag-end transition */
-  #wasActive = false;
-
-  /**
-   * The terminal drag snapshot this droppable has already processed. `endedDragState`
-   * persists until the next drag starts, so this guards against replaying the same drop
-   * when the effect re-runs (e.g. `disabled()` toggling) after the drag has ended.
-   */
-  #handledEndedState: DragState | null = null;
-
   /** Whether this droppable has rendered, so its inputs have values */
   #rendered = false;
 
@@ -184,7 +176,8 @@ export class DroppableDirective implements OnDestroy {
     // Register with the droppable registry, and again under the new key when the ID or group
     // changes. Drag code finds drop targets through the registry instead of querying the
     // document; a registration during an active drag makes this droppable a target from the
-    // next hit-test. The cleanup unregisters it, including on destroy.
+    // next hit-test. The registry also calls #handleDrop when a drag ends on this droppable.
+    // The cleanup unregisters it, including on destroy.
     //
     // Not deferred to afterNextRender: this runs in the change detection that creates the
     // droppable (inputs are set by then), so afterNextRender hooks of that same render (drop
@@ -196,51 +189,18 @@ export class DroppableDirective implements OnDestroy {
         return;
       }
       onCleanup(
-        this.#registry.register(this.#elementRef.nativeElement, this.vdndDroppable(), group),
+        this.#registry.register(
+          this.#elementRef.nativeElement,
+          this.vdndDroppable(),
+          group,
+          (endedState) => this.#handleDrop(endedState),
+        ),
       );
     });
 
     effect(() => {
       const currentIndex = this.#placeholderInsertionIndex();
       untracked(() => this.#handlePlaceholderMove(currentIndex));
-    });
-
-    // React to state changes and handle drop events.
-    //
-    // Keyed only on the low-frequency fields (isActive/isDragging/draggedItem). The final
-    // placeholder/index values #handleDrop needs are captured by DragStateService.endDrag()
-    // into endedDragState() at the drag-end boundary, so this effect never has to poll the
-    // high-frequency cursor/placeholder signals — reading them here would make it re-run and
-    // re-allocate a snapshot on every 60fps frame, defeating the service's signal splitting.
-    effect(() => {
-      const active = this.isActive();
-      const draggedItem = this.#dragState.draggedItem();
-      const isDragging = this.#dragState.isDragging();
-
-      // Handle drag end (drop). This droppable is the release target when it was either
-      // observed active during the drag (#wasActive) OR named as the target in the ended
-      // drag snapshot. The snapshot path covers the pointer-up flush, where the final
-      // position is processed and the state cleared in the same synchronous task, so this
-      // effect never observes isActive() === true mid-drag and #wasActive stays false.
-      const endedState = untracked(() => this.#dragState.endedDragState());
-      const endedTargetedThis = endedState?.activeDroppableId === this.vdndDroppable();
-
-      if (!isDragging && draggedItem === null && (this.#wasActive || endedTargetedThis)) {
-        // Consume each terminal snapshot exactly once. endedDragState persists until the
-        // next drag starts and disabled()/other inputs re-run this effect, so without a
-        // per-snapshot guard a later state change would replay the same historical drop.
-        if (endedState !== this.#handledEndedState) {
-          this.#handledEndedState = endedState;
-          // Emit only for an enabled target that ended normally. A target disabled at
-          // release still consumes the snapshot (so re-enabling can't resurrect the drop)
-          // but emits nothing, keeping dragEnd and drop consistent.
-          if (!this.disabled() && !this.#dragState.wasCancelled()) {
-            this.#handleDrop();
-          }
-        }
-      }
-
-      this.#wasActive = active;
     });
   }
 
@@ -296,15 +256,14 @@ export class DroppableDirective implements OnDestroy {
   }
 
   /**
-   * Handle a drop on this droppable.
+   * Emit `drop` for a drag that ended on this droppable. Called by the registry from
+   * `DragStateService.endDrag()`, with the state captured just before the reset. Returns
+   * whether it emitted.
    */
-  #handleDrop(): void {
-    // The live state is cleared before this effect fires, so read the terminal snapshot
-    // captured by endDrag()/cancelDrag() immediately before the reset.
-    const state = untracked(() => this.#dragState.endedDragState());
-
-    if (!state?.draggedItem || state.activeDroppableId !== this.vdndDroppable()) {
-      return;
+  #handleDrop(state: DragState): boolean {
+    // A target disabled at release is not a valid drop (dragEnd reports no destination).
+    if (this.disabled() || !state.draggedItem || state.activeDroppableId !== this.vdndDroppable()) {
+      return false;
     }
 
     const sourceDroppableId = state.sourceDroppableId ?? '';
@@ -330,7 +289,7 @@ export class DroppableDirective implements OnDestroy {
       activeDroppableId: this.vdndDroppable(),
     });
 
-    this.drop.emit({
+    const event: DropEvent = {
       source: {
         draggableId: state.draggedItem.draggableId,
         droppableId: sourceDroppableId,
@@ -343,7 +302,13 @@ export class DroppableDirective implements OnDestroy {
         index: destinationIndex,
         data: this.vdndDroppableData(),
       },
-    });
+    };
+    // Delivered from the pointer/keyboard listener, which runs outside Angular's zone. With
+    // zone.js a template listener marks its view dirty without scheduling a render, so emit
+    // inside the zone for the consumer's handler (and async work it starts) to render. A
+    // no-op when zoneless.
+    this.#ngZone.run(() => this.drop.emit(event));
+    return true;
   }
 
   /**

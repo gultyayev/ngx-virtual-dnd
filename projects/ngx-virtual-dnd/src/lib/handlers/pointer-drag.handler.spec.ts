@@ -557,6 +557,57 @@ describe('PointerDragHandler', () => {
     });
   });
 
+  describe('a drag end that throws', () => {
+    // e.g. a consumer's (dragEnd)/(drop) handler under an ErrorHandler that rethrows
+    beforeEach(() => {
+      (mockCallbacks.onDragEnd as jest.Mock).mockImplementation(() => {
+        isDragging = false;
+        throw new Error('handler failed');
+      });
+      // The listener's exception is reported as an uncaught error; this suite expects it
+      window.addEventListener('error', swallowError);
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => window.removeEventListener('error', swallowError));
+
+    const swallowError = (event: ErrorEvent): void => event.preventDefault();
+
+    const expectListenersRemoved = (): void => {
+      (mockCallbacks.onDragMove as jest.Mock).mockClear();
+      document.dispatchEvent(createMouseEvent('mousemove', 200, 260));
+      expect(mockCallbacks.onDragMove).not.toHaveBeenCalled();
+      expect(handler.getStartPosition()).toBeNull();
+    };
+
+    it('still stops tracking after pointer up', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      document.dispatchEvent(createMouseEvent('mouseup', 160, 220));
+
+      expectListenersRemoved();
+    });
+
+    it('still stops tracking after Escape', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expectListenersRemoved();
+    });
+
+    it('still stops tracking after focus loss', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      window.dispatchEvent(new Event('blur'));
+
+      expectListenersRemoved();
+    });
+  });
+
   describe('multi-touch', () => {
     interface TouchPoint {
       id: number;

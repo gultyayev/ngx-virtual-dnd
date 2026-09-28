@@ -1,4 +1,4 @@
-import { Component, DebugElement, Directive, OnInit, signal } from '@angular/core';
+import { Component, DebugElement, Directive, NgZone, OnInit, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DraggableDirective } from './draggable.directive';
@@ -9,7 +9,7 @@ import { PositionCalculatorService } from '../services/position-calculator.servi
 import { AutoScrollService } from '../services/auto-scroll.service';
 import { ElementCloneService } from '../services/element-clone.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
-import { DragStartEvent, DragEndEvent } from '../models/drag-drop.models';
+import { DragStartEvent, DragEndEvent, DropEvent } from '../models/drag-drop.models';
 
 // A web component whose input lives in its shadow DOM, like the form controls of many UI libraries
 class ShadowInputElement extends HTMLElement {
@@ -29,6 +29,7 @@ if (!customElements.get('test-shadow-input')) {
       vdndDroppable="test-list"
       vdndDroppableGroup="test-group"
       style="height: 400px; overflow: auto; padding-top: 20px; row-gap: 10px;"
+      (drop)="onDrop($event)"
     >
       <div data-draggable-id="preceding-item-1"></div>
       <div data-draggable-id="preceding-item-2"></div>
@@ -69,6 +70,9 @@ class TestHostComponent {
 
   dragStartEvents: DragStartEvent[] = [];
   dragEndEvents: DragEndEvent[] = [];
+  dropEvents: DropEvent[] = [];
+  /** Order in which the end-of-drag outputs fired */
+  endOutputs: string[] = [];
 
   onDragStart(event: DragStartEvent): void {
     this.dragStartEvents.push(event);
@@ -76,6 +80,12 @@ class TestHostComponent {
 
   onDragEnd(event: DragEndEvent): void {
     this.dragEndEvents.push(event);
+    this.endOutputs.push('dragEnd');
+  }
+
+  onDrop(event: DropEvent): void {
+    this.dropEvents.push(event);
+    this.endOutputs.push('drop');
   }
 }
 
@@ -1037,6 +1047,29 @@ describe('DraggableDirective', () => {
       expect(keyboardDrag.targetIndex()).toBe(initialIndex - 1);
     });
 
+    it("emits dragEnd, then the target list's drop, in the keypress that drops", () => {
+      draggableNative.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      fixture.detectChanges();
+      expect(dragStateService.isDragging()).toBe(true);
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+
+      expect(component.endOutputs).toEqual(['dragEnd', 'drop']);
+      expect(component.dropEvents[0]).toEqual(
+        expect.objectContaining({
+          source: expect.objectContaining({ draggableId: 'test-item', droppableId: 'test-list' }),
+          destination: expect.objectContaining({
+            droppableId: 'test-list',
+            index: component.dragEndEvents[0].destinationIndex,
+          }),
+        }),
+      );
+    });
+
     it('should cancel drag on escape when dragging', () => {
       dragStateService.startDrag({
         draggableId: 'test-item',
@@ -1063,6 +1096,65 @@ describe('DraggableDirective', () => {
           destinationIndex: null,
         }),
       ]);
+    });
+  });
+
+  describe('outputs inside the Angular zone', () => {
+    // The pointer and keyboard listeners run outside Angular's zone. With zone.js, a template
+    // listener marks its view dirty but schedules no render, so the outputs must be emitted
+    // inside the zone for the consumer's handler to render.
+    let emittedInZone: string[];
+
+    beforeEach(() => {
+      const zone = TestBed.inject(NgZone);
+      const run = zone.run.bind(zone);
+      let insideRun = false;
+      jest.spyOn(zone, 'run').mockImplementation(<T>(fn: () => T): T => {
+        const wasInside = insideRun;
+        insideRun = true;
+        try {
+          return run(fn);
+        } finally {
+          insideRun = wasInside;
+        }
+      });
+      emittedInZone = [];
+      const draggable = fixture.debugElement
+        .query(By.directive(DraggableDirective))
+        .injector.get(DraggableDirective);
+      draggable.dragStart.subscribe(() => emittedInZone.push(`dragStart:${insideRun}`));
+      draggable.dragEnd.subscribe(() => emittedInZone.push(`dragEnd:${insideRun}`));
+    });
+
+    it('emits dragStart and dragEnd of a pointer drag inside the zone', () => {
+      attemptPointerDrag(draggableNative);
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 100, clientY: 120 }));
+
+      expect(emittedInZone).toEqual(['dragStart:true', 'dragEnd:true']);
+    });
+
+    it('emits dragStart and dragEnd of a keyboard drop inside the zone', () => {
+      draggableNative.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      fixture.detectChanges();
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+
+      expect(emittedInZone).toEqual(['dragStart:true', 'dragEnd:true']);
+    });
+
+    it('emits dragEnd of a cancelled keyboard drag inside the zone', () => {
+      draggableNative.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      fixture.detectChanges();
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+
+      expect(emittedInZone.at(-1)).toBe('dragEnd:true');
     });
   });
 

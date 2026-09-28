@@ -54,6 +54,7 @@ Design tokens for the demo and docs live in `src/styles/tokens.css`.
 - Use `runOutsideAngular` for RAF loops, programmatic event listeners, and `ResizeObserver`
 - Avoid template/host event bindings (`(event)`, `host: { '(event)' }`) for high-frequency DOM events (`mousemove`, `pointermove`, `touchmove`, `scroll`, `resize`, `dragover`) — Angular marks the view dirty on every emission, even with OnPush. Use programmatic `addEventListener` inside `runOutsideAngular` instead. Low-frequency initiation events (`mousedown`, `touchstart`, `keydown`, `click`) are fine as template/host bindings.
 - Signal updates do NOT need `ngZone.run()` - signals work across zone boundaries
+- Outputs emitted from listeners outside the zone (drag start/end, drop) DO need `ngZone.run()`: with zone.js, a template listener marks its view dirty but schedules no render
 - Never use hand made `ngDevMode`. Use `isDevMode()` instead
 
 ### Components
@@ -148,7 +149,7 @@ Keep a bound handler in a field so the same reference can be removed, attach pro
 
 8. **Drop animation is visual-only, after the drop**: The drag state still ends synchronously and `drop`/`dragEnd` are never delayed. `DragPreviewComponent` keeps the preview rendered from `endedDragState()` while settling, and after the next render `DropAnimator` (`lib/utils/drop-animator.ts`) glides it onto the item's rendered element (found by `data-*` attributes in the target list, then the source list) while hiding that element with an `opacity` animation. A new drag cancels it. The settling preview uses `data-testid="vdnd-drag-preview-dropping"`, so E2E `dragPreview` locators see the drag as over immediately.
 
-9. **Droppables are found through a registry, never a document query**: `DroppableDirective` registers its element (by ID and group) with `DroppableRegistryService` from an effect (in the change detection that creates it, so `afterNextRender` hooks of that render find it) and unregisters on destroy. Hit-testing, keyboard list switching, drop handling, drop animation and focus restore read the group's droppables from it. A (un)registration during a drag makes the next hit-test re-read the candidates. Test fixtures that build droppables from raw DOM must register them.
+9. **Droppables are found through a registry, never a document query**: `DroppableDirective` registers its element (by ID and group) with `DroppableRegistryService` from an effect (in the change detection that creates it, so `afterNextRender` hooks of that render find it) and unregisters on destroy. Hit-testing, keyboard list switching, drop animation and focus restore read the group's droppables from it. It also delivers the drop: `DragStateService.endDrag()` hands the ended state to the target's registered handler, so `drop` fires synchronously right after `dragEnd` (no effect, nothing for a later render to replay or lose). A (un)registration during a drag makes the next hit-test re-read the candidates. Test fixtures that build droppables from raw DOM must register them.
 
 ### Safari Autoscroll
 

@@ -1,5 +1,6 @@
-import { computed, effect, Injectable, signal } from '@angular/core';
+import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { CursorPosition, DraggedItem, DragState, GrabOffset } from '../models/drag-drop.models';
+import { DroppableRegistryService } from './droppable-registry.service';
 
 /**
  * Internal state type without high-frequency fields.
@@ -43,6 +44,8 @@ const INITIAL_CORE_STATE: CoreDragState = {
   providedIn: 'root',
 })
 export class DragStateService {
+  readonly #droppableRegistry = inject(DroppableRegistryService);
+
   /** Core state signal — contains all rarely-changing properties */
   readonly #state = signal<CoreDragState>(INITIAL_CORE_STATE);
 
@@ -67,7 +70,7 @@ export class DragStateService {
   /** Flag indicating if the last drag was cancelled (not dropped) */
   readonly #wasCancelled = signal<boolean>(false);
 
-  /** Whether the last drag was cancelled (for droppable to check before emitting drop) */
+  /** Whether the last drag was cancelled (a cancelled drag delivers no drop) */
   readonly wasCancelled = this.#wasCancelled.asReadonly();
 
   /** Snapshot captured synchronously before the last drag reset. */
@@ -247,19 +250,38 @@ export class DragStateService {
   }
 
   /**
-   * End the drag operation and reset state (normal drop).
+   * End the drag operation and reset state (normal drop), then deliver the drop: the target
+   * droppable (`activeDroppableId`) emits `drop` before this returns.
    */
   endDrag(): void {
-    this.#endedDragState.set(this.getStateSnapshot());
+    // Only a drag in progress ends. Again (e.g. from a drop handler) it would overwrite the
+    // ended drag, which the drop animation reads, with an empty one.
+    if (!this.#state().isDragging) {
+      return;
+    }
+
+    const endedState = this.getStateSnapshot();
+    this.#endedDragState.set(endedState);
     this.#wasCancelled.set(false);
     this.#resetHighFrequencySignals();
     this.#state.set(INITIAL_CORE_STATE);
+
+    // After the reset, so the drop handler sees the drag as over. Delivered here rather than
+    // from a droppable effect on the next change detection: by then the target may already
+    // be destroyed or re-created (a drop zone rendered only while dragging, a list replaced
+    // by a (dragEnd) handler), and every other droppable would have to tell a new drop from
+    // an old one.
+    this.#droppableRegistry.deliverDrop(endedState);
   }
 
   /**
    * Cancel the drag operation (escape key, disabled, etc.).
    */
   cancelDrag(): void {
+    if (!this.#state().isDragging) {
+      return;
+    }
+
     this.#endedDragState.set(this.getStateSnapshot());
     this.#wasCancelled.set(true);
     this.#resetHighFrequencySignals();

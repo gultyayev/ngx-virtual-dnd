@@ -339,14 +339,17 @@ export class PointerDragHandler {
 
     // Only prevent default if we were actually dragging
     // Otherwise, allow native touch behavior (like scroll momentum) to complete
-    if (this.#deps.callbacks.isDragging()) {
-      event.preventDefault();
-      // The system took the touch (an incoming call, an OS gesture, too many fingers): the user
-      // never released, so this is a cancel, not a drop
-      this.#deps.callbacks.onDragEnd(event.type === 'touchcancel');
+    // The drag end runs consumer handlers (dragEnd, drop); stop tracking even if one throws
+    try {
+      if (this.#deps.callbacks.isDragging()) {
+        event.preventDefault();
+        // The system took the touch (an incoming call, an OS gesture, too many fingers): the
+        // user never released, so this is a cancel, not a drop
+        this.#deps.callbacks.onDragEnd(event.type === 'touchcancel');
+      }
+    } finally {
+      this.cleanup();
     }
-
-    this.cleanup();
   }
 
   /**
@@ -365,9 +368,11 @@ export class PointerDragHandler {
    */
   #onEscapeKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Escape' && this.#deps.callbacks.isDragging()) {
-      // No ngZone.run() needed - #endDrag uses signals which work outside zone
-      this.#deps.callbacks.onDragEnd(true);
-      this.cleanup();
+      try {
+        this.#deps.callbacks.onDragEnd(true);
+      } finally {
+        this.cleanup();
+      }
     }
   }
 
@@ -379,10 +384,13 @@ export class PointerDragHandler {
       return;
     }
 
-    if (this.#deps.callbacks.isDragging()) {
-      this.#deps.callbacks.onDragEnd(true);
+    try {
+      if (this.#deps.callbacks.isDragging()) {
+        this.#deps.callbacks.onDragEnd(true);
+      }
+    } finally {
+      this.cleanup();
     }
-    this.cleanup();
   }
 
   /**
