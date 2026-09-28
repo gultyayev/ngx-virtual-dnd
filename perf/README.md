@@ -51,11 +51,21 @@ the pages' drag-state debug output, which E2E tests read to synchronize with the
 drag scheduler: the main demo's debug panel and the hidden `app-drag-state-debug`
 mirror elsewhere. Both render the cursor position, so they re-render on every drag
 frame, and the main demo's panel re-renders the whole `DemoComponent` template and
-every rendered row of both lists with it (#97). Without the panel,
-`drag-within-list-1000` does 10 layouts instead of 24 and about 10% less
-main-thread work. `PerfPage.goto` fails the run when a page still renders that
-output, so a page that stops honoring the flag can't silently skew the numbers
-again.
+every rendered row of both lists with it (#97). `PerfPage.goto` fails the run when a
+page still renders that output, so a page that stops honoring the flag can't
+silently skew the numbers again.
+
+For the same reason the main demo subscribes to `placeholderMove` in its
+constructor instead of binding it in the template: a template listener marks the
+demo's view dirty, so each placeholder move (about one every three frames during
+autoscroll) re-rendered the demo and every row. Keep high-frequency outputs out of
+the measured pages' templates.
+
+Measured against the previous page (5 runs before, 3 after, alternated on one
+machine), `drag-within-list-1000` went from 24 layouts to 10 and about 15% less
+main-thread task time, and `drag-between-lists-autoscroll-1000` from 88 layouts
+to 78 and about 10% less task time. What remains is the library's work,
+including the consumer row templates it renders.
 
 | Scenario                             | Page                           | Interaction                                                    |
 | ------------------------------------ | ------------------------------ | -------------------------------------------------------------- |
@@ -83,12 +93,15 @@ throttling. For every iteration the collector:
    60 Hz scheduling jitter (16.8 ms) is not counted the same as a real stall.
 4. Reads the renderer's cumulative counters from CDP `Performance.getMetrics`
    before and after the scenario and reports the deltas: `layoutCount`,
-   `recalcStyleCount`, and main-thread CPU time, `scriptDuration`
-   (`ScriptDuration`) and `taskDuration` (`TaskDuration`, all main-thread tasks:
-   script, style, layout, paint, …), converted to ms. The frame metrics only move
-   when a frame misses its budget; CPU time also registers a change in per-frame
-   work that still fits in the frame. It includes the harness's own page calls,
-   which are the same on both sides of a comparison.
+   `recalcStyleCount`, and main-thread time, `taskDuration` (`TaskDuration`, all
+   main-thread tasks: script, style, layout, paint, …) and `scriptDuration`
+   (`ScriptDuration`), converted to ms. These are wall times of the tasks (CDP's
+   default `timeTicks` domain), which include the CPU throttling. The frame
+   metrics only move when a frame misses its budget; task time also counts extra
+   work that still fits in the frame, but only a change beyond the percent
+   threshold gates it. It includes the harness's own page calls (Playwright's
+   waits, the frame tracker), which differ little between the two sides. A
+   missing counter fails the run instead of reading as 0.
 
 ## Regression gating
 
@@ -115,6 +128,14 @@ An over-threshold change that fails one of the guards is reported as
 informational with the guard that suppressed it: `noise (below floor)` or
 `noise (within band)`.
 
+`scriptDuration` is reported but **not gated**: every iteration reloads the page,
+so JIT compilation and GC timing vary, and runs of the same code on one machine
+differed by up to 26% (past the 25% threshold). `taskDuration`, which includes
+script time, drifted at most 19% between those runs and is gated. The one
+larger task-time difference (+27%) had the first benchmark run in a fresh
+container as the slower side; CI measures the base first, so a cold start there
+slows the base, not the head.
+
 `p99FrameTime` is reported but **not gated**: the scenarios collect fewer than
 ~300 frame intervals, so nearest-rank p99 resolves to (or right next to) the
 maximum — gating it would evaluate the same noisy value as `maxFrameGap` a
@@ -137,17 +158,17 @@ near-deterministic (MAD ≈ 0), and their original floor of 25 was larger than t
 drag-within-list layout baseline (24), which let a full doubling of layout work
 slip through as "noise". Without the debug panel (schema 3) the drag layout
 baselines are 10 (drag-within-list) and 6 (drag-within-virtual-for-list), so the
-layout floor is 5. The CPU-time floors cover run-to-run drift: two runs of the
-same code on one machine differed by up to 18 ms of script time on the ~80 ms
-drag-within-list baseline. Current floors:
+layout floor is 3: one forced layout per placeholder move adds 4 layouts to the
+`*vdndVirtualFor` drag. The task-time floor sits above run-to-run drift on the
+smallest baseline (up to 28 ms on the ~200 ms drag-within-virtual-for-list) and
+at 25% of it; the percent threshold covers the larger baselines. Current floors:
 
 | Metric            | Floor | Unit   |
 | ----------------- | ----- | ------ |
 | totalBlockingTime | 20    | ms     |
 | longTaskCount     | 2     | tasks  |
-| layoutCount       | 5     | count  |
+| layoutCount       | 3     | count  |
 | recalcStyleCount  | 10    | count  |
-| scriptDuration    | 25    | ms     |
 | taskDuration      | 50    | ms     |
 | avgFrameTime      | 1.5   | ms     |
 | maxFrameGap       | 15    | ms     |
@@ -165,7 +186,7 @@ baseline is not comparable to the current run:
   scenario measures). The pre-#42 harness — leaking observer, `buffered: true`,
   `>16.7ms` dropped frames — is schema 1; schema 2 measured the main demo with
   its debug panel re-rendering every drag frame; this collector is schema 3
-  (pages without drag-state debug output, plus CPU time, #97). Comparing across
+  (pages without drag-state debug output, plus main-thread time, #97). Comparing across
   schemas would attribute a **semantics** change (e.g. dropped frames 60 → 0)
   to the library.
 - **Playwright version.** Embedded in each side's JSON report; different

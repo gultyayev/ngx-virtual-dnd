@@ -389,7 +389,6 @@
                 [itemTemplate]="simplifiedItemTpl"
                 [constrainToContainer]="constrainToContainer()"
                 (drop)="onDropSimplified($event)"
-                (placeholderMove)="onPlaceholderMove($event)"
               />
             </div>
           </div>
@@ -413,7 +412,6 @@
                 [itemTemplate]="simplifiedItemTpl"
                 [constrainToContainer]="constrainToContainer()"
                 (drop)="onDropSimplified($event)"
-                (placeholderMove)="onPlaceholderMove($event)"
               />
             </div>
           </div>
@@ -464,7 +462,6 @@
               vdndDroppableGroup="demo"
               [constrainToContainer]="constrainToContainer()"
               (drop)="onDrop($event)"
-              (placeholderMove)="onPlaceholderMove($event)"
             >
               <vdnd-virtual-scroll
                 class="virtual-scroll-container"
@@ -494,7 +491,6 @@
               [disabled]="list2DroppableDisabled()"
               [constrainToContainer]="constrainToContainer()"
               (drop)="onDrop($event)"
-              (placeholderMove)="onPlaceholderMove($event)"
             >
               <vdnd-virtual-scroll
                 class="virtual-scroll-container"

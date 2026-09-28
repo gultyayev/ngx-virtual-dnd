@@ -35,16 +35,20 @@ test('readPerfCounters converts CDP durations from seconds to milliseconds', () 
   });
 });
 
-test('readPerfCounters reads a metric CDP did not report as 0', () => {
-  assert.deepEqual(readPerfCounters([]), {
-    layoutCount: 0,
-    recalcStyleCount: 0,
-    scriptDuration: 0,
-    taskDuration: 0,
-  });
+test('readPerfCounters fails when CDP stops reporting a counter', () => {
+  // Reading it as 0 on both sides would pass the gate without measuring anything.
+  assert.throws(
+    () =>
+      readPerfCounters([
+        { name: 'LayoutCount', value: 12 },
+        { name: 'RecalcStyleCount', value: 30 },
+        { name: 'ScriptDuration', value: 0.25 },
+      ]),
+    /TaskDuration/,
+  );
 });
 
-test('aggregateScenarioMetrics aggregates every reported metric, CPU time included', () => {
+test('aggregateScenarioMetrics aggregates every reported metric, main-thread time included', () => {
   const sample = (scriptDuration: number): ScenarioMetrics => ({
     durationMs: 1000,
     longTaskCount: 0,

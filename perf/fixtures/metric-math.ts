@@ -20,7 +20,7 @@ export interface LongTask {
  * then not comparable — the pre-#42 harness (leaking observer, `buffered: true`,
  * >16.7ms dropped frames) is schema 1; schema 2 measured the main demo with its debug
  * panel, which re-rendered the whole demo every drag frame (#97); this collector is
- * schema 3 (pages without drag-state debug output, plus CPU time).
+ * schema 3 (pages without drag-state debug output, plus main-thread time).
  */
 export const METRICS_SCHEMA_VERSION = 3;
 
@@ -71,15 +71,25 @@ export interface CdpMetric {
 export interface PerfCounters {
   layoutCount: number;
   recalcStyleCount: number;
-  /** Main-thread time spent running script, in ms. */
+  /** Main-thread wall time spent running script, in ms. */
   scriptDuration: number;
-  /** Main-thread time spent in tasks (script, style, layout, paint, …), in ms. */
+  /** Main-thread wall time spent in tasks (script, style, layout, paint, …), in ms. */
   taskDuration: number;
 }
 
-/** Read the counters from CDP `Performance.getMetrics`, which reports durations in seconds. */
+/**
+ * Read the counters from CDP `Performance.getMetrics`, which reports durations in seconds.
+ * Throws when a counter is missing: reading it as 0 on both sides of a comparison would pass
+ * the gate without measuring anything.
+ */
 export function readPerfCounters(metrics: CdpMetric[]): PerfCounters {
-  const get = (name: string) => metrics.find((m) => m.name === name)?.value ?? 0;
+  const get = (name: string) => {
+    const metric = metrics.find((m) => m.name === name);
+    if (!metric) {
+      throw new Error(`CDP Performance.getMetrics did not report ${name}`);
+    }
+    return metric.value;
+  };
   return {
     layoutCount: get('LayoutCount'),
     recalcStyleCount: get('RecalcStyleCount'),

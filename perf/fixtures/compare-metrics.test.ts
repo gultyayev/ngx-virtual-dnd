@@ -92,22 +92,23 @@ test('layout/style-recalc floors sit below the smallest baseline medians', () =>
   // delta 24) was suppressed as noise. These counts are near-deterministic, so
   // the floor only needs to guard tiny baselines. Without the demo's debug panel
   // (#97) the smallest drag layout baseline is 6 (drag-within-virtual-for-list).
-  assert.equal(MIN_ABS_DELTA['layoutCount'], 5);
+  assert.equal(MIN_ABS_DELTA['layoutCount'], 3);
   assert.equal(MIN_ABS_DELTA['recalcStyleCount'], 10);
+  // One forced layout per placeholder move on that scenario's 4 moves: 6 -> 10
   const result = evaluateMetric(
     'layoutCount',
     aggregate([6, 6, 6, 6, 6]),
-    aggregate([12, 12, 12, 12, 12]),
+    aggregate([10, 10, 10, 10, 10]),
     25,
   );
   assert.equal(result.regression, true);
 });
 
-test('a single extra layout on a tiny layout baseline stays below the floor', () => {
+test('a couple of extra layouts on a tiny layout baseline stay below the floor', () => {
   const result = evaluateMetric(
     'layoutCount',
     aggregate([0, 0, 0, 0, 0]),
-    aggregate([1, 1, 1, 1, 1]),
+    aggregate([2, 2, 2, 2, 2]),
     25,
   );
   assert.equal(result.regression, false);
@@ -144,37 +145,50 @@ test('a small percent change under the threshold is neither regression nor suppr
   assert.equal(result.suppressed, false);
 });
 
-test('CPU time is gated (#97): script and task duration catch per-frame cost', () => {
-  // Frame and layout metrics cannot see a change in how much work each frame does while it
-  // still fits in the frame budget; main-thread time can.
-  assert.ok(GATED_METRICS.includes('scriptDuration'));
+test('main-thread task time is gated (#97)', () => {
+  // Frame metrics only move when a frame misses its budget; task time also counts extra work
+  // that still fits in the frame.
   assert.ok(GATED_METRICS.includes('taskDuration'));
   const result = evaluateMetric(
-    'scriptDuration',
-    aggregate([200, 205, 195, 200, 210]),
-    aggregate([300, 290, 310, 305, 300]),
+    'taskDuration',
+    aggregate([340, 350, 360, 355, 345]),
+    aggregate([460, 450, 470, 455, 465]),
     25,
   );
   assert.equal(result.regression, true);
 });
 
-test('CPU-time run-to-run drift on a small baseline stays below the floor', () => {
-  // Measured between two runs of the same code on one machine: drag-within-list script time
-  // 70 -> 88 ms (+26%, MAD 5). Not a regression.
-  assert.equal(MIN_ABS_DELTA['scriptDuration'], 25);
-  assert.equal(MIN_ABS_DELTA['taskDuration'], 50);
-  const result = evaluateMetric(
-    'scriptDuration',
-    aggregate([64, 70, 70, 75, 80]),
-    aggregate([83, 88, 88, 92, 98]),
-    25,
-  );
-  assert.ok(result.percentChange > 25);
-  assert.equal(result.regression, false);
-  assert.equal(result.suppressedReason, 'below-floor');
+test('script time is reported but not gated (its run-to-run drift exceeds the threshold)', () => {
+  // Two runs of the same code on one machine: drag-within-list script time 70 -> 88 ms (+26%).
+  // Pages reload per iteration, so JIT and GC timing vary; task time drifted at most 19%.
+  assert.equal(GATED_METRICS.includes('scriptDuration' as never), false);
+  assert.equal('scriptDuration' in MIN_ABS_DELTA, false);
+  assert.ok(SCENARIO_METRICS.includes('scriptDuration'));
 });
 
-test('every gated metric is reported by every scenario', () => {
+test('task-time drift between runs of the same code is not gated', () => {
+  // Measured on drag-within-list: 358 -> 426 ms (+19%), under the percent threshold.
+  const drift = evaluateMetric(
+    'taskDuration',
+    aggregate([326, 350, 358, 360, 364]),
+    aggregate([352, 420, 426, 430, 434]),
+    25,
+  );
+  assert.equal(drift.regression, false);
+  // On the smallest baseline (~200 ms, drag-within-virtual-for-list) the floor, not the band,
+  // keeps a +28 ms (+14%) drift from mattering even if the threshold is lowered.
+  assert.equal(MIN_ABS_DELTA['taskDuration'], 50);
+  const small = evaluateMetric(
+    'taskDuration',
+    aggregate([200, 200, 200, 200, 200]),
+    aggregate([228, 228, 228, 228, 228]),
+    10,
+  );
+  assert.equal(small.regression, false);
+  assert.equal(small.suppressedReason, 'below-floor');
+});
+
+test('every gated metric is in the aggregated scenario report', () => {
   // compare.ts skips a metric the baseline lacks, so a gated metric missing from the scenario
   // reports would silently never be gated.
   for (const metric of GATED_METRICS) {
