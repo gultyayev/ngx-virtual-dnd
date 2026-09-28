@@ -1,4 +1,14 @@
-import { Component, DebugElement, Directive, OnInit, signal } from '@angular/core';
+import {
+  afterNextRender,
+  ApplicationRef,
+  Component,
+  createComponent,
+  DebugElement,
+  Directive,
+  EnvironmentInjector,
+  OnInit,
+  signal,
+} from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DroppableDirective } from './droppable.directive';
@@ -6,6 +16,7 @@ import { DroppableGroupDirective } from './droppable-group.directive';
 import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
+import { DroppableRegistryService } from '../services/droppable-registry.service';
 import {
   DraggedItem,
   DropEvent,
@@ -69,6 +80,26 @@ class TestHostComponent {
 class BoundGroupHostComponent {
   group = 'test-group';
 }
+
+// Lists recreated on every update (tracked by object identity), like an immutable drop handler
+@Component({
+  template: `
+    @for (list of lists(); track list) {
+      <div [vdndDroppable]="list.id" vdndDroppableGroup="test-group"></div>
+    }
+  `,
+  imports: [DroppableDirective],
+})
+class RecreatedListsHostComponent {
+  lists = signal([{ id: 'list-a' }, { id: 'list-b' }]);
+}
+
+// A droppable whose view is refreshed only by its own detectChanges(), not by the app
+@Component({
+  template: `<div vdndDroppable="standalone-list" vdndDroppableGroup="test-group"></div>`,
+  imports: [DroppableDirective],
+})
+class StandaloneDroppableComponent {}
 
 // A consumer directive that extends the droppable with an ngOnInit of its own
 @Directive({ selector: '[vdndTestExtendedDroppable]' })
@@ -975,6 +1006,94 @@ describe('DroppableDirective', () => {
       expect(dragStateService.activeDroppableId()).toBeNull();
 
       dragStateService.endDrag();
+    });
+  });
+
+  describe('droppable registry', () => {
+    it('registers its element under its ID and group once rendered', () => {
+      const registry = TestBed.inject(DroppableRegistryService);
+
+      expect(registry.getById('test-list')).toBe(droppableNative);
+      expect(registry.getGroup('test-group')).toEqual([droppableNative]);
+    });
+
+    it('does not register before its first render', () => {
+      const registry = TestBed.inject(DroppableRegistryService);
+      const unrendered = TestBed.createComponent(BoundGroupHostComponent);
+
+      expect(registry.getById('grouped-list')).toBeNull();
+
+      unrendered.detectChanges();
+      const element = unrendered.debugElement.query(By.directive(DroppableDirective))
+        .nativeElement as HTMLElement;
+      expect(registry.getById('grouped-list')).toBe(element);
+
+      unrendered.destroy();
+    });
+
+    it('is registered by the time afterNextRender hooks of the render that created it run', async () => {
+      // The drop animation and keyboard focus restore look droppables up from an
+      // afterNextRender hook scheduled with the drop. A drop that re-creates the lists
+      // must not leave that lookup empty.
+      const registry = TestBed.inject(DroppableRegistryService);
+      const host = TestBed.createComponent(RecreatedListsHostComponent);
+      await host.whenStable();
+
+      let seen: HTMLElement | null | undefined;
+      host.componentInstance.lists.set([{ id: 'list-a' }, { id: 'list-b' }]);
+      afterNextRender(() => (seen = registry.getById('list-b')), {
+        injector: TestBed.inject(EnvironmentInjector),
+      });
+      await host.whenStable();
+
+      const rendered = host.nativeElement.querySelector('[data-droppable-id="list-b"]');
+      expect(rendered).not.toBeNull();
+      expect(seen).toBe(rendered);
+      host.destroy();
+    });
+
+    it('registers in a view refreshed only by its own change detection', async () => {
+      const registry = TestBed.inject(DroppableRegistryService);
+      const ref = createComponent(StandaloneDroppableComponent, {
+        environmentInjector: TestBed.inject(EnvironmentInjector),
+      });
+      document.body.appendChild(ref.location.nativeElement);
+      try {
+        ref.changeDetectorRef.detectChanges();
+        await TestBed.inject(ApplicationRef).whenStable();
+
+        expect(registry.getById('standalone-list')).toBe(
+          ref.location.nativeElement.querySelector('[data-droppable-id="standalone-list"]'),
+        );
+      } finally {
+        ref.destroy();
+        ref.location.nativeElement.remove();
+      }
+    });
+
+    it('re-registers under the new ID when the droppable ID changes', () => {
+      const registry = TestBed.inject(DroppableRegistryService);
+
+      component.droppableId.set('renamed-list');
+      fixture.detectChanges();
+
+      expect(registry.getById('test-list')).toBeNull();
+      expect(registry.getById('renamed-list')).toBe(droppableNative);
+      expect(registry.getGroup('test-group')).toEqual([droppableNative]);
+    });
+
+    it('unregisters on destroy, even if its element stays in the document', () => {
+      const registry = TestBed.inject(DroppableRegistryService);
+
+      fixture.destroy();
+      // Put the element back to prove it is gone from the registry, not only from the DOM.
+      document.body.appendChild(droppableNative);
+      try {
+        expect(registry.getById('test-list')).toBeNull();
+        expect(registry.getGroup('test-group')).toEqual([]);
+      } finally {
+        droppableNative.remove();
+      }
     });
   });
 

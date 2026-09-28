@@ -8,6 +8,7 @@ import {
 } from './keyboard-drag.handler';
 import { PositionCalculatorService } from '../services/position-calculator.service';
 import { DragIndexCalculatorService } from '../services/drag-index-calculator.service';
+import { DroppableRegistryService } from '../services/droppable-registry.service';
 
 jest.mock('@angular/core', () => {
   const actual = jest.requireActual('@angular/core');
@@ -35,6 +36,9 @@ describe('KeyboardDragHandler', () => {
     groupName: string | null;
     data: unknown;
   };
+
+  /** Droppables the mocked position calculator resolves by ID (stands in for the registry). */
+  const droppablesById = new Map<string, HTMLElement>();
 
   const createElement = (): HTMLElement => {
     const el = document.createElement('div');
@@ -72,7 +76,9 @@ describe('KeyboardDragHandler', () => {
       getDroppableId: jest.fn().mockReturnValue('list-1'),
       findAdjacentDroppable: jest.fn(),
       isDroppableDisabledById: jest.fn().mockReturnValue(false),
+      getDroppableById: jest.fn((id: string) => droppablesById.get(id) ?? null),
     };
+    droppablesById.clear();
 
     mockDragIndexCalculator = {
       getTotalItemCount: jest.fn().mockReturnValue(5),
@@ -498,6 +504,7 @@ describe('KeyboardDragHandler', () => {
 
       const destination = document.createElement('div');
       destination.setAttribute('data-droppable-id', destinationId);
+      droppablesById.set(destinationId, destination);
       const firstDraggable = document.createElement('button');
       firstDraggable.setAttribute('data-draggable-id', 'first');
       const focusSpy = jest.spyOn(firstDraggable, 'focus');
@@ -524,6 +531,7 @@ describe('KeyboardDragHandler', () => {
       const createList = (id: string): HTMLButtonElement => {
         const list = document.createElement('div');
         list.setAttribute('data-droppable-id', id);
+        droppablesById.set(id, list);
         const firstDraggable = document.createElement('button');
         firstDraggable.setAttribute('data-draggable-id', `${id}-first`);
         list.appendChild(firstDraggable);
@@ -541,6 +549,8 @@ describe('KeyboardDragHandler', () => {
 
       expect(destinationFocus).toHaveBeenCalled();
       expect(sourceFocus).not.toHaveBeenCalled();
+      // The list is looked up through the droppable registry, not a document query
+      expect(mockPositionCalculator.getDroppableById).toHaveBeenCalledWith('list-2');
       sourceFirst.parentElement?.remove();
       destinationFirst.parentElement?.remove();
     });
@@ -575,6 +585,7 @@ describe('KeyboardDragHandler', () => {
       const createList = (id: string): HTMLButtonElement => {
         const list = document.createElement('div');
         list.setAttribute('data-droppable-id', id);
+        droppablesById.set(id, list);
         const firstDraggable = document.createElement('button');
         firstDraggable.setAttribute('data-draggable-id', `${id}-first`);
         list.appendChild(firstDraggable);
@@ -708,6 +719,7 @@ describe('KeyboardDragHandler', () => {
   // spacer/itemHeight division that mis-counted dynamic-height and vdnd-virtual-content lists.
   describe('cross-list item counting (issue #25)', () => {
     const created: HTMLElement[] = [];
+    const unregisters: (() => void)[] = [];
     let realPositionCalc: PositionCalculatorService;
     let realIndexCalc: DragIndexCalculatorService;
     let localHandler: KeyboardDragHandler;
@@ -734,6 +746,7 @@ describe('KeyboardDragHandler', () => {
       stubRect(el, left);
       document.body.appendChild(el);
       created.push(el);
+      unregisters.push(TestBed.inject(DroppableRegistryService).register(el, id, 'test-group'));
       return el;
     }
 
@@ -770,6 +783,8 @@ describe('KeyboardDragHandler', () => {
 
     afterEach(() => {
       localHandler.destroy();
+      unregisters.forEach((unregister) => unregister());
+      unregisters.length = 0;
       created.forEach((el) => el.remove());
       created.length = 0;
     });
@@ -809,6 +824,9 @@ describe('KeyboardDragHandler', () => {
       }
       document.body.appendChild(target);
       created.push(target);
+      unregisters.push(
+        TestBed.inject(DroppableRegistryService).register(target, 'content-list', 'test-group'),
+      );
 
       localHandler.handleKey(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
 

@@ -475,7 +475,7 @@ Controls edge auto-scrolling during drag operations. Usually configured via comp
 
 **Injectable:** `providedIn: 'root'` (singleton)
 
-Internal service for DOM hit-testing and drop position calculation. Exported for advanced customization.
+Internal service for DOM hit-testing and drop position calculation. Exported for advanced customization. Its droppable lookups (`findDroppableAtPoint`, `getDroppableById`, `findAdjacentDroppable`) only see droppables rendered with `vdndDroppable`, which register themselves; an element that merely carries `data-droppable-*` attributes is ignored.
 
 **Key Methods:**
 
@@ -485,7 +485,7 @@ Internal service for DOM hit-testing and drop position calculation. Exported for
 | `findDraggableAtPoint` | `(x, y, draggedElement) => HTMLElement \| null` | Find draggable element at cursor position |
 | `getDroppableId` | `(element) => string \| null` | Get droppable ID from element's data attribute |
 | `calculateDropIndex` | `(scrollTop, cursorY, containerTop, itemHeight, totalItems) => number` | Fixed-height index math: `floor((cursorY - containerTop + scrollTop) / itemHeight)`, clamped to `[0, totalItems]` |
-| `refreshCandidates` | `() => void` | Re-query the active drag's candidate droppables (picks up droppables added/removed mid-drag). Called automatically by droppable lifecycle hooks; exposed as a manual escape hatch |
+| `refreshCandidates` | `() => void` | Re-read the active drag's candidate droppables (picks up droppables added/removed mid-drag). Runs automatically when a droppable registers or unregisters; exposed as a manual escape hatch |
 
 ### ElementCloneService
 

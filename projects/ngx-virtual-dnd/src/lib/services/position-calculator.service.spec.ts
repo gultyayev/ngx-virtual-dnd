@@ -1,12 +1,32 @@
 import { TestBed } from '@angular/core/testing';
 import { PositionCalculatorService } from './position-calculator.service';
+import { DroppableRegistryService } from './droppable-registry.service';
 
 describe('PositionCalculatorService', () => {
   let service: PositionCalculatorService;
+  let registry: DroppableRegistryService;
+  const unregisters: (() => void)[] = [];
+
+  /** Register a test droppable the way `DroppableDirective` does, from its data attributes. */
+  function registerDroppable(el: HTMLElement): void {
+    unregisters.push(
+      registry.register(
+        el,
+        el.getAttribute('data-droppable-id') ?? '',
+        el.getAttribute('data-droppable-group') ?? '',
+      ),
+    );
+  }
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
     service = TestBed.inject(PositionCalculatorService);
+    registry = TestBed.inject(DroppableRegistryService);
+  });
+
+  afterEach(() => {
+    unregisters.forEach((unregister) => unregister());
+    unregisters.length = 0;
   });
 
   describe('calculateDropIndex', () => {
@@ -307,6 +327,7 @@ describe('PositionCalculatorService', () => {
       el.setAttribute('data-droppable-id', id);
       el.setAttribute('data-droppable-group', group);
       stubRect(el, rect);
+      registerDroppable(el);
       document.body.appendChild(el);
       created.push(el);
       return el;
@@ -368,6 +389,7 @@ describe('PositionCalculatorService', () => {
       inner.setAttribute('data-droppable-group', 'g');
       stubRect(inner, { top: 100, left: 100, right: 300, bottom: 300 });
       outer.appendChild(inner);
+      registerDroppable(inner);
       created.push(inner);
 
       service.beginDragSession('g');
@@ -406,7 +428,7 @@ describe('PositionCalculatorService', () => {
       const dragged = document.createElement('div');
       const drop = makeDroppable('list', 'g', { top: 100, left: 100, right: 300, bottom: 400 });
 
-      // No beginDragSession() — lazy path queries the DOM directly.
+      // No beginDragSession() — one-shot path reads the registry directly.
       expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBe(drop);
     });
   });
@@ -437,6 +459,7 @@ describe('PositionCalculatorService', () => {
       el.setAttribute('data-droppable-id', id);
       el.setAttribute('data-droppable-group', group);
       stubRect(el, rect);
+      registerDroppable(el);
       document.body.appendChild(el);
       created.push(el);
       return el;
@@ -448,25 +471,36 @@ describe('PositionCalculatorService', () => {
       created.length = 0;
     });
 
-    it('refreshCandidates picks up a droppable mounted after the session started', () => {
+    it('a droppable registered mid-drag is a candidate on the next hit-test', () => {
       const dragged = document.createElement('div');
       makeDroppable('a', 'g', { top: 0, left: 0, right: 100, bottom: 100 });
 
       service.beginDragSession('g');
 
-      // A new droppable mounts mid-drag (e.g. a conditionally rendered list).
+      // A new droppable mounts mid-drag (e.g. a conditionally rendered list) and registers.
       const b = makeDroppable('b', 'g', { top: 200, left: 200, right: 400, bottom: 400 });
 
-      // Frozen candidate list does not see it yet.
-      expect(service.findDroppableAtPoint(300, 300, dragged, 'g')).toBeNull();
-
-      service.refreshCandidates();
-
-      // After an explicit refresh it becomes a valid target.
       expect(service.findDroppableAtPoint(300, 300, dragged, 'g')).toBe(b);
     });
 
-    it('refreshCandidates drops a droppable removed mid-session', () => {
+    it('a droppable unregistered mid-drag stops being a candidate', () => {
+      const dragged = document.createElement('div');
+      const el = document.createElement('div');
+      stubRect(el, { top: 0, left: 0, right: 300, bottom: 300 });
+      document.body.appendChild(el);
+      created.push(el);
+      const unregister = registry.register(el, 'a', 'g');
+
+      service.beginDragSession('g');
+      expect(service.findDroppableAtPoint(100, 100, dragged, 'g')).toBe(el);
+
+      // Destroyed directive: unregistered while its element is still in the DOM.
+      unregister();
+
+      expect(service.findDroppableAtPoint(100, 100, dragged, 'g')).toBeNull();
+    });
+
+    it('refreshCandidates drops a droppable removed from the DOM mid-session', () => {
       const dragged = document.createElement('div');
       const a = makeDroppable('a', 'g', { top: 0, left: 0, right: 300, bottom: 300 });
 
@@ -479,39 +513,102 @@ describe('PositionCalculatorService', () => {
       expect(service.findDroppableAtPoint(100, 100, dragged, 'g')).toBeNull();
     });
 
-    it('notifyCandidatesChanged makes the next hit-test observe a newly mounted droppable', () => {
+    it("a registration in another group does not re-read this session's candidates", () => {
       const dragged = document.createElement('div');
       makeDroppable('a', 'g', { top: 0, left: 0, right: 100, bottom: 100 });
-
       service.beginDragSession('g');
+      const getGroup = jest.spyOn(registry, 'getGroup');
 
-      const b = makeDroppable('b', 'g', { top: 200, left: 200, right: 400, bottom: 400 });
-      expect(service.findDroppableAtPoint(300, 300, dragged, 'g')).toBeNull();
+      makeDroppable('foreign', 'other-group', { top: 200, left: 200, right: 400, bottom: 400 });
+      service.findDroppableAtPoint(50, 50, dragged, 'g');
 
-      // A droppable directive registering mid-drag notifies the calculator.
-      service.notifyCandidatesChanged('g');
-
-      expect(service.findDroppableAtPoint(300, 300, dragged, 'g')).toBe(b);
+      expect(getGroup).not.toHaveBeenCalled();
     });
 
-    it('notifyCandidatesChanged ignores notifications for a different group', () => {
+    it('notifyCandidatesChanged re-reads candidates only for the session group', () => {
       const dragged = document.createElement('div');
       makeDroppable('a', 'g', { top: 0, left: 0, right: 100, bottom: 100 });
-
       service.beginDragSession('g');
-      const b = makeDroppable('b', 'g', { top: 200, left: 200, right: 400, bottom: 400 });
+      const getGroup = jest.spyOn(registry, 'getGroup');
 
-      // Notification for an unrelated group must not refresh this session's candidates.
       service.notifyCandidatesChanged('other-group');
-      expect(service.findDroppableAtPoint(300, 300, dragged, 'g')).toBeNull();
+      service.findDroppableAtPoint(50, 50, dragged, 'g');
+      expect(getGroup).not.toHaveBeenCalled();
 
-      // The matching group's notification does refresh them.
       service.notifyCandidatesChanged('g');
-      expect(service.findDroppableAtPoint(300, 300, dragged, 'g')).toBe(b);
+      service.findDroppableAtPoint(50, 50, dragged, 'g');
+      expect(getGroup).toHaveBeenCalledWith('g');
     });
 
     it('refreshCandidates is a no-op when no session is active', () => {
       expect(() => service.refreshCandidates()).not.toThrow();
+    });
+  });
+
+  describe('droppable discovery via the registry', () => {
+    const created: HTMLElement[] = [];
+
+    function stubRect(el: HTMLElement, rect: Partial<DOMRect>): void {
+      el.getBoundingClientRect = () =>
+        ({
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+          ...rect,
+        }) as DOMRect;
+    }
+
+    afterEach(() => {
+      service.endDragSession();
+      created.forEach((el) => el.remove());
+      created.length = 0;
+    });
+
+    it('ignores an element with droppable attributes that never registered', () => {
+      const dragged = document.createElement('div');
+      const stray = document.createElement('div');
+      stray.setAttribute('data-droppable-id', 'stray');
+      stray.setAttribute('data-droppable-group', 'g');
+      stubRect(stray, { top: 0, left: 0, right: 300, bottom: 300 });
+      document.body.appendChild(stray);
+      created.push(stray);
+
+      service.beginDragSession('g');
+
+      expect(service.findDroppableAtPoint(100, 100, dragged, 'g')).toBeNull();
+      expect(service.getDroppableById('stray')).toBeNull();
+    });
+
+    it('finds droppables registered inside an open shadow root', () => {
+      const dragged = document.createElement('div');
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      created.push(host);
+      const shadow = host.attachShadow({ mode: 'open' });
+
+      const left = document.createElement('div');
+      left.setAttribute('data-droppable-id', 'left');
+      stubRect(left, { top: 0, left: 0, right: 100, bottom: 100 });
+      shadow.appendChild(left);
+      unregisters.push(registry.register(left, 'left', 'g'));
+
+      const right = document.createElement('div');
+      right.setAttribute('data-droppable-id', 'right');
+      stubRect(right, { top: 0, left: 200, right: 300, bottom: 100 });
+      shadow.appendChild(right);
+      unregisters.push(registry.register(right, 'right', 'g'));
+
+      expect(service.getDroppableById('right')).toBe(right);
+      expect(service.findAdjacentDroppable('left', 'right', 'g')?.element).toBe(right);
+
+      service.beginDragSession('g');
+      expect(service.findDroppableAtPoint(250, 50, dragged, 'g')).toBe(right);
     });
   });
 
@@ -559,6 +656,7 @@ describe('PositionCalculatorService', () => {
       drop.setAttribute('data-droppable-group', 'g');
       stubRect(drop, { top: 0, left: 100, right: 300, bottom: 600 });
       scrollable.appendChild(drop);
+      registerDroppable(drop);
       created.push(drop);
 
       service.beginDragSession('g');
@@ -577,6 +675,7 @@ describe('PositionCalculatorService', () => {
       drop.setAttribute('data-droppable-id', 'list');
       drop.setAttribute('data-droppable-group', 'g');
       stubRect(drop, { top: 0, left: 0, right: 300, bottom: 600 });
+      registerDroppable(drop);
       document.body.appendChild(drop);
       created.push(drop);
 
@@ -592,6 +691,7 @@ describe('PositionCalculatorService', () => {
       const el = document.createElement('div');
       el.setAttribute('data-droppable-id', id);
       el.setAttribute('data-droppable-group', group);
+      registerDroppable(el);
       document.body.appendChild(el);
       createdById.push(el);
       return el;
@@ -617,10 +717,10 @@ describe('PositionCalculatorService', () => {
       expect(service.getDroppableById('list-999')).toBeNull();
     });
 
-    it('falls back to a DOM query when no session is active', () => {
+    it('finds the droppable through the registry when no session is active', () => {
       const drop = makeDroppableById('list-1', 'g');
 
-      // No session active — should still find via querySelector.
+      // No session active — found through the registry.
       expect(service.getDroppableById('list-1')).toBe(drop);
     });
 
@@ -656,6 +756,7 @@ describe('PositionCalculatorService', () => {
           y: 0,
           toJSON: () => ({}),
         }) as DOMRect;
+      registerDroppable(el);
       document.body.appendChild(el);
       createdAdjacent.push(el);
       return el;
@@ -734,6 +835,7 @@ describe('PositionCalculatorService', () => {
         el.setAttribute('data-droppable-disabled', 'true');
       }
       stub(el, rect);
+      registerDroppable(el);
       document.body.appendChild(el);
       createdDisabled.push(el);
       return el;

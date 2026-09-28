@@ -129,11 +129,16 @@ describe('DropAnimator', () => {
 });
 
 describe('findDropTarget', () => {
-  const createList = (id: string, bounds: DOMRect): HTMLElement => {
+  /** Stands in for the droppable registry lookup. */
+  const lists = new Map<string, HTMLElement>();
+  const getDroppable = (id: string): HTMLElement | null => lists.get(id) ?? null;
+
+  const createList = (id: string, bounds: DOMRect, parent: Node = document.body): HTMLElement => {
     const list = document.createElement('div');
     list.setAttribute('data-droppable-id', id);
     list.getBoundingClientRect = () => bounds;
-    document.body.appendChild(list);
+    parent.appendChild(list);
+    lists.set(id, list);
     return list;
   };
 
@@ -147,6 +152,7 @@ describe('findDropTarget', () => {
 
   afterEach(() => {
     document.body.innerHTML = '';
+    lists.clear();
   });
 
   it('finds the item in the first listed droppable that renders it', () => {
@@ -155,7 +161,7 @@ describe('findDropTarget', () => {
     addItem(source, 'item-1', rect(0, 0, 200, 50));
     const landed = addItem(target, 'item-1', rect(300, 100, 200, 50));
 
-    const result = findDropTarget('item-1', ['target', 'source']);
+    const result = findDropTarget('item-1', ['target', 'source'], getDroppable);
 
     expect(result?.element).toBe(landed);
     expect(result?.rect.top).toBe(100);
@@ -166,21 +172,31 @@ describe('findDropTarget', () => {
     createList('target', rect(300, 0, 200, 400));
     const original = addItem(source, 'item-1', rect(0, 50, 200, 50));
 
-    expect(findDropTarget('item-1', ['target', 'source'])?.element).toBe(original);
+    expect(findDropTarget('item-1', ['target', 'source'], getDroppable)?.element).toBe(original);
+  });
+
+  it('finds the item in a list the lookup returns from inside a shadow root', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: 'open' });
+    const list = createList('list', rect(0, 0, 200, 400), shadow);
+    const item = addItem(list, 'item-1', rect(0, 50, 200, 50));
+
+    expect(findDropTarget('item-1', ['list'], getDroppable)?.element).toBe(item);
   });
 
   it('returns null when the item is scrolled out of its list', () => {
     const list = createList('list', rect(0, 0, 200, 400));
     addItem(list, 'item-1', rect(0, 450, 200, 50));
 
-    expect(findDropTarget('item-1', ['list'])).toBeNull();
+    expect(findDropTarget('item-1', ['list'], getDroppable)).toBeNull();
   });
 
   it('returns null when the item is hidden or not rendered anywhere', () => {
     const list = createList('list', rect(0, 0, 200, 400));
     addItem(list, 'hidden', rect(0, 0, 0, 0));
 
-    expect(findDropTarget('hidden', ['list'])).toBeNull();
-    expect(findDropTarget('missing', ['list', null])).toBeNull();
+    expect(findDropTarget('hidden', ['list'], getDroppable)).toBeNull();
+    expect(findDropTarget('missing', ['list', null], getDroppable)).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DragPreviewComponent, DragPreviewContext } from './drag-preview.component';
 import { DragStateService } from '../services/drag-state.service';
 import { OverlayContainerService } from '../services/overlay-container.service';
+import { DroppableRegistryService } from '../services/droppable-registry.service';
 import { CursorPosition, DraggedItem, GrabOffset } from '../models/drag-drop.models';
 import { VDND_ANIMATION_CONFIG, VdndAnimationConfig } from '../tokens/animation-config.token';
 
@@ -398,6 +399,8 @@ describe('DragPreviewComponent', () => {
         droppable.getBoundingClientRect = () =>
           ({ left: 0, top: 0, right: 300, bottom: 500, width: 300, height: 500 }) as DOMRect;
         document.body.appendChild(droppable);
+        // As DroppableDirective does once rendered
+        TestBed.inject(DroppableRegistryService).register(droppable, droppableId, 'group');
       }
       const item = document.createElement('div');
       item.setAttribute('data-draggable-id', draggableId);
