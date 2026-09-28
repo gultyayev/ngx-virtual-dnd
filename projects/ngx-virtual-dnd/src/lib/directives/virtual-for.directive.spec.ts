@@ -837,7 +837,12 @@ describe('VirtualForDirective (content offset)', () => {
           droppableId: 'list'
         "
       >
-        <div class="item" [attr.data-id]="item.key" [attr.data-index]="i">
+        <div
+          class="item"
+          [attr.data-id]="item.key"
+          [attr.data-index]="i"
+          [attr.data-selected]="selected() === item.key"
+        >
           {{ countRowRender(item.key) }}
         </div>
       </ng-container>
@@ -850,6 +855,8 @@ describe('VirtualForDirective (content offset)', () => {
 class RenderCountingHostComponent implements VdndScrollContainer {
   readonly items = Array.from({ length: 30 }, (_, i) => ({ key: `k${i}` }));
   readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+
+  readonly selected = signal<string | null>(null);
 
   hostRenders = 0;
   readonly rowRenders: string[] = [];
@@ -971,5 +978,32 @@ describe('VirtualForDirective (change detection scope)', () => {
       Array.from({ length: 11 }, (_, i) => `${i + 1}`),
     );
     expect(rows.map((row) => row.textContent?.trim())).toEqual(renderedIds());
+  });
+
+  it('renders a pooled row again when it comes back for the same item', () => {
+    const selectedAttr = (key: string): string | null | undefined =>
+      (fixture.nativeElement as HTMLElement)
+        .querySelector(`[data-id="${key}"]`)
+        ?.getAttribute('data-selected');
+
+    // First row in view 25: rows 22-29. Then 26: k22 leaves the range and its view is pooled
+    host.scrollTop.set(1250);
+    appRef.tick();
+    // A host re-render renders the rows too (their signal reads now count as the host's)
+    host.selected.set('k29');
+    appRef.tick();
+    host.scrollTop.set(1300);
+    appRef.tick();
+    expect(selectedAttr('k22')).toBeUndefined();
+
+    // State the row shows changes while its view is detached in the pool
+    host.selected.set('k22');
+    appRef.tick();
+
+    // Back to 25: the pool hands the same view to k22, with the same context as before
+    host.scrollTop.set(1250);
+    appRef.tick();
+
+    expect(selectedAttr('k22')).toBe('true');
   });
 });

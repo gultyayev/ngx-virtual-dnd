@@ -817,17 +817,21 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
   /**
    * Get an existing view or create/recycle one from the pool.
-   * Adds the view to `changedViews` when its context changed and it needs rendering.
+   * Adds the view to `changedViews` when it needs rendering: new, taken from the pool, or with a
+   * changed context.
    */
   #getOrCreateView(
     key: unknown,
     context: VirtualForContext<T>,
     changedViews: EmbeddedViewRef<VirtualForContext<T>>[],
   ): EmbeddedViewRef<VirtualForContext<T>> {
-    let view = this.#activeViews.get(key) ?? this.#viewPool.pop();
+    const activeView = this.#activeViews.get(key);
+    let view = activeView ?? this.#viewPool.pop();
 
     if (view) {
-      if (this.#updateContext(view.context, context)) {
+      // A pooled view was detached, so change detection skipped it: render it even when it
+      // comes back with the same context, as what its template shows may have changed since
+      if (this.#updateContext(view.context, context) || !activeView) {
         changedViews.push(view);
       }
     } else {
