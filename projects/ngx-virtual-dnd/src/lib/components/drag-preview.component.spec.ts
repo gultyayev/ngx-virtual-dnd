@@ -128,7 +128,7 @@ describe('DragPreviewComponent', () => {
         expect(preview).not.toBeNull();
       });
 
-      it('should not be visible when dragging but cursor position is null', () => {
+      it('should not be visible when the drag has no start position', () => {
         const item = createMockDraggedItem();
         dragStateService.startDrag(item);
         fixture.detectChanges();
@@ -181,6 +181,19 @@ describe('DragPreviewComponent', () => {
         // Should use default cursorOffset input: (100-8, 100-8) = (92, 92)
         expect(preview!.style.transform).toBe('translate3d(92px, 92px, 0)');
       });
+    });
+
+    it('should reposition when cursorOffset changes mid-drag', () => {
+      dragStateService.startDrag(createMockDraggedItem(), { x: 100, y: 100 }); // No grab offset
+      fixture.detectChanges();
+      fixture.detectChanges();
+
+      fixture.componentInstance.cursorOffset = { x: 20, y: 30 };
+      fixture.changeDetectorRef.markForCheck();
+      fixture.detectChanges();
+
+      const preview = queryPreview('.vdnd-drag-preview');
+      expect(preview!.style.transform).toBe('translate3d(80px, 70px, 0)');
     });
 
     describe('dimensions', () => {
@@ -586,9 +599,18 @@ describe('DragPreviewComponent', () => {
     it('a new drag cuts the drop animation short', () => {
       const landed = addListItem('list-1', 'item-1', 120);
       startDrag();
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 300, y: 250 },
+        activeDroppableId: 'list-1',
+        placeholderId: null,
+        placeholderIndex: 2,
+      });
       dragStateService.endDrag();
       render();
       const glide = animations.get(queryPreview('.vdnd-drag-preview')!)!;
+      expect(queryPreview('.vdnd-drag-preview')!.style.transform).toBe(
+        'translate3d(290px, 240px, 0)',
+      );
 
       startDrag();
 
@@ -596,6 +618,8 @@ describe('DragPreviewComponent', () => {
       expect(animations.get(landed)!.cancel).toHaveBeenCalled();
       const preview = queryPreview('.vdnd-drag-preview')!;
       expect(preview.getAttribute('data-testid')).toBe('vdnd-drag-preview');
+      // Back at the new drag's cursor, not the settled position
+      expect(preview.style.transform).toBe('translate3d(90px, 90px, 0)');
     });
 
     it('hides the preview immediately when the drop duration is 0', () => {
