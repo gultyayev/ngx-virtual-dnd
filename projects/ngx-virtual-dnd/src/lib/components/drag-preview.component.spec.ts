@@ -4,6 +4,7 @@ import { DragPreviewComponent, DragPreviewContext } from './drag-preview.compone
 import { DragStateService } from '../services/drag-state.service';
 import { OverlayContainerService } from '../services/overlay-container.service';
 import { DroppableRegistryService } from '../services/droppable-registry.service';
+import { DragSchedulerService } from '../services/drag-scheduler.service';
 import { CursorPosition, DraggedItem, GrabOffset } from '../models/drag-drop.models';
 import { VDND_ANIMATION_CONFIG, VdndAnimationConfig } from '../tokens/animation-config.token';
 
@@ -127,7 +128,7 @@ describe('DragPreviewComponent', () => {
         expect(preview).not.toBeNull();
       });
 
-      it('should not be visible when dragging but cursor position is null', () => {
+      it('should not be visible when the drag has no start position', () => {
         const item = createMockDraggedItem();
         dragStateService.startDrag(item);
         fixture.detectChanges();
@@ -180,74 +181,19 @@ describe('DragPreviewComponent', () => {
         // Should use default cursorOffset input: (100-8, 100-8) = (92, 92)
         expect(preview!.style.transform).toBe('translate3d(92px, 92px, 0)');
       });
-
-      it('should update position when cursor moves', () => {
-        const item = createMockDraggedItem();
-        dragStateService.startDrag(item, { x: 100, y: 100 }, { x: 0, y: 0 });
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        let preview = queryPreview('.vdnd-drag-preview');
-        expect(preview!.style.transform).toBe('translate3d(100px, 100px, 0)');
-
-        dragStateService.updateDragPosition({
-          cursorPosition: { x: 200, y: 200 },
-          activeDroppableId: null,
-          placeholderId: null,
-          placeholderIndex: null,
-        });
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        preview = queryPreview('.vdnd-drag-preview');
-        expect(preview!.style.transform).toBe('translate3d(200px, 200px, 0)');
-      });
     });
 
-    describe('axis locking', () => {
-      it('should lock x axis when configured', () => {
-        const item = createMockDraggedItem();
-        const initialPosition = { x: 100, y: 100 };
-        const grabOffset = { x: 0, y: 0 };
+    it('should reposition when cursorOffset changes mid-drag', () => {
+      dragStateService.startDrag(createMockDraggedItem(), { x: 100, y: 100 }); // No grab offset
+      fixture.detectChanges();
+      fixture.detectChanges();
 
-        dragStateService.startDrag(item, initialPosition, grabOffset, 'x');
-        fixture.detectChanges();
-        fixture.detectChanges();
+      fixture.componentInstance.cursorOffset = { x: 20, y: 30 };
+      fixture.changeDetectorRef.markForCheck();
+      fixture.detectChanges();
 
-        dragStateService.updateDragPosition({
-          cursorPosition: { x: 200, y: 200 },
-          activeDroppableId: null,
-          placeholderId: null,
-          placeholderIndex: null,
-        });
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        const preview = queryPreview('.vdnd-drag-preview');
-        expect(preview!.style.transform).toBe('translate3d(100px, 200px, 0)');
-      });
-
-      it('should lock y axis when configured', () => {
-        const item = createMockDraggedItem();
-        const initialPosition = { x: 100, y: 100 };
-        const grabOffset = { x: 0, y: 0 };
-
-        dragStateService.startDrag(item, initialPosition, grabOffset, 'y');
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        dragStateService.updateDragPosition({
-          cursorPosition: { x: 200, y: 200 },
-          activeDroppableId: null,
-          placeholderId: null,
-          placeholderIndex: null,
-        });
-        fixture.detectChanges();
-        fixture.detectChanges();
-
-        const preview = queryPreview('.vdnd-drag-preview');
-        expect(preview!.style.transform).toBe('translate3d(200px, 100px, 0)');
-      });
+      const preview = queryPreview('.vdnd-drag-preview');
+      expect(preview!.style.transform).toBe('translate3d(80px, 70px, 0)');
     });
 
     describe('dimensions', () => {
@@ -378,6 +324,140 @@ describe('DragPreviewComponent', () => {
     });
   });
 
+  describe('frame writes', () => {
+    const originalRAF = globalThis.requestAnimationFrame;
+    const originalCancelRAF = globalThis.cancelAnimationFrame;
+    let rafCallbacks: Map<number, FrameRequestCallback>;
+    let rafId: number;
+    let fixture: ComponentFixture<DefaultTestHostComponent>;
+    let dragStateService: DragStateService;
+    let scheduler: DragSchedulerService;
+    let overlayContainerService: OverlayContainerService;
+
+    /** Run the queued animation frames, without any change detection. */
+    const flushRAF = (): void => {
+      const batch = [...rafCallbacks.values()];
+      rafCallbacks.clear();
+      batch.forEach((cb) => cb(performance.now()));
+    };
+
+    /** Start a drag the way DraggableDirective does: the scheduler tick writes the cursor. */
+    const startPointerDrag = (lockAxis: 'x' | 'y' | null = null): void => {
+      dragStateService.startDrag(
+        createMockDraggedItem(),
+        { x: 100, y: 100 },
+        { x: 0, y: 0 },
+        lockAxis,
+      );
+      fixture.detectChanges();
+      fixture.detectChanges();
+      scheduler.start((cursor, cursorDirty) => {
+        if (cursorDirty && cursor) {
+          dragStateService.updateDragPosition({
+            cursorPosition: cursor,
+            activeDroppableId: null,
+            placeholderId: null,
+            placeholderIndex: null,
+          });
+        }
+      });
+    };
+
+    beforeEach(() => {
+      rafCallbacks = new Map();
+      rafId = 0;
+      globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+        rafCallbacks.set(++rafId, cb);
+        return rafId;
+      }) as typeof requestAnimationFrame;
+      globalThis.cancelAnimationFrame = (id: number) => {
+        rafCallbacks.delete(id);
+      };
+
+      TestBed.configureTestingModule({ imports: [DefaultTestHostComponent] });
+      fixture = TestBed.createComponent(DefaultTestHostComponent);
+      dragStateService = TestBed.inject(DragStateService);
+      scheduler = TestBed.inject(DragSchedulerService);
+      overlayContainerService = TestBed.inject(OverlayContainerService);
+      fixture.detectChanges();
+      fixture.detectChanges();
+    });
+
+    afterEach(() => {
+      scheduler.stop();
+      dragStateService.endDrag();
+      fixture.destroy();
+      overlayContainerService.ngOnDestroy();
+      globalThis.requestAnimationFrame = originalRAF;
+      globalThis.cancelAnimationFrame = originalCancelRAF;
+    });
+
+    it('moves the preview inside the scheduler frame, before change detection runs', () => {
+      startPointerDrag();
+      const preview = queryPreview('.vdnd-drag-preview')!;
+      expect(preview.style.transform).toBe('translate3d(100px, 100px, 0)');
+
+      scheduler.queueCursorUpdate({ x: 200, y: 150 });
+      flushRAF();
+
+      expect(preview.style.transform).toBe('translate3d(200px, 150px, 0)');
+    });
+
+    it('schedules no render when only the cursor moves', async () => {
+      startPointerDrag();
+      await fixture.whenStable();
+      expect(fixture.isStable()).toBe(true);
+
+      scheduler.queueCursorUpdate({ x: 200, y: 150 });
+      flushRAF();
+
+      // A pending render would mean a full ApplicationRef.tick() on every pointer frame
+      expect(fixture.isStable()).toBe(true);
+    });
+
+    it('locks the x axis in the frame write', () => {
+      startPointerDrag('x');
+      const preview = queryPreview('.vdnd-drag-preview')!;
+
+      scheduler.queueCursorUpdate({ x: 200, y: 300 });
+      flushRAF();
+
+      expect(preview.style.transform).toBe('translate3d(100px, 300px, 0)');
+    });
+
+    it('locks the y axis in the frame write', () => {
+      startPointerDrag('y');
+      const preview = queryPreview('.vdnd-drag-preview')!;
+
+      scheduler.queueCursorUpdate({ x: 200, y: 300 });
+      flushRAF();
+
+      expect(preview.style.transform).toBe('translate3d(200px, 100px, 0)');
+    });
+
+    it('agrees with the rendered position once change detection catches up', () => {
+      startPointerDrag();
+      scheduler.queueCursorUpdate({ x: 200, y: 150 });
+      flushRAF();
+      fixture.detectChanges();
+
+      expect(queryPreview('.vdnd-drag-preview')!.style.transform).toBe(
+        'translate3d(200px, 150px, 0)',
+      );
+    });
+
+    it('stops writing once destroyed', () => {
+      startPointerDrag();
+      const preview = queryPreview('.vdnd-drag-preview')!;
+      fixture.destroy();
+
+      scheduler.queueCursorUpdate({ x: 200, y: 150 });
+      flushRAF();
+
+      expect(preview.style.transform).toBe('translate3d(100px, 100px, 0)');
+    });
+  });
+
   describe('drop animation', () => {
     const originalAnimate = Element.prototype.animate;
     let fixture: ComponentFixture<AnimatedTestHostComponent>;
@@ -473,6 +553,27 @@ describe('DragPreviewComponent', () => {
       expect(animations.get(landed)!.cancel).toHaveBeenCalled();
     });
 
+    it('starts the glide from a release position written outside a frame', () => {
+      addListItem('list-1', 'item-1', 120);
+      startDrag();
+
+      // DraggableDirective flushes the release position synchronously, then ends the drag
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 300, y: 250 },
+        activeDroppableId: 'list-1',
+        placeholderId: null,
+        placeholderIndex: 2,
+      });
+      dragStateService.endDrag();
+      render();
+
+      const preview = queryPreview('.vdnd-drag-preview')!;
+      expect(preview.style.transform).toBe('translate3d(290px, 240px, 0)');
+      expect(animations.get(preview)?.keyframes[0]['transform']).toBe(
+        'translate3d(290px, 240px, 0) translate(0px, 0px)',
+      );
+    });
+
     it('fades out in place when the dropped item is not rendered', () => {
       startDrag();
 
@@ -498,9 +599,18 @@ describe('DragPreviewComponent', () => {
     it('a new drag cuts the drop animation short', () => {
       const landed = addListItem('list-1', 'item-1', 120);
       startDrag();
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 300, y: 250 },
+        activeDroppableId: 'list-1',
+        placeholderId: null,
+        placeholderIndex: 2,
+      });
       dragStateService.endDrag();
       render();
       const glide = animations.get(queryPreview('.vdnd-drag-preview')!)!;
+      expect(queryPreview('.vdnd-drag-preview')!.style.transform).toBe(
+        'translate3d(290px, 240px, 0)',
+      );
 
       startDrag();
 
@@ -508,6 +618,8 @@ describe('DragPreviewComponent', () => {
       expect(animations.get(landed)!.cancel).toHaveBeenCalled();
       const preview = queryPreview('.vdnd-drag-preview')!;
       expect(preview.getAttribute('data-testid')).toBe('vdnd-drag-preview');
+      // Back at the new drag's cursor, not the settled position
+      expect(preview.style.transform).toBe('translate3d(90px, 90px, 0)');
     });
 
     it('hides the preview immediately when the drop duration is 0', () => {
