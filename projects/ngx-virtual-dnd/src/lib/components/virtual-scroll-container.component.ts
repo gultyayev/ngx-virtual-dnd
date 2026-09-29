@@ -4,12 +4,17 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  ComponentRef,
   computed,
+  createComponent,
   effect,
   ElementRef,
+  EmbeddedViewRef,
+  EnvironmentInjector,
   inject,
   Injector,
   input,
+  isDevMode,
   NgZone,
   OnDestroy,
   OnInit,
@@ -17,8 +22,10 @@ import {
   signal,
   TemplateRef,
   untracked,
+  viewChild,
+  ViewContainerRef,
 } from '@angular/core';
-import { isPlatformBrowser, NgTemplateOutlet } from '@angular/common';
+import { isPlatformBrowser } from '@angular/common';
 import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
@@ -46,6 +53,38 @@ export interface VirtualScrollItemContext<T> {
   index: number;
   /** Whether this item is "sticky" (always rendered) */
   isSticky: boolean;
+}
+
+/** An entry of the rendered list: an item's row, or the placeholder. */
+interface RenderedEntry<T> {
+  type: 'item' | 'placeholder';
+  data: T | null;
+  index: number;
+  isSticky: boolean;
+  isDragging: boolean;
+}
+
+/** A rendered row: the item template's view and the track key it was created for. */
+interface RowView<T> {
+  key: unknown;
+  view: EmbeddedViewRef<VirtualScrollItemContext<T>>;
+}
+
+/** `Node.DOCUMENT_POSITION_FOLLOWING`, without the `Node` global (servers have none) */
+const DOCUMENT_POSITION_FOLLOWING = 4;
+
+/**
+ * The node that comes first in the DOM. A view's `rootNodes` list a control flow block's anchor
+ * before the nodes rendered in it, which the DOM puts before the anchor.
+ */
+function firstInDocumentOrder(nodes: Node[]): Node | null {
+  let first: Node | null = null;
+  for (const node of nodes) {
+    if (first === null || node.compareDocumentPosition(first) & DOCUMENT_POSITION_FOLLOWING) {
+      first = node;
+    }
+  }
+  return first;
 }
 
 /**
@@ -88,36 +127,21 @@ export interface VirtualScrollItemContext<T> {
 @Component({
   selector: 'vdnd-virtual-scroll',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, DragPlaceholderComponent],
   host: {
     class: 'vdnd-virtual-scroll',
     '[style.height.px]': 'containerHeight() ?? null',
     '[attr.data-item-height]': 'itemHeight()',
     '[attr.data-total-items]': 'items().length',
   },
+  // No bindings: the effects render the rows, the placeholder, the spacer height and the content
+  // offset (see #render). A signal read here would re-render every row whenever it changes.
   template: `
     <!-- Single spacer maintains scroll height -->
-    <div class="vdnd-virtual-scroll-spacer" [style.height.px]="totalHeight()"></div>
+    <div #spacer class="vdnd-virtual-scroll-spacer"></div>
 
     <!-- Content wrapper positioned via GPU-accelerated transform -->
-    <div class="vdnd-virtual-scroll-content-wrapper" [style.transform]="contentTransform()">
-      @for (entry of renderedItems(); track trackEntry($index, entry)) {
-        @if (entry.type === 'placeholder') {
-          <vdnd-drag-placeholder [itemHeight]="placeholderHeight()" />
-        } @else {
-          <ng-container
-            *ngTemplateOutlet="
-              itemTemplate();
-              context: {
-                $implicit: entry.data,
-                index: entry.index,
-                isSticky: entry.isSticky,
-              }
-            "
-          >
-          </ng-container>
-        }
-      }
+    <div #contentWrapper class="vdnd-virtual-scroll-content-wrapper">
+      <ng-container #rows />
     </div>
   `,
   styles: `
@@ -159,6 +183,7 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
   readonly #keyboardDrag = inject(KeyboardDragService);
   readonly #ngZone = inject(NgZone);
   readonly #injector = inject(Injector);
+  readonly #environmentInjector = inject(EnvironmentInjector);
   readonly #isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   /** Cleanup function for scroll listener */
@@ -178,6 +203,39 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
 
   /** Slides items displaced by the placeholder (only when VDND_ANIMATION_CONFIG is provided) */
   readonly #shiftAnimator = this.#createShiftAnimator();
+
+  /** The template's spacer (cannot use ES private with viewChild) */
+  private readonly spacer = viewChild<ElementRef<HTMLElement>>('spacer');
+
+  /** The template's content wrapper (cannot use ES private with viewChild) */
+  private readonly contentWrapper = viewChild<ElementRef<HTMLElement>>('contentWrapper');
+
+  /** Where #renderRows inserts the rows (cannot use ES private with viewChild) */
+  private readonly rowOutlet = viewChild('rows', { read: ViewContainerRef });
+
+  /** Rendered rows, in DOM order */
+  #rows: RowView<T>[] = [];
+
+  /** The entries the rendered rows show */
+  #rowEntries: RenderedEntry<T>[] | null = null;
+
+  /** The template the rendered rows were created from */
+  #rowTemplate: TemplateRef<VirtualScrollItemContext<T>> | null = null;
+
+  /** The placeholder, created on its first render and reused */
+  #placeholder: ComponentRef<DragPlaceholderComponent> | null = null;
+
+  /** Height last set on the placeholder */
+  #placeholderHeightSet: number | null = null;
+
+  /** Content offset last written to the content wrapper */
+  #contentTransformSet: string | null = null;
+
+  /** Whether duplicate track keys were reported (once per list) */
+  #warnedDuplicateKeys = false;
+
+  /** The row keys last checked for duplicates (checked again when the rows change) */
+  #rowKeysChecked: unknown[] | null = null;
 
   /** Template for rendering each item - passed as input instead of content child for reliability */
   itemTemplate = input.required<TemplateRef<VirtualScrollItemContext<T>>>();
@@ -400,41 +458,23 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
     return this.itemHeight();
   });
 
-  /** Items to render, including sticky items and placeholder */
-  protected readonly renderedItems = computed(() => {
+  /**
+   * Rows to render: the items in range, then the sticky items outside it. Independent of the
+   * placeholder, so a placeholder move leaves the rows as they are.
+   */
+  readonly #renderedRows = computed(() => {
     const items = this.items();
     const { start, end } = this.#renderRange();
     const stickyIds = this.#stickyIdsSet();
     const idFn = this.itemIdFn();
     const itemIndexMap = this.#itemIndexMap();
     const draggedId = this.draggedItemId();
-    const placeholderIdx = this.placeholderIndex();
 
-    const result: {
-      type: 'item' | 'placeholder';
-      data: T | null;
-      index: number;
-      isSticky: boolean;
-      // The template doesn't read it, but subclasses can: renderedItems is protected
-      isDragging: boolean;
-    }[] = [];
+    const result: RenderedEntry<T>[] = [];
     const renderedIds = new Set<string>();
-    let hasPlaceholder = false;
 
-    // Add all items in the visible range, inserting placeholder at correct position
+    // Add all items in the visible range
     for (let i = start; i <= end && i < items.length; i++) {
-      // Insert placeholder before item at placeholderIndex
-      if (placeholderIdx === i && !hasPlaceholder) {
-        result.push({
-          type: 'placeholder',
-          data: null,
-          index: placeholderIdx,
-          isSticky: false,
-          isDragging: false,
-        });
-        hasPlaceholder = true;
-      }
-
       const item = items[i];
       const id = idFn(item);
       result.push({
@@ -445,18 +485,6 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
         isDragging: id === draggedId,
       });
       renderedIds.add(id);
-    }
-
-    // If placeholder is at the end (after all items), add it
-    if (placeholderIdx >= items.length && placeholderIdx >= 0 && !hasPlaceholder) {
-      result.push({
-        type: 'placeholder',
-        data: null,
-        index: placeholderIdx,
-        isSticky: false,
-        isDragging: false,
-      });
-      hasPlaceholder = true;
     }
 
     // Add any sticky items that aren't already rendered
@@ -483,6 +511,58 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
       });
     }
 
+    return result;
+  });
+
+  /** Track keys of #renderedRows, in order */
+  readonly #rowKeys = computed(() =>
+    this.#renderedRows().map((entry, i) => this.trackEntry(i, entry)),
+  );
+
+  /**
+   * Where the placeholder renders among the rows: before the row at this position (after the
+   * rows in range when it equals their count), or -1 when it is not rendered. It goes before the
+   * item at the placeholder index when that item is in range, and after the rows in range when
+   * the index is past the last item.
+   */
+  readonly #placeholderSlot = computed(() => {
+    const placeholderIndex = this.placeholderIndex();
+    if (placeholderIndex < 0) return -1;
+
+    const itemCount = this.items().length;
+    const { start, end } = this.#renderRange();
+    const lastInRange = Math.min(end, itemCount - 1);
+    if (placeholderIndex >= start && placeholderIndex <= lastInRange) {
+      return placeholderIndex - start;
+    }
+    if (placeholderIndex >= itemCount) {
+      return Math.max(0, lastInRange - start + 1);
+    }
+    return -1;
+  });
+
+  /** Items to render, including sticky items and placeholder */
+  protected readonly renderedItems = computed(() => {
+    const rows = this.#renderedRows();
+    const slot = this.#placeholderSlot();
+
+    const result: {
+      type: 'item' | 'placeholder';
+      data: T | null;
+      index: number;
+      isSticky: boolean;
+      // The container doesn't read it, but subclasses can: renderedItems is protected
+      isDragging: boolean;
+    }[] = [...rows];
+    if (slot >= 0) {
+      result.splice(slot, 0, {
+        type: 'placeholder',
+        data: null,
+        index: this.placeholderIndex(),
+        isSticky: false,
+        isDragging: false,
+      });
+    }
     return result;
   });
 
@@ -528,17 +608,6 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
       const draggedIndex = this.#draggedItemIndex();
       strategy.setExcludedIndex(draggedIndex >= 0 ? draggedIndex : null);
     });
-
-    // Snapshot item positions before the template re-renders the placeholder move.
-    // Component effects run before the component's own template is refreshed.
-    if (this.#shiftAnimator) {
-      const animator = this.#shiftAnimator;
-      effect(() => {
-        const isDragging = this.#dragState.isDragging();
-        const placeholderIndex = this.placeholderIndex();
-        untracked(() => animator.beforeUpdate(isDragging, placeholderIndex));
-      });
-    }
 
     // Keyboard drag autoscroll: keep the placeholder visible. Arrow keys call
     // #revealPlaceholder synchronously (through KeyboardDragService) so a drop right after a
@@ -616,6 +685,17 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
         }
       }
     });
+
+    effect(() => {
+      const spacer = this.spacer()?.nativeElement;
+      if (spacer) {
+        spacer.style.height = `${this.totalHeight()}px`;
+      }
+    });
+
+    // Last, so it renders what the effects above scrolled to. Component effects run before the
+    // component's own view is checked, which has nothing to update: the template has no bindings.
+    effect(() => this.#render());
   }
 
   ngOnInit(): void {
@@ -708,6 +788,195 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
     }
   }
 
+  /**
+   * Render the content offset, the rows and the placeholder. From an effect, not the template:
+   * Angular checks every row view in this component's view each time a signal its template reads
+   * changes, so reading the placeholder there re-rendered every row on each placeholder move.
+   * Here a placeholder move only moves the placeholder, and a row renders when its context does.
+   */
+  #render(): void {
+    const outlet = this.rowOutlet();
+    const wrapper = this.contentWrapper()?.nativeElement;
+    // Not this component's template (a subclass's own): it renders renderedItems() itself
+    if (!outlet || !wrapper) return;
+
+    const template = this.itemTemplate();
+    const entries = this.#renderedRows();
+    const keys = this.#rowKeys();
+    const transform = this.contentTransform();
+    const slot = this.#placeholderSlot();
+    const placeholderHeight = slot >= 0 ? this.placeholderHeight() : null;
+    const isDragging = this.#dragState.isDragging();
+    const placeholderIndex = this.placeholderIndex();
+
+    // Untracked: the signals the rows' templates read must not become this effect's
+    untracked(() => {
+      // Snapshot the rendered positions before anything moves, so displaced rows can slide
+      this.#shiftAnimator?.beforeUpdate(isDragging, placeholderIndex);
+
+      if (transform !== this.#contentTransformSet) {
+        wrapper.style.transform = transform;
+        this.#contentTransformSet = transform;
+      }
+      this.#renderRows(outlet, template, entries, keys);
+      this.#renderPlaceholder(outlet, slot, placeholderHeight);
+    });
+  }
+
+  /**
+   * Give each entry a view of the item template, in order. As with `@for`, a row keeps its view
+   * (and the components in it) while its track key stays rendered, and a view never renders
+   * another item. Only new views and views whose context changed are checked, with
+   * `detectChanges()`: `markForCheck()` would mark every ancestor view up to the root too.
+   */
+  #renderRows(
+    outlet: ViewContainerRef,
+    template: TemplateRef<VirtualScrollItemContext<T>>,
+    entries: RenderedEntry<T>[],
+    keys: unknown[],
+  ): void {
+    // Nothing to do, as on a placeholder move
+    if (entries === this.#rowEntries && template === this.#rowTemplate) return;
+
+    // A new template renders every row anew
+    if (template !== this.#rowTemplate) {
+      for (const row of this.#rows) {
+        row.view.destroy();
+      }
+      this.#rows = [];
+      this.#rowTemplate = template;
+    }
+
+    // The last render's views by key, in order: an entry takes the first view left for its key
+    const previous = new Map<unknown, RowView<T>[]>();
+    for (const row of this.#rows) {
+      if (row.view.destroyed) continue;
+      const views = previous.get(row.key);
+      if (views) {
+        views.push(row);
+      } else {
+        previous.set(row.key, [row]);
+      }
+    }
+    const kept = keys.map((key) => previous.get(key)?.shift());
+    this.#warnDuplicateKeys(keys);
+
+    // Remove the rows that left first, so the kept views are in order from the first position on
+    for (const views of previous.values()) {
+      for (const row of views) {
+        row.view.destroy();
+      }
+    }
+
+    const rows: RowView<T>[] = [];
+    const toCheck: EmbeddedViewRef<VirtualScrollItemContext<T>>[] = [];
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      let row = kept[i];
+      if (row) {
+        if (outlet.get(i) !== row.view) {
+          outlet.move(row.view, i);
+        }
+        if (this.#updateContext(row.view.context, entry)) {
+          toCheck.push(row.view);
+        }
+      } else {
+        const context: VirtualScrollItemContext<T> = {
+          $implicit: entry.data as T,
+          index: entry.index,
+          isSticky: entry.isSticky,
+        };
+        row = { key: keys[i], view: outlet.createEmbeddedView(template, context, i) };
+        toCheck.push(row.view);
+      }
+      rows.push(row);
+    }
+    this.#rows = rows;
+
+    for (const view of toCheck) {
+      view.detectChanges();
+    }
+    this.#rowEntries = entries;
+  }
+
+  /** Copy an entry into a row's context. Returns whether the context changed. */
+  #updateContext(context: VirtualScrollItemContext<T>, entry: RenderedEntry<T>): boolean {
+    if (
+      Object.is(context.$implicit, entry.data) &&
+      context.index === entry.index &&
+      context.isSticky === entry.isSticky
+    ) {
+      return false;
+    }
+    context.$implicit = entry.data as T;
+    context.index = entry.index;
+    context.isSticky = entry.isSticky;
+    return true;
+  }
+
+  /** Items sharing a track key still render (a view each), but drag and drop needs unique IDs. */
+  #warnDuplicateKeys(keys: unknown[]): void {
+    if (this.#warnedDuplicateKeys || keys === this.#rowKeysChecked || !isDevMode()) return;
+    this.#rowKeysChecked = keys;
+    const seen = new Set<unknown>();
+    for (const key of keys) {
+      if (seen.has(key)) {
+        this.#warnedDuplicateKeys = true;
+        console.warn(
+          `[ngx-virtual-dnd] vdnd-virtual-scroll rendered two items with the track key ` +
+            `${String(key)}. Give every item a unique ID (itemIdFn, or trackByFn).`,
+        );
+        return;
+      }
+      seen.add(key);
+    }
+  }
+
+  /**
+   * Put the placeholder before the row at `slot` (see #placeholderSlot), or take it out of the
+   * DOM. It is a DragPlaceholderComponent of its own, outside this view: moving it or setting its
+   * height checks no row.
+   */
+  #renderPlaceholder(outlet: ViewContainerRef, slot: number, height: number | null): void {
+    if (slot < 0 || height === null) {
+      this.#placeholderElement()?.remove();
+      return;
+    }
+
+    this.#placeholder ??= createComponent(DragPlaceholderComponent, {
+      environmentInjector: this.#environmentInjector,
+    });
+    if (height !== this.#placeholderHeightSet) {
+      this.#placeholder.setInput('itemHeight', height);
+      this.#placeholder.changeDetectorRef.detectChanges();
+      this.#placeholderHeightSet = height;
+    }
+
+    // Rows are inserted before the outlet's anchor, so the anchor follows the last of them
+    const anchor: Node = outlet.element.nativeElement;
+    const parent = anchor.parentNode;
+    const element = this.#placeholderElement();
+    if (!parent || !element) return;
+    const before = this.#firstNodeOfRows(slot, parent) ?? anchor;
+    if (element.nextSibling !== before) {
+      parent.insertBefore(element, before);
+    }
+  }
+
+  #placeholderElement(): HTMLElement | null {
+    return this.#placeholder?.location.nativeElement ?? null;
+  }
+
+  /** The first node in `parent` of the rows from `index` on (null when none has one). */
+  #firstNodeOfRows(index: number, parent: Node): Node | null {
+    for (let i = index; i < this.#rows.length; i++) {
+      const nodes = this.#rows[i].view.rootNodes.filter((node) => node.parentNode === parent);
+      const node = firstInDocumentOrder(nodes);
+      if (node) return node;
+    }
+    return null;
+  }
+
   ngOnDestroy(): void {
     this.#scrollCleanup?.();
     this.#resizeCleanup?.();
@@ -718,6 +987,10 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
     this.#observedElementByKey.clear();
     itemResizeObserver?.disconnect();
     this.#shiftAnimator?.cancelAll();
+    // Created outside this view, so not destroyed with it (and destroy() leaves it in the DOM)
+    this.#placeholderElement()?.remove();
+    this.#placeholder?.destroy();
+    this.#placeholder = null;
   }
 
   #createShiftAnimator(): ShiftAnimator | null {
@@ -732,8 +1005,8 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
   }
 
   /**
-   * Rendered item roots and the placeholder. `@for` never reuses a view for a different
-   * track key, so each element is its own stable identity.
+   * Rendered item roots and the placeholder. A row's view never renders another item (see
+   * #renderRows), so each element is its own stable identity.
    */
   *#shiftAnimationEntries(): Iterable<ShiftAnimationEntry> {
     const wrapper = this.#elementRef.nativeElement.querySelector(
@@ -775,13 +1048,13 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
    * item when a new observer is created.
    */
   #observeRenderedItems(): void {
-    // Re-observe whenever rendered items change, once they are in the DOM (a plain effect runs
-    // before the template renders them, so newly rendered rows would be missed)
+    // Re-observe whenever the rows change, once #render has put them in the DOM. The rows, not
+    // renderedItems(): a placeholder move changes no row.
     afterRenderEffect(
       () => {
         const observer = this.#itemResizeObserver();
         if (!observer) return;
-        const rendered = this.renderedItems();
+        const rendered = this.#renderedRows();
         const idFn = this.itemIdFn();
 
         // Find the content wrapper and observe item elements

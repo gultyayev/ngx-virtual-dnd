@@ -1,4 +1,12 @@
-import { Component, PLATFORM_ID, signal, TemplateRef, viewChild } from '@angular/core';
+import {
+  ApplicationRef,
+  ChangeDetectionStrategy,
+  Component,
+  PLATFORM_ID,
+  signal,
+  TemplateRef,
+  viewChild,
+} from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import {
@@ -9,7 +17,9 @@ import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
-import { DraggedItem } from '../models/drag-drop.models';
+import { DraggedItem, END_OF_LIST } from '../models/drag-drop.models';
+import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
+import { DragPlaceholderComponent } from './drag-placeholder.component';
 
 // Mock ResizeObserver for JSDOM
 class MockResizeObserver {
@@ -844,5 +854,462 @@ describe('VirtualScrollContainerComponent', () => {
       // Scroll stays at 700px (no height change to compensate for)
       expect(virtualScrollEl.scrollTop).toBe(700);
     });
+  });
+});
+
+@Component({
+  template: `
+    <div class="host-render" [attr.data-count]="countHostRender()"></div>
+    <ng-template #itemTpl let-item let-index="index" let-isSticky="isSticky">
+      <div
+        class="item"
+        [attr.data-draggable-id]="item.id"
+        [attr.data-index]="index"
+        [attr.data-sticky]="isSticky"
+      >
+        {{ countRowRender(item.id) }}
+      </div>
+    </ng-template>
+    <!-- Its root is a control flow block: the view lists the block's anchor before its row -->
+    <ng-template #controlFlowTpl let-item let-index="index">
+      @if (item) {
+        <div class="item" [attr.data-draggable-id]="item.id" [attr.data-index]="index">
+          {{ countRowRender(item.id) }}
+        </div>
+      }
+    </ng-template>
+    <vdnd-virtual-scroll
+      [items]="items()"
+      [itemHeight]="50"
+      [containerHeight]="200"
+      [itemIdFn]="itemIdFn"
+      [itemTemplate]="controlFlow() ? controlFlowTpl : itemTpl"
+      droppableId="list"
+    />
+  `,
+  imports: [VirtualScrollContainerComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+class RenderCountingHostComponent {
+  // 200px of 50px rows: 4 in view plus 3 overscan below, so rows 0-7
+  readonly items = signal<TestItem[]>(
+    Array.from({ length: 30 }, (_, i) => ({ id: `item-${i}`, name: `Item ${i}` })),
+  );
+  readonly controlFlow = signal(false);
+  readonly itemIdFn = (item: TestItem): string => item.id;
+
+  hostRenders = 0;
+  readonly rowRenders: string[] = [];
+
+  countHostRender(): number {
+    return ++this.hostRenders;
+  }
+
+  countRowRender(id: string): string {
+    this.rowRenders.push(id);
+    return id;
+  }
+}
+
+describe('VirtualScrollContainerComponent (change detection scope)', () => {
+  let fixture: ComponentFixture<RenderCountingHostComponent>;
+  let host: RenderCountingHostComponent;
+  let dragState: DragStateService;
+  let appRef: ApplicationRef;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  const listElement = (): HTMLElement =>
+    (fixture.nativeElement as HTMLElement).querySelector('vdnd-virtual-scroll') as HTMLElement;
+
+  const rowElement = (id: string): HTMLElement | null =>
+    listElement().querySelector<HTMLElement>(`[data-draggable-id="${id}"]`);
+
+  const placeholder = (): HTMLElement | null =>
+    listElement().querySelector<HTMLElement>('vdnd-drag-placeholder');
+
+  /** Rendered rows and the placeholder, in DOM order (`P` for the placeholder) */
+  const renderedOrder = (): string[] =>
+    Array.from(
+      listElement().querySelectorAll<HTMLElement>('[data-draggable-id], vdnd-drag-placeholder'),
+    ).map((el) => el.getAttribute('data-draggable-id') ?? 'P');
+
+  const items = (from: number, to: number): string[] =>
+    Array.from({ length: to - from + 1 }, (_, i) => `item-${from + i}`);
+
+  const resetCounts = (): void => {
+    host.hostRenders = 0;
+    host.rowRenders.length = 0;
+  };
+
+  const render = (): void => {
+    appRef.tick();
+  };
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    TestBed.configureTestingModule({ imports: [RenderCountingHostComponent] });
+    fixture = TestBed.createComponent(RenderCountingHostComponent);
+    host = fixture.componentInstance;
+    dragState = TestBed.inject(DragStateService);
+    appRef = TestBed.inject(ApplicationRef);
+    fixture.detectChanges();
+    render();
+    resetCounts();
+  });
+
+  afterEach(() => {
+    dragState.endDrag();
+    fixture.destroy();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  const startDrag = (activeDroppableId: string, placeholderIndex: number | null): void => {
+    dragState.startDrag(
+      {
+        draggableId: 'item-0',
+        droppableId: 'list',
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      null,
+      activeDroppableId,
+      END_OF_LIST,
+      placeholderIndex,
+      0,
+    );
+    render();
+    resetCounts();
+  };
+
+  const movePlaceholder = (activeDroppableId: string | null, placeholderIndex: number): void => {
+    dragState.updateDragPosition({
+      cursorPosition: { x: 0, y: 0 },
+      activeDroppableId,
+      placeholderId: END_OF_LIST,
+      placeholderIndex,
+    });
+    render();
+  };
+
+  const scrollTo = async (scrollTop: number): Promise<void> => {
+    listElement().scrollTop = scrollTop;
+    listElement().dispatchEvent(new Event('scroll'));
+    await nextAnimationFrame();
+    render();
+  };
+
+  it('renders the rows in range', () => {
+    expect(renderedOrder()).toEqual(items(0, 7));
+  });
+
+  it('re-renders neither the host nor any row when only the placeholder moves', () => {
+    // item-0 is dragged within the list; the placeholder starts in its own slot
+    startDrag('list', 1);
+
+    movePlaceholder('list', 3);
+    movePlaceholder('list', 5);
+
+    // The placeholder renders before the item at its index
+    expect(renderedOrder()).toEqual([...items(0, 4), 'P', ...items(5, 7)]);
+    expect(host.hostRenders).toBe(0);
+    expect(host.rowRenders).toEqual([]);
+  });
+
+  it('re-renders no row when the placeholder enters or leaves the list', () => {
+    // item-0 is dragged over another list
+    startDrag('other', 0);
+
+    movePlaceholder('list', 2);
+    expect(renderedOrder()).toEqual([...items(0, 1), 'P', ...items(2, 7)]);
+
+    movePlaceholder('other', 0);
+    expect(placeholder()).toBeNull();
+
+    expect(host.hostRenders).toBe(0);
+    expect(host.rowRenders).toEqual([]);
+  });
+
+  it('renders only the dragged row when a drag starts (it becomes sticky)', () => {
+    dragState.startDrag(
+      {
+        draggableId: 'item-2',
+        droppableId: 'list',
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      null,
+      'list',
+      END_OF_LIST,
+      3,
+      2,
+    );
+    render();
+
+    expect(host.rowRenders).toEqual(['item-2']);
+    expect(rowElement('item-2')?.getAttribute('data-sticky')).toBe('true');
+    expect(rowElement('item-1')?.getAttribute('data-sticky')).toBe('false');
+  });
+
+  it('renders only the rows that scroll in', async () => {
+    const kept = rowElement('item-5');
+
+    // First row in view goes from 0 to 4: the range goes from 0-7 to 1-11
+    await scrollTo(200);
+
+    expect(renderedOrder()).toEqual(items(1, 11));
+    expect([...host.rowRenders].sort()).toEqual(items(8, 11).sort());
+    expect(host.hostRenders).toBe(0);
+    // A row still in range keeps its element
+    expect(rowElement('item-5')).toBe(kept);
+    const wrapper = listElement().querySelector<HTMLElement>(
+      '.vdnd-virtual-scroll-content-wrapper',
+    );
+    expect(wrapper?.style.transform).toBe('translateY(50px)');
+  });
+
+  it('never gives a row view to another item: a row that leaves and returns is rendered anew', async () => {
+    const first = rowElement('item-0');
+    await scrollTo(1000);
+    expect(rowElement('item-0')).toBeNull();
+
+    await scrollTo(0);
+
+    expect(rowElement('item-0')).not.toBeNull();
+    expect(rowElement('item-0')).not.toBe(first);
+  });
+
+  it('moves the rows of reordered items and shows their new index', () => {
+    const moved = rowElement('item-6');
+    const reordered = [...host.items()];
+    const [item6] = reordered.splice(6, 1);
+    reordered.splice(1, 0, item6);
+    host.items.set(reordered);
+    render();
+
+    expect(renderedOrder()).toEqual(['item-0', 'item-6', ...items(1, 5), 'item-7']);
+    expect(rowElement('item-6')).toBe(moved);
+    expect(rowElement('item-6')?.getAttribute('data-index')).toBe('1');
+    expect(rowElement('item-5')?.getAttribute('data-index')).toBe('6');
+  });
+
+  it('shows a replaced item in the row of its track key', () => {
+    const row = rowElement('item-3');
+    host.items.set(
+      host.items().map((item) => (item.id === 'item-3' ? { ...item, name: 'Renamed' } : item)),
+    );
+    resetCounts();
+    render();
+
+    expect(rowElement('item-3')).toBe(row);
+    expect(host.rowRenders).toContain('item-3');
+  });
+
+  it('renders every row anew when the item template changes', () => {
+    const before = rowElement('item-0');
+
+    host.controlFlow.set(true);
+    render();
+
+    expect(renderedOrder()).toEqual(items(0, 7));
+    expect(rowElement('item-0')).not.toBe(before);
+  });
+
+  it('places the placeholder before a row whose template starts with a control flow block', () => {
+    host.controlFlow.set(true);
+    render();
+    startDrag('list', 1);
+
+    movePlaceholder('list', 5);
+
+    expect(renderedOrder()).toEqual([...items(0, 4), 'P', ...items(5, 7)]);
+    expect(host.rowRenders).toEqual([]);
+  });
+
+  it('renders the placeholder after the rows when its index is past the last item', () => {
+    host.items.set(host.items().slice(0, 3));
+    render();
+    startDrag('list', 1);
+
+    movePlaceholder('list', 3);
+
+    expect(renderedOrder()).toEqual([...items(0, 2), 'P']);
+  });
+
+  it('does not render the placeholder when its index is outside the rendered rows', () => {
+    startDrag('list', 1);
+
+    movePlaceholder('list', 20);
+
+    expect(placeholder()).toBeNull();
+  });
+
+  it('renders the placeholder as a DragPlaceholderComponent sized like an item', () => {
+    startDrag('list', 2);
+
+    // Found through the debug tree too, as consumers' own tests may look for it
+    const debugPlaceholder = fixture.debugElement.query(By.css('vdnd-drag-placeholder'));
+    expect(debugPlaceholder.componentInstance).toBeInstanceOf(DragPlaceholderComponent);
+    const element = debugPlaceholder.nativeElement as HTMLElement;
+    expect(element).toBe(placeholder());
+    expect(element.classList.contains('vdnd-drag-placeholder')).toBe(true);
+    expect(element.classList.contains('vdnd-drag-placeholder-visible')).toBe(true);
+    expect(element.style.height).toBe('50px');
+  });
+
+  it('removes the placeholder when the drag ends', () => {
+    startDrag('list', 2);
+    expect(placeholder()).not.toBeNull();
+
+    dragState.endDrag();
+    render();
+
+    expect(placeholder()).toBeNull();
+    expect(renderedOrder()).toEqual(items(0, 7));
+  });
+
+  it('removes the placeholder when the list is destroyed during a drag', () => {
+    startDrag('list', 2);
+    const element = placeholder();
+    expect(element?.isConnected).toBe(true);
+
+    fixture.destroy();
+
+    expect(element?.isConnected).toBe(false);
+  });
+
+  it('keeps the placeholder in renderedItems for subclasses', () => {
+    startDrag('list', 1);
+    movePlaceholder('list', 3);
+
+    const list = fixture.debugElement.query(By.directive(VirtualScrollContainerComponent))
+      .componentInstance as VirtualScrollContainerComponent<TestItem>;
+    const entries = list['renderedItems']().map((entry) =>
+      entry.type === 'placeholder' ? 'P' : (entry.data as TestItem).id,
+    );
+    expect(entries).toEqual([...items(0, 2), 'P', ...items(3, 7)]);
+  });
+
+  it('renders every item of a duplicated track key and warns once', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const duplicated = [...host.items()];
+    duplicated[2] = { id: 'item-1', name: 'Duplicate' };
+    host.items.set(duplicated);
+    render();
+    host.items.set([...duplicated]);
+    render();
+
+    expect(renderedOrder()).toEqual(['item-0', 'item-1', 'item-1', ...items(3, 7)]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+});
+
+@Component({
+  template: `
+    <ng-template #itemTpl let-item>
+      <div class="item" [attr.data-draggable-id]="item.id">{{ item.name }}</div>
+    </ng-template>
+    <vdnd-virtual-scroll
+      [items]="items"
+      [itemHeight]="50"
+      [containerHeight]="200"
+      [itemIdFn]="itemIdFn"
+      [itemTemplate]="itemTpl"
+      droppableId="list"
+    />
+  `,
+  imports: [VirtualScrollContainerComponent],
+  providers: [{ provide: VDND_ANIMATION_CONFIG, useValue: { shiftDuration: 200 } }],
+})
+class AnimatedHostComponent {
+  readonly items: TestItem[] = Array.from({ length: 6 }, (_, i) => ({
+    id: `item-${i}`,
+    name: `Item ${i}`,
+  }));
+  readonly itemIdFn = (item: TestItem): string => item.id;
+}
+
+describe('VirtualScrollContainerComponent (shift animation)', () => {
+  let fixture: ComponentFixture<AnimatedHostComponent>;
+  let dragState: DragStateService;
+  let appRef: ApplicationRef;
+  let animated: string[];
+  const originalResizeObserver = globalThis.ResizeObserver;
+  const originalAnimate = Element.prototype.animate;
+  const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    animated = [];
+    // jsdom has no layout: place each element by its position among its siblings
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const index = this.parentElement ? Array.from(this.parentElement.children).indexOf(this) : 0;
+      return { top: index * 50, left: 0, width: 100, height: 50 } as DOMRect;
+    };
+    Element.prototype.animate = function (this: Element) {
+      animated.push(this.getAttribute('data-draggable-id') ?? 'P');
+      return {
+        cancel: jest.fn(),
+        effect: { getComputedTiming: () => ({ progress: 0 }) },
+        onfinish: null,
+      } as unknown as Animation;
+    } as typeof Element.prototype.animate;
+
+    TestBed.configureTestingModule({ imports: [AnimatedHostComponent] });
+    fixture = TestBed.createComponent(AnimatedHostComponent);
+    dragState = TestBed.inject(DragStateService);
+    appRef = TestBed.inject(ApplicationRef);
+    fixture.detectChanges();
+    appRef.tick();
+
+    // Drag item-0 within the list; the placeholder starts in its own slot
+    dragState.startDrag(
+      {
+        draggableId: 'item-0',
+        droppableId: 'list',
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      null,
+      'list',
+      END_OF_LIST,
+      1,
+      0,
+    );
+    appRef.tick();
+  });
+
+  afterEach(() => {
+    dragState.endDrag();
+    fixture.destroy();
+    globalThis.ResizeObserver = originalResizeObserver;
+    Element.prototype.animate = originalAnimate;
+    Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+  });
+
+  it('does not animate the drag start render', () => {
+    expect(animated).toEqual([]);
+  });
+
+  it('animates the rows a placeholder move displaces, and the placeholder', () => {
+    // The placeholder moves from before item-1 to before item-3: item-1 and item-2 move up past it
+    dragState.updateDragPosition({
+      cursorPosition: { x: 0, y: 0 },
+      activeDroppableId: 'list',
+      placeholderId: END_OF_LIST,
+      placeholderIndex: 3,
+    });
+    appRef.tick();
+
+    expect([...animated].sort()).toEqual(['P', 'item-1', 'item-2']);
   });
 });
