@@ -44,6 +44,7 @@ import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
 import { queryByAttribute } from '../utils/attribute-selectors';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
+import { firstInDocumentOrder, longestIncreasingRun, moveNodesBefore } from '../utils/row-order';
 
 /**
  * Context provided to the item template.
@@ -78,56 +79,6 @@ interface RowView<T> {
  * fewer rows render after the list shrinks.
  */
 const MAX_POOLED_ROWS = 10;
-
-/** `Node.DOCUMENT_POSITION_FOLLOWING`, without the `Node` global (servers have none) */
-const DOCUMENT_POSITION_FOLLOWING = 4;
-
-/**
- * The node that comes first in the DOM. A view's `rootNodes` list a control flow block's anchor
- * before the nodes rendered in it, which the DOM puts before the anchor.
- */
-function firstInDocumentOrder(nodes: Node[]): Node | null {
-  let first: Node | null = null;
-  for (const node of nodes) {
-    if (first === null || node.compareDocumentPosition(first) & DOCUMENT_POSITION_FOLLOWING) {
-      first = node;
-    }
-  }
-  return first;
-}
-
-/**
- * Which values belong to a longest increasing subsequence of `values` (negative values never
- * do). For rows: the views that can stay where they are while the others move around them, as
- * few as possible. A moved row loses focus and restarts its CSS transitions.
- */
-function longestIncreasingRun(values: number[]): boolean[] {
-  // tails[k]: the index of the smallest value that ends an increasing run of length k + 1
-  const tails: number[] = [];
-  const previous = new Array<number>(values.length).fill(-1);
-  for (let i = 0; i < values.length; i++) {
-    const value = values[i];
-    if (value < 0) continue;
-    let low = 0;
-    let high = tails.length;
-    while (low < high) {
-      const middle = (low + high) >> 1;
-      if (values[tails[middle]] < value) {
-        low = middle + 1;
-      } else {
-        high = middle;
-      }
-    }
-    previous[i] = low > 0 ? tails[low - 1] : -1;
-    tails[low] = i;
-  }
-
-  const inRun = new Array<boolean>(values.length).fill(false);
-  for (let i = tails.length > 0 ? tails[tails.length - 1] : -1; i >= 0; i = previous[i]) {
-    inRun[i] = true;
-  }
-  return inRun;
-}
 
 /**
  * A virtual scroll container that only renders visible items.
@@ -961,8 +912,9 @@ export class VirtualScrollContainerComponent<T>
     const kept = keys.map((key) => previous.get(key)?.shift());
     this.#warnDuplicateKeys(keys);
 
-    // Remove the rows that left, then keep in place the longest run of kept views that is
-    // already in order (their positions in the outlet, which now holds only kept views)
+    // Remove the rows that left, then keep in place the longest run of kept rows that is already
+    // in order. The last render left the rows in the DOM in its order (the outlet's order is not
+    // the DOM's: rows move by their nodes, see #moveBefore)
     const draggedId = this.draggedItemId();
     for (const views of previous.values()) {
       for (const row of views) {
@@ -976,8 +928,8 @@ export class VirtualScrollContainerComponent<T>
       }
     }
     const positions = new Map<unknown, number>();
-    for (let i = 0; i < outlet.length; i++) {
-      positions.set(outlet.get(i), i);
+    for (let i = 0; i < this.#rows.length; i++) {
+      positions.set(this.#rows[i].view, i);
     }
     const inPlace = longestIncreasingRun(kept.map((row) => (row ? positions.get(row.view)! : -1)));
 
@@ -1064,17 +1016,22 @@ export class VirtualScrollContainerComponent<T>
     this.#rowPool = [];
   }
 
-  /** Move a row's view right before `next` (last without one), unless it is there already. */
+  /**
+   * Move a row's nodes right before those of `next` (last without one), unless they are there
+   * already. The view keeps its place in the outlet: `move()` would detach it, and Angular removes
+   * a detached row once its leave animation (`animate.leave`) ends (see moveNodesBefore).
+   */
   #moveBefore(
     outlet: ViewContainerRef,
     view: EmbeddedViewRef<VirtualScrollItemContext<T>>,
     next: EmbeddedViewRef<VirtualScrollItemContext<T>> | null,
   ): void {
-    const target = next ? outlet.indexOf(next) : outlet.length;
-    const current = outlet.indexOf(view);
-    if (current === target - 1) return;
-    // move() takes the view out before inserting it, which shifts the views after it
-    outlet.move(view, current < target ? target - 1 : target);
+    // Rows are inserted before the outlet's anchor, so the anchor follows the last of them
+    const anchor: Node = outlet.element.nativeElement;
+    const parent = anchor.parentNode;
+    if (!parent) return;
+    const nextNodes = next ? next.rootNodes.filter((node) => node.parentNode === parent) : [];
+    moveNodesBefore(view.rootNodes, parent, firstInDocumentOrder(nextNodes) ?? anchor);
   }
 
   /** Copy an entry into a row's context. Returns whether the context changed. */

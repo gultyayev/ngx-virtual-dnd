@@ -1255,6 +1255,36 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
     expect(host.rowRenders).toEqual([]);
   });
 
+  it('moves every node of a row whose template starts with a control flow block', () => {
+    host.template.set('controlFlow');
+    render();
+    // The rows' elements and comments in DOM order (`#` for a comment: a row's @if anchor, then
+    // the outlet's own)
+    const rowNodes = (): string[] =>
+      Array.from(
+        (listElement().querySelector('.vdnd-virtual-scroll-content-wrapper') as HTMLElement)
+          .childNodes,
+      )
+        .filter(
+          (node) => node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.COMMENT_NODE,
+        )
+        .map((node) =>
+          node.nodeType === Node.COMMENT_NODE
+            ? '#'
+            : ((node as Element).getAttribute('data-draggable-id') ?? '?'),
+        );
+
+    // item-0 moves down, and a new item goes right before it
+    const [first, ...rest] = host.items();
+    rest.splice(3, 0, { id: 'new', name: 'New' }, first);
+    host.items.set(rest);
+    render();
+
+    const expected = ['item-1', 'item-2', 'item-3', 'new', 'item-0', 'item-4', 'item-5', 'item-6'];
+    expect(renderedOrder()).toEqual(expected);
+    expect(rowNodes()).toEqual([...expected.flatMap((id) => [id, '#']), '#']);
+  });
+
   it('renders the placeholder after the rows when its index is past the last item', () => {
     host.items.set(host.items().slice(0, 3));
     render();

@@ -27,6 +27,7 @@ import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
+import { firstInDocumentOrder, longestIncreasingRun, moveNodesBefore } from '../utils/row-order';
 
 /**
  * Context provided to the template for each virtual item.
@@ -130,6 +131,9 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
   /** Currently active views keyed by their track-by value */
   readonly #activeViews = new Map<unknown, EmbeddedViewRef<VirtualForContext<T>>>();
+
+  /** The active views in DOM order (the container's order is not the DOM's, see #reconcileViews) */
+  #orderedViews: EmbeddedViewRef<VirtualForContext<T>>[] = [];
 
   /** Single spacer element for scroll height */
   #spacer: HTMLDivElement | null = null;
@@ -718,14 +722,8 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     // Move unused views to pool
     for (const [key, view] of this.#activeViews) {
       if (!neededKeys.has(key)) {
-        const index = this.#viewContainer.indexOf(view);
-        if (index >= 0) {
-          this.#viewContainer.detach(index);
-        }
-        this.#unobserveViewElements(view);
-        this.#cancelShiftAnimation(view);
-        this.#viewPool.push(view);
         this.#activeViews.delete(key);
+        this.#poolView(view);
       }
     }
 
@@ -735,15 +733,24 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
       this.#placeholderInDom = false;
     }
 
-    // Process items and track placeholder position
-    let viewContainerIndex = 0;
+    // Where the views that stay are in the DOM: the last render left them in its order (the
+    // container's order is not the DOM's: rows move by their nodes, see moveNodesBefore)
+    const positions = new Map<EmbeddedViewRef<VirtualForContext<T>>, number>();
+    const stayed = new Set(this.#activeViews.values());
+    this.#orderedViews.forEach((view, index) => {
+      if (stayed.has(view)) positions.set(view, index);
+    });
+
+    // A view for each item, in order, and the placeholder's position among them
     let placeholderDomPosition = -1;
     const renderedKeys = new Set<unknown>();
     const changedViews: EmbeddedViewRef<VirtualForContext<T>>[] = [];
+    const views: EmbeddedViewRef<VirtualForContext<T>>[] = [];
+    const entries: RenderEntry<T>[] = [];
 
     for (const entry of itemsToRender) {
       if (entry.type === 'placeholder') {
-        placeholderDomPosition = viewContainerIndex;
+        placeholderDomPosition = views.length;
         continue;
       }
 
@@ -753,33 +760,41 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
       }
       renderedKeys.add(entry.key);
 
-      const view = this.#getOrCreateView(entry.key, entry.context!, changedViews);
+      views.push(this.#getOrCreateView(entry.key, entry.context!, changedViews));
+      entries.push(entry);
+    }
 
-      // Ensure view is at correct position in ViewContainerRef
-      const currentIndex = this.#viewContainer.indexOf(view);
-      if (currentIndex !== viewContainerIndex) {
-        const targetIndex = this.#getSafeViewContainerIndex(currentIndex, viewContainerIndex);
-        if (currentIndex >= 0) {
-          if (currentIndex !== targetIndex) {
-            this.#viewContainer.move(view, targetIndex);
-          }
-        } else {
-          this.#viewContainer.insert(view, targetIndex);
-        }
+    // Keep in place the longest run of views that stayed and are in order. From the last view up,
+    // each goes right before the next one, already in place: new and pooled views are inserted
+    // there, the other views that stayed move their nodes there
+    const inPlace = longestIncreasingRun(views.map((view) => positions.get(view) ?? -1));
+    const anchor: Node = this.#viewContainer.element.nativeElement;
+    const parent = anchor.parentNode;
+    let next: EmbeddedViewRef<VirtualForContext<T>> | null = null;
+    for (let i = views.length - 1; i >= 0; i--) {
+      const view = views[i];
+      if (!positions.has(view)) {
+        const index = next ? this.#viewContainer.indexOf(next) : this.#viewContainer.length;
+        this.#viewContainer.insert(view, index);
+      } else if (!inPlace[i] && parent) {
+        const nextNodes = next ? next.rootNodes.filter((node) => node.parentNode === parent) : [];
+        moveNodesBefore(view.rootNodes, parent, firstInDocumentOrder(nextNodes) ?? anchor);
       }
+      next = view;
+    }
+    this.#orderedViews = views;
 
+    for (let i = 0; i < views.length; i++) {
       // Apply absolute positioning when not using viewport wrapper
       if (!this.#useViewportPositioning) {
-        const offset = strategy.getOffsetForIndex(entry.visualIndex);
-        this.#applyAbsolutePositioning(view, offset);
+        const offset = strategy.getOffsetForIndex(entries[i].visualIndex);
+        this.#applyAbsolutePositioning(views[i], offset);
       }
 
       // Observe for dynamic height measurement
       if (this.#resizeObserver) {
-        this.#observeViewElements(view, entry.key);
+        this.#observeViewElements(views[i], entries[i].key);
       }
-
-      viewContainerIndex++;
     }
 
     this.#renderChangedViews(changedViews);
@@ -788,18 +803,23 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   }
 
   /**
-   * Clamp target indices for move/insert to avoid out-of-range operations when
-   * reconciliation is given invalid duplicate keys or transiently inconsistent view state.
+   * Take a row's view out of the container and pool it. It keeps its element, so its shift
+   * animation is cancelled: the item it renders next must not slide from this one's position.
    */
-  #getSafeViewContainerIndex(currentIndex: number, requestedIndex: number): number {
-    const length = this.#viewContainer.length;
-
-    if (currentIndex >= 0) {
-      if (length <= 1) return 0;
-      return Math.min(requestedIndex, length - 1);
+  #poolView(view: EmbeddedViewRef<VirtualForContext<T>>): void {
+    const index = this.#viewContainer.indexOf(view);
+    if (index >= 0) {
+      this.#viewContainer.detach(index);
     }
-
-    return Math.min(requestedIndex, length);
+    this.#unobserveViewElements(view);
+    // A leave animation (`animate.leave`) keeps the row in the DOM, and Angular removes it when
+    // the animation ends: in the row of another item by then, if the view were reused
+    if (view.rootNodes.some((node) => node.parentNode !== null)) {
+      view.destroy();
+      return;
+    }
+    this.#cancelShiftAnimation(view);
+    this.#viewPool.push(view);
   }
 
   /**
@@ -916,7 +936,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
     // The placeholder goes immediately before the item view at placeholderDomPosition
     // (the reconcile pass counts item views only, so this index maps directly to a
-    // ViewContainerRef view). Reading the reference node from that view avoids
+    // view in #orderedViews). Reading the reference node from that view avoids
     // re-querying and filtering container.children on every placeholder move.
     const insertBeforeEl = this.#getViewReferenceNode(placeholderDomPosition);
 
@@ -947,13 +967,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
    * is past the last view (placeholder belongs at the end → append).
    */
   #getViewReferenceNode(viewIndex: number): Element | null {
-    if (viewIndex < 0 || viewIndex >= this.#viewContainer.length) {
-      return null;
-    }
-    const view = this.#viewContainer.get(viewIndex) as
-      | EmbeddedViewRef<VirtualForContext<T>>
-      | null
-      | undefined;
+    const view = this.#orderedViews[viewIndex];
     if (!view) {
       return null;
     }

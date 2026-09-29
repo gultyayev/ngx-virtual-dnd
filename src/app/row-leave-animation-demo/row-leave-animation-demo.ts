@@ -1,8 +1,14 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import {
   DraggableDirective,
   DragPreviewComponent,
+  DropEvent,
+  DroppableDirective,
+  DroppableGroupDirective,
+  moveItem,
+  VirtualForDirective,
   VirtualSortableListComponent,
+  VirtualViewportComponent,
 } from 'ngx-virtual-dnd';
 
 interface Row {
@@ -10,44 +16,80 @@ interface Row {
   name: string;
 }
 
+function createRows(prefix: string, label: string, count: number): Row[] {
+  return Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}`, name: `${label} ${i}` }));
+}
+
 /**
- * E2E fixture: a list with `recycleRows` whose rows play a leave animation (`animate.leave`).
- * Angular removes a leaving row's element only when that animation ends, so the view of a row
- * that scrolls out must not render a row that scrolls in.
+ * E2E fixture: rows that play a leave animation (`animate.leave`). Angular removes a leaving
+ * row's element only when that animation ends, so a row that moves (a reorder) or whose view is
+ * recycled must not leave. "Rows" is a `vdnd-sortable-list` with `recycleRows`; "Viewport rows"
+ * renders its rows with `*vdndVirtualFor`, which always recycles.
  */
 @Component({
   selector: 'app-row-leave-animation-demo',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [VirtualSortableListComponent, DraggableDirective, DragPreviewComponent],
+  imports: [
+    VirtualSortableListComponent,
+    VirtualViewportComponent,
+    VirtualForDirective,
+    DroppableDirective,
+    DroppableGroupDirective,
+    DraggableDirective,
+    DragPreviewComponent,
+  ],
   template: `
     <main class="rla">
       <h1 class="rla-title">Row leave animation</h1>
       <p class="rla-hint">
-        The list recycles its rows, and each row fades out when it leaves the list, including when
-        it scrolls out of range.
+        Each row fades out when it leaves the list, including when it scrolls out of range. Rows
+        that move or come back in a recycled view stay.
       </p>
-      <div class="listcard">
-        <div class="list-hd">
-          <span class="list-title">Rows</span>
-        </div>
-        <vdnd-sortable-list
-          droppableId="rows"
-          group="leave-animation"
-          [items]="rows"
-          [itemHeight]="50"
-          [containerHeight]="400"
-          [itemIdFn]="rowId"
-          [itemTemplate]="rowTpl"
-          [recycleRows]="true"
-        />
-      </div>
-      <ng-template #rowTpl let-row>
-        <div class="item" animate.leave="rla-leave" [vdndDraggable]="row.id">
-          <div class="item-inner">
-            <span class="item-text" data-testid="row-name">{{ row.name }}</span>
+      <div class="lists">
+        <div class="listcard" vdndGroup="leave-animation">
+          <div class="list-hd">
+            <span class="list-title">Rows</span>
           </div>
+          <vdnd-sortable-list
+            droppableId="rows"
+            [items]="rows()"
+            [itemHeight]="50"
+            [containerHeight]="400"
+            [itemIdFn]="rowId"
+            [itemTemplate]="rowTpl"
+            [recycleRows]="true"
+            (drop)="onDrop($event)"
+          />
+          <!-- Declared inside vdndGroup so the rendered draggables inherit the group. -->
+          <ng-template #rowTpl let-row>
+            <div class="item" animate.leave="rla-leave" [vdndDraggable]="row.id">
+              <div class="item-inner">
+                <span class="item-text">{{ row.name }}</span>
+              </div>
+            </div>
+          </ng-template>
         </div>
-      </ng-template>
+
+        <div class="listcard" vdndGroup="leave-animation-viewport">
+          <div class="list-hd">
+            <span class="list-title">Viewport rows</span>
+          </div>
+          <vdnd-virtual-viewport
+            class="rla-viewport"
+            vdndDroppable="viewport-rows"
+            [itemHeight]="50"
+            (drop)="onDrop($event)"
+          >
+            <ng-container *vdndVirtualFor="let row of viewportRows(); trackBy: trackById">
+              <div class="item" animate.leave="rla-leave" [vdndDraggable]="row.id">
+                <div class="item-inner">
+                  <span class="item-text">{{ row.name }}</span>
+                </div>
+              </div>
+            </ng-container>
+          </vdnd-virtual-viewport>
+        </div>
+      </div>
     </main>
 
     <vdnd-drag-preview />
@@ -70,6 +112,10 @@ interface Row {
       font-size: 13.5px;
       color: var(--ink-2);
     }
+    .rla-viewport {
+      height: 400px;
+      background: var(--bg-sunk);
+    }
     .rla-leave {
       animation: rla-fade-out 300ms linear;
     }
@@ -81,10 +127,13 @@ interface Row {
   `,
 })
 export class RowLeaveAnimationDemoComponent {
-  readonly rows: Row[] = Array.from({ length: 100 }, (_, i) => ({
-    id: `row-${i}`,
-    name: `Row ${i + 1}`,
-  }));
+  readonly rows = signal<Row[]>(createRows('row', 'Row', 100));
+  readonly viewportRows = signal<Row[]>(createRows('vrow', 'Viewport row', 100));
 
   readonly rowId = (row: Row): string => row.id;
+  readonly trackById = (_index: number, row: Row): string => row.id;
+
+  onDrop(event: DropEvent): void {
+    moveItem(event, { rows: this.rows, 'viewport-rows': this.viewportRows });
+  }
 }

@@ -45,7 +45,9 @@ A recycled view renders another item, and keeps whatever does not come from its 
 - **Local state stays with the view.** A component's own fields and signals, and the value of an input field that is not bound to the item, show up on the next item.
 - **DOM state that no binding sets stays**: classes or styles set from code, an element's scroll position, an `<img>` until its new `src` loads.
 
-Focus does not carry over: a view leaves the DOM before it renders another item. A row keeps its view while its item stays rendered, as without recycling. A row whose root element has a leave animation (`animate.leave`) is not recycled: Angular keeps it in the DOM until the animation ends.
+Focus does not carry over: a view leaves the DOM before it renders another item. A row keeps its view while its item stays rendered, as without recycling. A row whose root element has a leave animation (`animate.leave`) is not recycled: it plays the animation, and Angular removes it when the animation ends.
+
+Rows change order by moving their elements, not their views, in every list. A row that moves, for example after a drop, keeps its view and plays no leave animation. A query over the rows (`viewChildren()`, `contentChildren()`) can list them in an order other than the page's.
 
 Turn it on for rows that are costly to create (several components, many elements) and render only from their item.
 

@@ -53,6 +53,26 @@ class TestHostComponent {
   readonly trackByFn = (_index: number, item: TestItem): string => item.key;
 }
 
+/** Rows of two elements at the root: the item, and a note rendered by an @if block */
+@Component({
+  template: `
+    <vdnd-virtual-viewport [itemHeight]="50" style="height: 200px;">
+      <ng-container *vdndVirtualFor="let id of items(); trackBy: trackById">
+        <div class="item" [attr.data-id]="id">{{ id }}</div>
+        @if (showNotes()) {
+          <div class="note" [attr.data-id]="id">Note</div>
+        }
+      </ng-container>
+    </vdnd-virtual-viewport>
+  `,
+  imports: [VirtualViewportComponent, VirtualForDirective],
+})
+class NotesHostComponent {
+  readonly items = signal(['a', 'b', 'c']);
+  readonly showNotes = signal(false);
+  readonly trackById = (_index: number, id: string): string => id;
+}
+
 @Component({
   template: `
     <vdnd-virtual-viewport [itemHeight]="50" [dynamicItemHeight]="true" style="height: 200px;">
@@ -131,10 +151,31 @@ describe('VirtualForDirective', () => {
       parts: [],
     }));
 
+  // In DOM order: rows move by their nodes, so the debug element tree (in the order of the views in
+  // the ViewContainerRef) can list them in another order
   const renderedIds = (): string[] =>
-    fixture.debugElement
-      .queryAll(By.css('.item'))
-      .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id') ?? '');
+    Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.item')).map(
+      (el) => el.getAttribute('data-id') ?? '',
+    );
+
+  const rowElement = (id: string): Element | null =>
+    (fixture.nativeElement as HTMLElement).querySelector(`.item[data-id="${id}"]`);
+
+  /** Records the rows taken out of the DOM (a moved row is taken out, then put back) */
+  const watchRemovedRows = (): (() => string[]) => {
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver((delivered) => records.push(...delivered));
+    observer.observe(fixture.nativeElement as HTMLElement, { childList: true, subtree: true });
+    return () => {
+      records.push(...observer.takeRecords());
+      observer.disconnect();
+      return records
+        .flatMap((record) => Array.from(record.removedNodes))
+        .filter((node): node is HTMLElement => node instanceof HTMLElement)
+        .map((node) => node.getAttribute('data-id') ?? '')
+        .filter((id) => id !== '');
+    };
+  };
 
   beforeAll(() => {
     originalResizeObserver = globalThis.ResizeObserver;
@@ -282,9 +323,9 @@ describe('VirtualForDirective', () => {
       ]);
       fixture.detectChanges();
 
-      const beforeElements = fixture.debugElement
-        .queryAll(By.css('.item'))
-        .map((el) => el.nativeElement as HTMLElement);
+      const beforeElements = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.item'),
+      );
 
       // Reorder: swap first and last
       component.items.set([
@@ -294,9 +335,9 @@ describe('VirtualForDirective', () => {
       ]);
       fixture.detectChanges();
 
-      const afterElements = fixture.debugElement
-        .queryAll(By.css('.item'))
-        .map((el) => el.nativeElement as HTMLElement);
+      const afterElements = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.item'),
+      );
 
       // Same DOM nodes, moved — not destroyed and re-created
       expect(afterElements).toEqual([beforeElements[2], beforeElements[1], beforeElements[0]]);
@@ -335,6 +376,108 @@ describe('VirtualForDirective', () => {
       fixture.detectChanges();
       expect(renderedIds()).toEqual(['item-1']);
     });
+
+    it('moves only the row of an item moved down the list', () => {
+      const items = makeItems(6);
+      component.items.set(items);
+      fixture.detectChanges();
+      const removedRows = watchRemovedRows();
+
+      const reordered = [...items];
+      const [first] = reordered.splice(0, 1);
+      reordered.splice(4, 0, first);
+      component.items.set(reordered);
+      fixture.detectChanges();
+
+      expect(renderedIds()).toEqual(['item-1', 'item-2', 'item-3', 'item-4', 'item-0', 'item-5']);
+      expect(removedRows()).toEqual(['item-0']);
+    });
+
+    it('renders any mix of removals, insertions and moves in order, keeping the rows that stay', () => {
+      // A seeded pseudo-random sequence; at most 7 items, so every item renders
+      let seed = 11;
+      const random = (count: number): number => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed % count;
+      };
+      let added = 0;
+      let list = makeItems(5);
+      component.items.set(list);
+      fixture.detectChanges();
+
+      for (let step = 0; step < 60; step++) {
+        const elements = new Map(list.map((item) => [item.id, rowElement(item.id)]));
+        const next = [...list];
+        if (next.length > 2 && random(3) === 0) {
+          next.splice(random(next.length), 1);
+        }
+        if (next.length < 7 && random(2) === 0) {
+          const id = `new-${added++}`;
+          next.splice(random(next.length + 1), 0, { id, key: id, label: id, parts: [] });
+        }
+        const [moved] = next.splice(random(next.length), 1);
+        next.splice(random(next.length + 1), 0, moved);
+        component.items.set(next);
+        fixture.detectChanges();
+
+        expect(renderedIds()).toEqual(next.map((item) => item.id));
+        for (const item of next) {
+          if (elements.has(item.id)) {
+            expect(rowElement(item.id)).toBe(elements.get(item.id));
+          }
+        }
+        list = next;
+      }
+    });
+  });
+});
+
+describe('VirtualForDirective (rows of several nodes)', () => {
+  let fixture: ComponentFixture<NotesHostComponent>;
+  let originalResizeObserver: typeof ResizeObserver;
+
+  // The rows' elements in DOM order: each item, then its note when notes show
+  const renderedNodes = (): string[] =>
+    Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.item, .note')).map(
+      (el) => (el.classList.contains('note') ? 'note ' : '') + el.getAttribute('data-id'),
+    );
+
+  beforeAll(() => {
+    originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+  });
+
+  afterAll(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  beforeEach(() => {
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(200);
+    fixture = TestBed.createComponent(NotesHostComponent);
+    fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    jest.restoreAllMocks();
+  });
+
+  it('moves every node of a row, and renders its blocks within it after the move', () => {
+    fixture.componentInstance.showNotes.set(true);
+    fixture.detectChanges();
+
+    fixture.componentInstance.items.set(['b', 'c', 'a']);
+    fixture.detectChanges();
+    expect(renderedNodes()).toEqual(['b', 'note b', 'c', 'note c', 'a', 'note a']);
+
+    // Blocks that render after the move go with their row
+    fixture.componentInstance.showNotes.set(false);
+    fixture.detectChanges();
+    fixture.componentInstance.items.set(['c', 'a', 'b']);
+    fixture.detectChanges();
+    fixture.componentInstance.showNotes.set(true);
+    fixture.detectChanges();
+    expect(renderedNodes()).toEqual(['c', 'note c', 'a', 'note a', 'b', 'note b']);
   });
 });
 
@@ -738,10 +881,11 @@ describe('VirtualForDirective (shift animation)', () => {
 describe('VirtualForDirective (content offset)', () => {
   let originalResizeObserver: typeof ResizeObserver;
 
+  // In DOM order (see the other renderedIds)
   const renderedIds = (fixture: ComponentFixture<unknown>): string[] =>
-    fixture.debugElement
-      .queryAll(By.css('.item'))
-      .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id') ?? '');
+    Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.item')).map(
+      (el) => el.getAttribute('data-id') ?? '',
+    );
 
   /** item IDs from..to inclusive */
   const itemIds = (from: number, to: number): string[] =>
@@ -884,10 +1028,12 @@ describe('VirtualForDirective (change detection scope)', () => {
   let appRef: ApplicationRef;
   const originalResizeObserver = globalThis.ResizeObserver;
 
+  // In DOM order: rows move by their nodes, so the debug element tree (in the order of the views in
+  // the ViewContainerRef) can list them in another order
   const renderedIds = (): string[] =>
-    fixture.debugElement
-      .queryAll(By.css('.item'))
-      .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id') ?? '');
+    Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.item')).map(
+      (el) => el.getAttribute('data-id') ?? '',
+    );
 
   const resetCounts = (): void => {
     host.hostRenders = 0;
