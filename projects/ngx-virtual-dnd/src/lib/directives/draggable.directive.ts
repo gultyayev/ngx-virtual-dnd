@@ -1,13 +1,13 @@
 import {
   computed,
   Directive,
-  effect,
   ElementRef,
   EnvironmentInjector,
   ErrorHandler,
   inject,
   input,
   NgZone,
+  OnChanges,
   OnDestroy,
   OnInit,
   output,
@@ -91,7 +91,7 @@ const HANDLED_KEYS = new Set([
     '(mousedown)': 'onPointerDown($event, false)',
   },
 })
-export class DraggableDirective implements OnInit, OnDestroy {
+export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #dragState = inject(DragStateService);
   readonly #positionCalculator = inject(PositionCalculatorService);
@@ -215,30 +215,31 @@ export class DraggableDirective implements OnInit, OnDestroy {
    * without options, so non-passive): a swipe that starts on an element with a non-passive
    * touchstart listener can't scroll until the main thread has run it. With a drag delay the press
    * never cancels the scroll (the page must scroll when the user swipes before the delay passes),
-   * so the listener is passive; without one it prevents the default action and stays non-passive.
-   * Runs outside Angular's zone like the other pointer listeners.
+   * so the listener is passive; without one it prevents the default action and is non-passive.
+   * Like the keydown listener, it runs the handler in the zone (as the mousedown host binding
+   * does) and reports what it throws to the ErrorHandler. Added once the inputs are set, so unlike
+   * a host listener it runs after the element's template listeners.
    */
   readonly #onTouchStart = (event: TouchEvent): void => {
-    if (this.#initialized) {
-      this.onPointerDown(event, true);
+    if (!this.#initialized) {
+      return;
     }
+    this.#ngZone.run(() => {
+      try {
+        this.onPointerDown(event, true);
+      } catch (error) {
+        this.#envInjector.get(ErrorHandler).handleError(error);
+      }
+    });
   };
 
-  /** Whether the touchstart listener can be passive: only a press without a delay cancels the scroll */
-  readonly #passiveTouchStart = computed(() => this.dragDelay() > 0);
+  /** Whether the touchstart listener is passive, or null while it isn't added */
+  #touchStartPassive: boolean | null = null;
 
   constructor() {
-    const element: HTMLElement = this.#elementRef.nativeElement;
-    this.#ngZone.runOutsideAngular(() => element.addEventListener('keydown', this.#onKeydown));
-
-    // Re-added only when the listener has to change between passive and non-passive
-    effect((onCleanup) => {
-      const passive = this.#passiveTouchStart();
-      this.#ngZone.runOutsideAngular(() =>
-        element.addEventListener('touchstart', this.#onTouchStart, { passive }),
-      );
-      onCleanup(() => element.removeEventListener('touchstart', this.#onTouchStart));
-    });
+    this.#ngZone.runOutsideAngular(() =>
+      this.#elementRef.nativeElement.addEventListener('keydown', this.#onKeydown),
+    );
   }
 
   /** Cached constraint flag from source droppable */
@@ -321,10 +322,16 @@ export class DraggableDirective implements OnInit, OnDestroy {
     });
 
     this.#initialized = true;
+    this.#listenForTouchStart();
+  }
+
+  ngOnChanges(): void {
+    this.#listenForTouchStart();
   }
 
   ngOnDestroy(): void {
     this.#elementRef.nativeElement.removeEventListener('keydown', this.#onKeydown);
+    this.#elementRef.nativeElement.removeEventListener('touchstart', this.#onTouchStart);
 
     // Destroyed before its first change detection: there are no handlers yet, and its inputs
     // have no values (reading a bound ID would throw).
@@ -338,6 +345,25 @@ export class DraggableDirective implements OnInit, OnDestroy {
     }
     this.#pointerHandler.destroy();
     this.#keyboardHandler.destroy();
+  }
+
+  /**
+   * Add the touchstart listener, or re-add it when the drag delay changes whether it can be
+   * passive. Lifecycle hooks, not an effect: creating a view effect schedules a change detection
+   * that visits every ancestor, and a virtual list creates rows on each scroll step.
+   */
+  #listenForTouchStart(): void {
+    // The handler cancels the scroll of a touch press only when there is no delay
+    const passive = this.dragDelay() !== 0;
+    if (passive === this.#touchStartPassive) {
+      return;
+    }
+    const element: HTMLElement = this.#elementRef.nativeElement;
+    element.removeEventListener('touchstart', this.#onTouchStart);
+    this.#ngZone.runOutsideAngular(() =>
+      element.addEventListener('touchstart', this.#onTouchStart, { passive }),
+    );
+    this.#touchStartPassive = passive;
   }
 
   /** Run the handler of a key the item handles (see HANDLED_KEYS), returning what it returns. */

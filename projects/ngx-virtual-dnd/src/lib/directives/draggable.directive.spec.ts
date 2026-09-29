@@ -190,6 +190,31 @@ class KeyOverridingHostComponent {}
 })
 class ExtendedDraggableHostComponent {}
 
+// A consumer directive that overrides the pointer press handler
+@Directive({ selector: '[vdndTestPressOverridingDraggable]' })
+class PressOverridingDraggableDirective extends DraggableDirective {
+  failure: Error | null = null;
+
+  protected override onPointerDown(event: MouseEvent | TouchEvent, isTouch: boolean): void {
+    if (this.failure) {
+      throw this.failure;
+    }
+    super.onPointerDown(event, isTouch);
+  }
+}
+
+@Component({
+  template: `
+    <div
+      vdndTestPressOverridingDraggable
+      vdndDraggable="press-overriding-item"
+      vdndDraggableGroup="test-group"
+    ></div>
+  `,
+  imports: [PressOverridingDraggableDirective],
+})
+class PressOverridingHostComponent {}
+
 // A draggable rendered with a drag delay from the start, as lists that scroll by touch are
 @Component({
   template: `<div
@@ -515,6 +540,40 @@ describe('DraggableDirective', () => {
       } finally {
         jest.useRealTimers();
       }
+    });
+
+    it('should listen passively with a negative delay, which never cancels the scroll', () => {
+      const { added } = recordTouchStartListeners(() => {
+        component.dragDelay.set(-1);
+        fixture.detectChanges();
+      });
+
+      expect(added.filter(({ element }) => element === draggableNative)).toEqual([
+        expect.objectContaining({ passive: true }),
+      ]);
+      const press = touchStart();
+      draggableNative.dispatchEvent(press);
+      expect(press.defaultPrevented).toBe(false);
+    });
+
+    it('should report an error thrown by an overridden press handler to the ErrorHandler', () => {
+      const handleError = jest
+        .spyOn(TestBed.inject(ErrorHandler), 'handleError')
+        .mockImplementation(() => {
+          // Recorded below
+        });
+      const overriding = TestBed.createComponent(PressOverridingHostComponent);
+      overriding.detectChanges();
+      const debugItem = overriding.debugElement.query(
+        By.directive(PressOverridingDraggableDirective),
+      );
+      const failure = new Error('press handler failed');
+      debugItem.injector.get(PressOverridingDraggableDirective).failure = failure;
+
+      debugItem.nativeElement.dispatchEvent(touchStart());
+
+      expect(handleError).toHaveBeenCalledWith(failure);
+      overriding.destroy();
     });
 
     it('should remove its listener when destroyed', () => {

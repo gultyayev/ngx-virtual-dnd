@@ -4,7 +4,9 @@ import 'zone.js';
 import {
   afterEveryRender,
   Component,
+  Directive,
   EnvironmentInjector,
+  NgZone,
   provideZoneChangeDetection,
 } from '@angular/core';
 import { ComponentFixtureAutoDetect, TestBed } from '@angular/core/testing';
@@ -34,6 +36,27 @@ class ZoneHostComponent {
   imports: [DraggableDirective],
 })
 class DelayedZoneHostComponent {}
+
+// A consumer directive that overrides the pointer press handler and records where it ran
+@Directive({ selector: '[vdndTestPressRecordingDraggable]' })
+class PressRecordingDraggableDirective extends DraggableDirective {
+  pressesInZone: boolean[] = [];
+
+  protected override onPointerDown(event: MouseEvent | TouchEvent, isTouch: boolean): void {
+    this.pressesInZone.push(NgZone.isInAngularZone());
+    super.onPointerDown(event, isTouch);
+  }
+}
+
+@Component({
+  template: `<div
+    vdndTestPressRecordingDraggable
+    vdndDraggable="item-a"
+    vdndDraggableGroup="g"
+  ></div>`,
+  imports: [PressRecordingDraggableDirective],
+})
+class PressRecordingHostComponent {}
 
 describe('drag outputs in a zone.js app', () => {
   beforeEach(() => {
@@ -132,6 +155,30 @@ describe('drag outputs in a zone.js app', () => {
     Zone.root.run(() =>
       document.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [touch] })),
     );
+    fixture.destroy();
+  });
+
+  it('runs the press handler of a touch in the zone, as it does for a mouse press', async () => {
+    const fixture = TestBed.createComponent(PressRecordingHostComponent);
+    await fixture.whenStable();
+    const item = fixture.nativeElement.querySelector('[data-draggable-id="item-a"]') as HTMLElement;
+    const touch = { clientX: 10, clientY: 10 } as Touch;
+
+    Zone.root.run(() => {
+      item.dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 10, clientY: 10, button: 0, bubbles: true }),
+      );
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 10, clientY: 10 }));
+      item.dispatchEvent(
+        new TouchEvent('touchstart', { touches: [touch], changedTouches: [touch], bubbles: true }),
+      );
+      document.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [touch] }));
+    });
+
+    const directive = fixture.debugElement.children[0].injector.get(
+      PressRecordingDraggableDirective,
+    );
+    expect(directive.pressesInZone).toEqual([true, true]);
     fixture.destroy();
   });
 });
