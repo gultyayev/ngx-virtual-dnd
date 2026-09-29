@@ -190,6 +190,22 @@ class KeyOverridingHostComponent {}
 })
 class ExtendedDraggableHostComponent {}
 
+// A draggable rendered with a drag delay from the start, as lists that scroll by touch are
+@Component({
+  template: `<div
+    vdndDraggable="delayed-item"
+    vdndDraggableGroup="test-group"
+    [dragDelay]="300"
+  ></div>`,
+  imports: [DraggableDirective],
+})
+class DelayedHostComponent {}
+
+/** Whether `addEventListener` options make the listener passive */
+function isPassive(options: boolean | AddEventListenerOptions | undefined): boolean {
+  return typeof options === 'object' && options.passive === true;
+}
+
 describe('DraggableDirective', () => {
   let fixture: ComponentFixture<TestHostComponent>;
   let component: TestHostComponent;
@@ -337,6 +353,181 @@ describe('DraggableDirective', () => {
       draggableNative.dispatchEvent(mousedown);
 
       expect(mousedown.defaultPrevented).toBe(true);
+    });
+  });
+
+  describe('touchstart listener', () => {
+    // A swipe that starts on a row with a non-passive touchstart listener can't scroll until the
+    // main thread has run the listener. With a drag delay the press never cancels the scroll, so
+    // the listener must be passive; without one it must stay able to cancel it.
+    const touchStart = (): TouchEvent => {
+      const touch = { clientX: 100, clientY: 100 } as Touch;
+      return new TouchEvent('touchstart', {
+        touches: [touch],
+        changedTouches: [touch],
+        bubbles: true,
+        cancelable: true,
+      });
+    };
+
+    interface Registration {
+      element: unknown;
+      listener: unknown;
+      passive: boolean;
+    }
+
+    /** The touchstart listeners added to and removed from elements while `run` runs */
+    function recordTouchStartListeners(run: () => void): {
+      added: Registration[];
+      removed: Omit<Registration, 'passive'>[];
+    } {
+      const add = jest.spyOn(HTMLElement.prototype, 'addEventListener');
+      const remove = jest.spyOn(HTMLElement.prototype, 'removeEventListener');
+      try {
+        run();
+        return {
+          added: add.mock.calls
+            .map(([type, listener, options], call) => ({
+              type,
+              element: add.mock.contexts[call],
+              listener,
+              passive: isPassive(options),
+            }))
+            .filter(({ type }) => type === 'touchstart')
+            .map(({ element, listener, passive }) => ({ element, listener, passive })),
+          removed: remove.mock.calls
+            .map(([type, listener], call) => ({
+              type,
+              element: remove.mock.contexts[call],
+              listener,
+            }))
+            .filter(({ type }) => type === 'touchstart')
+            .map(({ element, listener }) => ({ element, listener })),
+        };
+      } finally {
+        add.mockRestore();
+        remove.mockRestore();
+      }
+    }
+
+    it('should listen passively on an item rendered with a drag delay', () => {
+      let delayed!: ComponentFixture<DelayedHostComponent>;
+      const { added } = recordTouchStartListeners(() => {
+        delayed = TestBed.createComponent(DelayedHostComponent);
+        delayed.detectChanges();
+      });
+      const item = delayed.debugElement.query(By.directive(DraggableDirective)).nativeElement;
+
+      const onItem = added.filter(({ element }) => element === item);
+      expect(onItem.map(({ passive }) => passive)).toEqual([true]);
+      delayed.destroy();
+    });
+
+    it('should listen on an item without a drag delay with a listener that can cancel the scroll', () => {
+      let other!: ComponentFixture<BoundIdHostComponent>;
+      const { added } = recordTouchStartListeners(() => {
+        other = TestBed.createComponent(BoundIdHostComponent);
+        other.detectChanges();
+      });
+      const item = other.debugElement.query(By.directive(DraggableDirective)).nativeElement;
+
+      const onItem = added.filter(({ element }) => element === item);
+      expect(onItem.map(({ passive }) => passive)).toEqual([false]);
+      other.destroy();
+    });
+
+    it('should switch to a passive listener when a drag delay is set', () => {
+      const { added, removed } = recordTouchStartListeners(() => {
+        component.dragDelay.set(300);
+        fixture.detectChanges();
+      });
+
+      expect(added.filter(({ element }) => element === draggableNative)).toEqual([
+        expect.objectContaining({ passive: true }),
+      ]);
+      // The listener that could cancel the scroll is gone
+      expect(removed.filter(({ element }) => element === draggableNative).length).toBe(1);
+    });
+
+    it('should keep its listener while the delay changes but stays above zero', () => {
+      component.dragDelay.set(300);
+      fixture.detectChanges();
+
+      const { added, removed } = recordTouchStartListeners(() => {
+        component.dragDelay.set(500);
+        fixture.detectChanges();
+      });
+
+      expect(added).toEqual([]);
+      expect(removed).toEqual([]);
+    });
+
+    it('should not let a touch press without a drag delay scroll the page', () => {
+      const press = touchStart();
+      draggableNative.dispatchEvent(press);
+
+      expect(press.defaultPrevented).toBe(true);
+    });
+
+    it('should again stop the page scrolling when the drag delay is removed', () => {
+      component.dragDelay.set(300);
+      fixture.detectChanges();
+      component.dragDelay.set(0);
+      fixture.detectChanges();
+
+      const press = touchStart();
+      draggableNative.dispatchEvent(press);
+
+      expect(press.defaultPrevented).toBe(true);
+    });
+
+    it('should leave a touch press with a drag delay free to scroll the page', () => {
+      component.dragDelay.set(300);
+      fixture.detectChanges();
+
+      const press = touchStart();
+      draggableNative.dispatchEvent(press);
+
+      expect(press.defaultPrevented).toBe(false);
+    });
+
+    it('should start a touch drag once the delay has passed', () => {
+      component.dragDelay.set(100);
+      fixture.detectChanges();
+      jest.useFakeTimers();
+      try {
+        draggableNative.dispatchEvent(touchStart());
+        jest.advanceTimersByTime(100);
+        fixture.detectChanges();
+        expect(draggableNative.classList.contains('vdnd-drag-pending')).toBe(true);
+
+        const touch = { clientX: 100, clientY: 120 } as Touch;
+        const move = new TouchEvent('touchmove', {
+          touches: [touch],
+          changedTouches: [touch],
+          bubbles: true,
+          cancelable: true,
+        });
+        document.dispatchEvent(move);
+
+        expect(dragStateService.isDragging()).toBe(true);
+        expect(move.defaultPrevented).toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should remove its listener when destroyed', () => {
+      const { added } = recordTouchStartListeners(() => {
+        component.dragDelay.set(300);
+        fixture.detectChanges();
+      });
+      const listener = added.find(({ element }) => element === draggableNative)?.listener;
+      expect(listener).toBeDefined();
+
+      const { removed } = recordTouchStartListeners(() => fixture.destroy());
+
+      expect(removed).toContainEqual({ element: draggableNative, listener });
     });
   });
 

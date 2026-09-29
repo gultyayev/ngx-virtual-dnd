@@ -29,6 +29,12 @@ class ZoneHostComponent {
   drops = 0;
 }
 
+@Component({
+  template: `<div vdndDraggable="item-a" vdndDraggableGroup="g" [dragDelay]="50">A</div>`,
+  imports: [DraggableDirective],
+})
+class DelayedZoneHostComponent {}
+
 describe('drag outputs in a zone.js app', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -100,6 +106,32 @@ describe('drag outputs in a zone.js app', () => {
     // jsdom has no layout, so the release hits no droppable: dragEnd without a drop
     expect(host.querySelector('[data-testid="counts"]')?.textContent).toBe('1/0');
     expect(renders).toBe(1);
+    fixture.destroy();
+  });
+
+  it('shows a touch press as ready to drag once its delay has passed', async () => {
+    const fixture = TestBed.createComponent(DelayedZoneHostComponent);
+    await fixture.whenStable();
+    const host: HTMLElement = fixture.nativeElement;
+    const item = host.querySelector<HTMLElement>('[data-draggable-id="item-a"]');
+    if (!item) {
+      throw new Error('item-a not rendered');
+    }
+
+    const touch = { clientX: 10, clientY: 10 } as Touch;
+    // The touch listener runs outside Angular's zone, and so does the delay it starts
+    Zone.root.run(() =>
+      item.dispatchEvent(
+        new TouchEvent('touchstart', { touches: [touch], changedTouches: [touch], bubbles: true }),
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await fixture.whenStable();
+
+    expect(item.classList.contains('vdnd-drag-pending')).toBe(true);
+    Zone.root.run(() =>
+      document.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [touch] })),
+    );
     fixture.destroy();
   });
 });

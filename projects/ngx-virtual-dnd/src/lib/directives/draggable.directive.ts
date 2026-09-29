@@ -1,6 +1,7 @@
 import {
   computed,
   Directive,
+  effect,
   ElementRef,
   EnvironmentInjector,
   ErrorHandler,
@@ -88,7 +89,6 @@ const HANDLED_KEYS = new Set([
     '[attr.aria-grabbed]': 'isDragging() ? "true" : "false"',
     '[tabindex]': 'disabled() ? -1 : 0',
     '(mousedown)': 'onPointerDown($event, false)',
-    '(touchstart)': 'onPointerDown($event, true)',
   },
 })
 export class DraggableDirective implements OnInit, OnDestroy {
@@ -210,10 +210,35 @@ export class DraggableDirective implements OnInit, OnDestroy {
     });
   };
 
+  /**
+   * Touch presses on the item. Added programmatically, not as a host binding (which Angular adds
+   * without options, so non-passive): a swipe that starts on an element with a non-passive
+   * touchstart listener can't scroll until the main thread has run it. With a drag delay the press
+   * never cancels the scroll (the page must scroll when the user swipes before the delay passes),
+   * so the listener is passive; without one it prevents the default action and stays non-passive.
+   * Runs outside Angular's zone like the other pointer listeners.
+   */
+  readonly #onTouchStart = (event: TouchEvent): void => {
+    if (this.#initialized) {
+      this.onPointerDown(event, true);
+    }
+  };
+
+  /** Whether the touchstart listener can be passive: only a press without a delay cancels the scroll */
+  readonly #passiveTouchStart = computed(() => this.dragDelay() > 0);
+
   constructor() {
-    this.#ngZone.runOutsideAngular(() =>
-      this.#elementRef.nativeElement.addEventListener('keydown', this.#onKeydown),
-    );
+    const element: HTMLElement = this.#elementRef.nativeElement;
+    this.#ngZone.runOutsideAngular(() => element.addEventListener('keydown', this.#onKeydown));
+
+    // Re-added only when the listener has to change between passive and non-passive
+    effect((onCleanup) => {
+      const passive = this.#passiveTouchStart();
+      this.#ngZone.runOutsideAngular(() =>
+        element.addEventListener('touchstart', this.#onTouchStart, { passive }),
+      );
+      onCleanup(() => element.removeEventListener('touchstart', this.#onTouchStart));
+    });
   }
 
   /** Cached constraint flag from source droppable */
