@@ -1,6 +1,6 @@
 ---
 title: How it works
-description: Geometric hit-testing, virtual scroll math, and the resulting limitations.
+description: Geometric hit-testing, virtual scroll math, row recycling, and the resulting limitations.
 ---
 
 # How it works
@@ -35,7 +35,25 @@ While an item is dragged within its own list it is hidden with `display: none`, 
 
 Pointer moves are coalesced into a single `requestAnimationFrame` loop that reads layout, computes the new state and then writes styles, in that order. Drag state lives in signals, so only the parts of the page that depend on it update. The loop and all high-frequency listeners run outside Angular's zone. The `dragStart`, `dragEnd` and `drop` outputs are emitted inside it, so handlers that change plain fields still render in zone.js apps.
 
+## Row recycling
+
+By default, `<vdnd-sortable-list>` and `<vdnd-virtual-scroll>` create a row's view (its elements, components and directives) when the row scrolls into range, and destroy it when the row scrolls out. With `[recycleRows]="true"` they keep the views of the rows that scroll out and render the rows that scroll in with them, so scrolling creates few components and elements. `*vdndVirtualFor` always recycles rows.
+
+A recycled view renders another item, and keeps whatever does not come from its bindings:
+
+- **Components in the row are not created again.** Their constructor and `ngOnInit` run once, for the first item the view renders; later items only change their inputs. Derive what a row shows from its inputs (`input()`, `computed()`), not from values read once in `ngOnInit`.
+- **Local state stays with the view.** A component's own fields and signals, and the value of an input field that is not bound to the item, show up on the next item.
+- **DOM state that no binding sets stays**: classes or styles set from code, an element's scroll position, an `<img>` until its new `src` loads.
+
+Focus does not carry over: a view leaves the DOM before it renders another item. A row keeps its view while its item stays rendered, as without recycling.
+
+A row with a leave animation (`animate.leave`) on its root element is not recycled, by `*vdndVirtualFor` either, even when its bound value is empty: Angular keeps the row in the DOM until the leave animation has run. On Angular 22 this also applies to `animate.leave` on any element inside the row.
+
+Turn it on for rows that are costly to create (several components, many elements) and render only from their item.
+
 ## Known limitations
+
+### Hit-testing
 
 Because hit-testing uses geometry rather than `elementFromPoint()`, some browser behavior is not reproduced:
 
@@ -43,6 +61,51 @@ Because hit-testing uses geometry rather than `elementFromPoint()`, some browser
 - **Stacking order is approximated.** "Last in document order wins" matches the paint order in most layouts. It does not follow `z-index` or stacking contexts, so a droppable earlier in the DOM but raised visually loses to a later sibling.
 
 If your layout depends on either, keep overlapping droppables in different groups, or avoid painting interactive overlays across active drop targets during a drag.
+
+### Animations on rows that move
+
+This is a limitation of Angular. The lists move a row's view with `ViewContainerRef.move()`, as `*ngFor` does, and Angular animates a view that moves as if it left and came back: it plays the row's leave animation (`animate.leave`) and its enter animation (`animate.enter`). Only `@for` avoids that. Rows move when the items change order, for example after a drop or a sort. A row in `stickyItemIds` also moves each time it scrolls past the edge of the rendered rows.
+
+What happens to a row with `animate.leave` then depends on the Angular version:
+
+- Before Angular 21.2.1, Angular removes the row from the page when its leave animation ends, so it disappears.
+- From Angular 21.2.1, the row stays, unless it moves again before its leave animation ends: then Angular removes it.
+- On Angular 21, the row also keeps its leave class after the animation. A leave style that holds its end state, such as a transition to `opacity: 0`, leaves the row invisible.
+
+To avoid it during a drag, turn the animations off: give `[animate.leave]` an empty value from `dragStart` until the drop has rendered. Angular reads the value when the animation runs, after the render that moves the rows, so turn it back on in the `read` phase of that render:
+
+```ts
+readonly leaveAnimation = signal('row-leave');
+readonly #injector = inject(Injector);
+
+onDragStart(): void {
+  this.leaveAnimation.set('');
+}
+
+onDragEnd(): void {
+  // Angular runs the leave animations of the moved rows before the read phase of the next render
+  afterNextRender(
+    { read: () => this.leaveAnimation.set('row-leave') },
+    { injector: this.#injector },
+  );
+}
+```
+
+```html
+<div
+  class="item"
+  [animate.leave]="leaveAnimation()"
+  [vdndDraggable]="item.id"
+  (dragStart)="onDragStart()"
+  (dragEnd)="onDragEnd()"
+></div>
+```
+
+Bind `[animate.enter]` to a signal and clear it the same way, so moved rows don't replay their enter animation either.
+
+Before Angular 21.2.1 this is not enough, because Angular removes a row that moves even when its leave animation is empty. Update Angular, or keep `animate.leave` off rows that can move.
+
+This only covers drags. Turn the animations off the same way around a sort of your own, and keep `animate.leave` off rows in `stickyItemIds`: they move while the list scrolls. A bound `[animate.leave]` also keeps a row from being recycled, even while its value is empty (see [Row recycling](#row-recycling)).
 
 ## Browser support
 

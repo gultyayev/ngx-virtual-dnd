@@ -1,7 +1,11 @@
 import {
   ApplicationRef,
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
+  Directive,
+  inject,
+  OnDestroy,
   PLATFORM_ID,
   signal,
   TemplateRef,
@@ -21,20 +25,36 @@ import { KeyboardDragService } from '../services/keyboard-drag.service';
 import { DraggedItem, END_OF_LIST } from '../models/drag-drop.models';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { DragPlaceholderComponent } from './drag-placeholder.component';
+import { DropAnimator } from '../utils/drop-animator';
+import { DragIndexCalculatorService } from '../services/drag-index-calculator.service';
 
 // Mock ResizeObserver for JSDOM
 class MockResizeObserver {
   static instances: MockResizeObserver[] = [];
 
   disconnected = false;
-  observe = jest.fn();
-  unobserve = jest.fn();
+  /** Elements observed and not unobserved since, in the order they were (last) observed */
+  readonly #observed = new Set<Element>();
+  observe = jest.fn((element: Element) => {
+    this.#observed.delete(element);
+    this.#observed.add(element);
+  });
+  unobserve = jest.fn((element: Element) => {
+    this.#observed.delete(element);
+  });
   disconnect = jest.fn(() => {
     this.disconnected = true;
+    this.#observed.clear();
   });
 
-  constructor() {
+  constructor(readonly callback: ResizeObserverCallback = () => undefined) {
     MockResizeObserver.instances.push(this);
+  }
+
+  /** Report a new border-box height for an element, as the browser would */
+  resize(element: Element, blockSize: number): void {
+    const entry = { target: element, borderBoxSize: [{ blockSize, inlineSize: 100 }] };
+    this.callback([entry as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
   }
 
   /** Live observers that observed list rows (the container also observes its own size). */
@@ -50,10 +70,7 @@ class MockResizeObserver {
 
   /** Elements observed and not unobserved since. */
   observedElements(): Element[] {
-    const unobserved = new Set(this.unobserve.mock.calls.map(([element]) => element));
-    return this.observe.mock.calls
-      .map(([element]) => element as Element)
-      .filter((element) => !unobserved.has(element));
+    return [...this.#observed];
   }
 }
 
@@ -98,6 +115,7 @@ interface TestItem {
       [droppableId]="droppableId()"
       [autoScrollEnabled]="autoScrollEnabled()"
       [autoScrollConfig]="autoScrollConfig()"
+      [recycleRows]="recycleRows()"
     >
     </vdnd-virtual-scroll>
   `,
@@ -117,6 +135,7 @@ class TestHostComponent {
   dynamicItemHeight = signal(false);
   itemHeight = signal(50);
   otherTemplate = signal(false);
+  recycleRows = signal(false);
 
   readonly itemIdFn = (item: TestItem): string => item.id;
   readonly trackByFn = (_: number, item: TestItem): string => item.id;
@@ -569,6 +588,11 @@ describe('VirtualScrollContainerComponent', () => {
         .queryAll(By.css('[data-draggable-id]'))
         .map((el) => el.nativeElement as Element);
 
+    const byDraggableId = (a: Element, b: Element): number =>
+      (a.getAttribute('data-draggable-id') ?? '').localeCompare(
+        b.getAttribute('data-draggable-id') ?? '',
+      );
+
     const setDynamic = (dynamic: boolean): void => {
       component.dynamicItemHeight.set(dynamic);
       fixture.detectChanges();
@@ -661,6 +685,33 @@ describe('VirtualScrollContainerComponent', () => {
       expect(after.length).toBe(before.length);
       expect(after.some((element) => before.includes(element))).toBe(false);
       expect(observer.observedElements()).toEqual(after);
+    });
+
+    it('should measure a recycled row for the item it renders now', async () => {
+      component.droppableId.set('list');
+      component.recycleRows.set(true);
+      setDynamic(true);
+      const [observer] = MockResizeObserver.measuringRows();
+      const before = renderedItems();
+
+      // Rows 0-9 scroll out and rows 37-49 in: the views of rows 0-9 render 10 of them
+      await scrollContainerTo(2000);
+
+      const after = renderedItems();
+      const recycled = after.find((element) => before.includes(element));
+      expect(recycled).toBeDefined();
+      expect([...observer.observedElements()].sort(byDraggableId)).toEqual(
+        [...after].sort(byDraggableId),
+      );
+
+      // Its height goes to the item it renders now, not to the one it rendered before
+      const id = recycled!.getAttribute('data-draggable-id')!;
+      const index = Number(id.replace('item-', ''));
+      expect(index).toBeGreaterThanOrEqual(37);
+      observer.resize(recycled!, 80);
+      const strategy = TestBed.inject(DragIndexCalculatorService).getStrategyForDroppable('list');
+      expect(strategy?.getItemHeight(index)).toBe(80);
+      expect(virtualScrollComponent.getScrollHeight()).toBe(5000 + 30);
     });
 
     it('should measure every rendered row again when dynamic heights are turned back on', () => {
@@ -880,16 +931,32 @@ describe('VirtualScrollContainerComponent', () => {
   });
 });
 
+/** Row views created and destroyed (counted by a directive on each row) */
+const rowViews = { created: 0, destroyed: 0 };
+
+@Directive({ selector: '[vdndTestRowView]' })
+class RowViewDirective implements OnDestroy {
+  constructor() {
+    rowViews.created++;
+  }
+
+  ngOnDestroy(): void {
+    rowViews.destroyed++;
+  }
+}
+
 @Component({
   template: `
     <div class="host-render" [attr.data-count]="countHostRender()"></div>
     <ng-template #itemTpl let-item let-index="index" let-isSticky="isSticky">
       <div
         class="item"
+        vdndTestRowView
         [attr.data-draggable-id]="item.id"
         [attr.data-index]="index"
         [attr.data-sticky]="isSticky"
         [attr.data-name]="item.name"
+        [attr.data-selected]="selectedId === item.id"
       >
         {{ countRowRender(item.id) }}
       </div>
@@ -911,20 +978,27 @@ describe('VirtualScrollContainerComponent', () => {
       [itemTemplate]="
         template() === 'controlFlow' ? controlFlowTpl : template() === 'none' ? noTemplate : itemTpl
       "
+      [recycleRows]="recycleRows()"
+      [autoStickyDraggedItem]="autoStickyDraggedItem()"
       droppableId="list"
     />
   `,
-  imports: [VirtualScrollContainerComponent],
+  imports: [VirtualScrollContainerComponent, RowViewDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 class RenderCountingHostComponent {
+  readonly #changeDetector = inject(ChangeDetectorRef);
   // 200px of 50px rows: 4 in view plus 3 overscan below, so rows 0-7
   readonly items = signal<TestItem[]>(
     Array.from({ length: 30 }, (_, i) => ({ id: `item-${i}`, name: `Item ${i}` })),
   );
   readonly template = signal<'plain' | 'controlFlow' | 'none'>('plain');
   readonly trackByFn = signal<((index: number, item: TestItem) => string) | undefined>(undefined);
+  readonly recycleRows = signal(false);
+  readonly autoStickyDraggedItem = signal(true);
   readonly itemIdFn = (item: TestItem): string => item.id;
+  /** A plain field: the rows show it when this component renders them */
+  selectedId: string | null = null;
   // A misconfigured list: the template input is required, but a bound value can still be missing
   readonly noTemplate = undefined as unknown as TemplateRef<VirtualScrollItemContext<TestItem>>;
 
@@ -938,6 +1012,11 @@ class RenderCountingHostComponent {
   countRowRender(id: string): string {
     this.rowRenders.push(id);
     return id;
+  }
+
+  select(id: string): void {
+    this.selectedId = id;
+    this.#changeDetector.markForCheck();
   }
 }
 
@@ -1356,6 +1435,188 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
     render();
     expect(renderedOrder()).toEqual([...items(0, 1), 'P', ...items(2, 7)]);
   });
+
+  describe('with recycleRows', () => {
+    beforeEach(() => {
+      host.recycleRows.set(true);
+      render();
+      resetCounts();
+      rowViews.created = 0;
+      rowViews.destroyed = 0;
+    });
+
+    it('renders the rows that scroll in with the views of the rows that scroll out', async () => {
+      const views = items(0, 7).map(rowElement);
+
+      // First row in view 20: rows 17-27. Rows 0-7 leave, so only 3 views are new
+      await scrollTo(1000);
+
+      expect(renderedOrder()).toEqual(items(17, 27));
+      const rows = items(17, 27).map(rowElement);
+      expect(views.every((view) => rows.includes(view))).toBe(true);
+      expect(rowViews).toEqual({ created: 3, destroyed: 0 });
+      expect([...host.rowRenders].sort()).toEqual(items(17, 27).sort());
+      expect(host.hostRenders).toBe(0);
+    });
+
+    it('shows the item, index and sticky flag of the row a recycled view renders now', async () => {
+      await scrollTo(1000);
+
+      for (let i = 17; i <= 27; i++) {
+        const row = rowElement(`item-${i}`);
+        expect(row?.getAttribute('data-index')).toBe(`${i}`);
+        expect(row?.getAttribute('data-name')).toBe(`Item ${i}`);
+        expect(row?.getAttribute('data-sticky')).toBe('false');
+      }
+    });
+
+    it('keeps the view of a row while its item stays rendered', async () => {
+      const kept = items(1, 7).map(rowElement);
+
+      // Rows 1-11: item-0 leaves, and its view renders one of rows 8-11
+      await scrollTo(200);
+
+      expect(items(1, 7).map(rowElement)).toEqual(kept);
+      expect(rowViews).toEqual({ created: 3, destroyed: 0 });
+    });
+
+    it('renders a pooled view again when it comes back for the same item', async () => {
+      await scrollTo(1000);
+      // Back at the top only rows 0-7 render: the views of rows 17-19 wait in the pool
+      await scrollTo(0);
+      expect(rowViews).toEqual({ created: 3, destroyed: 0 });
+
+      // What the rows show changes while those views are detached
+      host.select('item-17');
+      render();
+      expect(rowElement('item-0')?.getAttribute('data-selected')).toBe('false');
+
+      // Rows 17-19 get their own views back, with the context they had
+      await scrollTo(1000);
+
+      expect(rowElement('item-17')?.getAttribute('data-selected')).toBe('true');
+      expect(rowViews).toEqual({ created: 3, destroyed: 0 });
+    });
+
+    it('moves only the view that renders another row', async () => {
+      const first = rowElement('item-0');
+      const removedRows = watchRemovedRows();
+
+      await scrollTo(200);
+
+      // The view of item-0 moves to the end, to render the last new row
+      expect(rowElement('item-11')).toBe(first);
+      expect(removedRows()).toEqual(['item-11']);
+    });
+
+    it('destroys the row of the dragged item instead of recycling it', async () => {
+      host.autoStickyDraggedItem.set(false);
+      render();
+      // item-0 is dragged, and not kept rendered when it scrolls out
+      startDrag('list', 1);
+      const dragged = rowElement('item-0');
+
+      await scrollTo(1000);
+
+      expect(rowElement('item-0')).toBeNull();
+      expect(items(17, 27).map(rowElement)).not.toContain(dragged);
+      expect(rowViews.destroyed).toBe(1);
+    });
+
+    it('destroys the row that holds the dragged element when its ID is not the item ID', async () => {
+      host.autoStickyDraggedItem.set(false);
+      render();
+      // The draggable ID of the row is not what itemIdFn returns for its item
+      const dragged = rowElement('item-0')!;
+      dragState.startDrag(
+        {
+          draggableId: 'row-of-item-0',
+          droppableId: 'list',
+          element: dragged,
+          height: 50,
+          width: 100,
+        },
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'list',
+        END_OF_LIST,
+        1,
+        0,
+      );
+      render();
+
+      await scrollTo(1000);
+
+      expect(items(17, 27).map(rowElement)).not.toContain(dragged);
+      expect(rowViews.destroyed).toBe(1);
+    });
+
+    it('destroys the pooled views when recycling is turned off', () => {
+      // Rows 5-7 leave: their views wait in the pool
+      host.items.set(host.items().slice(0, 5));
+      render();
+      expect(rowViews.destroyed).toBe(0);
+
+      host.recycleRows.set(false);
+      render();
+
+      expect(rowViews.destroyed).toBe(3);
+    });
+
+    it('destroys the pooled views with the list', () => {
+      host.items.set(host.items().slice(0, 5));
+      render();
+
+      fixture.destroy();
+
+      expect(rowViews.destroyed).toBe(8);
+    });
+
+    it('destroys the pooled views when the item template changes', () => {
+      host.items.set(host.items().slice(0, 5));
+      render();
+
+      host.template.set('controlFlow');
+      render();
+
+      // The 5 rendered views and the 3 pooled ones
+      expect(rowViews.destroyed).toBe(8);
+    });
+
+    it('renders any mix of removals, insertions and moves in order', () => {
+      let seed = 11;
+      const random = (count: number): number => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed % count;
+      };
+      let added = 0;
+      let list = host.items().slice(0, 6);
+      host.items.set(list);
+      render();
+
+      for (let step = 0; step < 60; step++) {
+        const next = [...list];
+        if (next.length > 2 && random(3) === 0) {
+          next.splice(random(next.length), 1);
+        }
+        if (next.length < 8 && random(2) === 0) {
+          next.splice(random(next.length + 1), 0, { id: `new-${added}`, name: `New ${added++}` });
+        }
+        const [moved] = next.splice(random(next.length), 1);
+        next.splice(random(next.length + 1), 0, moved);
+        host.items.set(next);
+        render();
+
+        expect(renderedOrder()).toEqual(next.map((item) => item.id));
+        next.forEach((item, index) => {
+          expect(rowElement(item.id)?.getAttribute('data-name')).toBe(item.name);
+          expect(rowElement(item.id)?.getAttribute('data-index')).toBe(`${index}`);
+        });
+        list = next;
+      }
+    });
+  });
 });
 
 @Component({
@@ -1506,5 +1767,153 @@ describe.each([
     appRef.tick();
 
     expect([...animated].sort()).toEqual(['P', 'item-1', 'item-2']);
+  });
+});
+
+@Component({
+  template: `
+    <ng-template #itemTpl let-item>
+      <div class="item" [attr.data-draggable-id]="item.id">{{ item.name }}</div>
+    </ng-template>
+    <vdnd-virtual-scroll
+      [items]="items()"
+      [itemHeight]="50"
+      [containerHeight]="200"
+      [itemIdFn]="itemIdFn"
+      [itemTemplate]="itemTpl"
+      [recycleRows]="true"
+      droppableId="list"
+    />
+  `,
+  imports: [VirtualScrollContainerComponent],
+  providers: [{ provide: VDND_ANIMATION_CONFIG, useValue: { shiftDuration: 200 } }],
+})
+class RecyclingAnimatedHostComponent {
+  readonly items = signal<TestItem[]>(
+    Array.from({ length: 6 }, (_, i) => ({ id: `item-${i}`, name: `Item ${i}` })),
+  );
+  readonly itemIdFn = (item: TestItem): string => item.id;
+}
+
+describe('VirtualScrollContainerComponent (shift animation of recycled rows)', () => {
+  let fixture: ComponentFixture<RecyclingAnimatedHostComponent>;
+  let host: RecyclingAnimatedHostComponent;
+  let dragState: DragStateService;
+  let appRef: ApplicationRef;
+  /** The animations started, by the item their element rendered when each started */
+  let animations: { id: string; animation: { cancel: jest.Mock } }[];
+  const originalResizeObserver = globalThis.ResizeObserver;
+  const originalAnimate = Element.prototype.animate;
+  const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+
+  const movePlaceholder = (placeholderIndex: number): void => {
+    dragState.updateDragPosition({
+      cursorPosition: { x: 0, y: 0 },
+      activeDroppableId: 'list',
+      placeholderId: END_OF_LIST,
+      placeholderIndex,
+    });
+  };
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    animations = [];
+    // jsdom has no layout: place each element by its position among its siblings
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const index = this.parentElement ? Array.from(this.parentElement.children).indexOf(this) : 0;
+      return { top: index * 50, left: 0, width: 100, height: 50 } as DOMRect;
+    };
+    Element.prototype.animate = function (this: Element) {
+      const animation = {
+        cancel: jest.fn(),
+        effect: { getComputedTiming: () => ({ progress: 0 }) },
+        onfinish: null,
+      };
+      animations.push({ id: this.getAttribute('data-draggable-id') ?? 'P', animation });
+      return animation as unknown as Animation;
+    } as typeof Element.prototype.animate;
+
+    TestBed.configureTestingModule({ imports: [RecyclingAnimatedHostComponent] });
+    fixture = TestBed.createComponent(RecyclingAnimatedHostComponent);
+    host = fixture.componentInstance;
+    dragState = TestBed.inject(DragStateService);
+    appRef = TestBed.inject(ApplicationRef);
+    fixture.detectChanges();
+    appRef.tick();
+
+    // Drag item-0 within the list; the placeholder starts in its own slot
+    dragState.startDrag(
+      {
+        draggableId: 'item-0',
+        droppableId: 'list',
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      null,
+      'list',
+      END_OF_LIST,
+      1,
+      0,
+    );
+    appRef.tick();
+  });
+
+  afterEach(() => {
+    dragState.endDrag();
+    fixture.destroy();
+    globalThis.ResizeObserver = originalResizeObserver;
+    Element.prototype.animate = originalAnimate;
+    Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+  });
+
+  it('does not slide a recycled row from where the item it rendered before was', () => {
+    // item-1 leaves and a new item comes in, in the render that moves the placeholder: the view
+    // of item-1 renders the new item, at the end of the list
+    const [item0, , ...rest] = host.items();
+    host.items.set([item0, ...rest, { id: 'item-new', name: 'New' }]);
+    movePlaceholder(3);
+    appRef.tick();
+
+    const animated = animations.map(({ id }) => id);
+    expect(animated).not.toContain('item-new');
+    // The rows that did move still slide
+    expect(animated).toContain('item-2');
+  });
+
+  it('cancels the shift animation of a row whose view is pooled', () => {
+    // The placeholder moves from before item-1 to before item-3: item-1 slides up
+    movePlaceholder(3);
+    appRef.tick();
+    const slide = animations.find(({ id }) => id === 'item-1')?.animation;
+    expect(slide?.cancel).not.toHaveBeenCalled();
+
+    // item-1 leaves the list: its view waits in the pool, to render another item later
+    host.items.set(host.items().filter((item) => item.id !== 'item-1'));
+    appRef.tick();
+
+    expect(slide?.cancel).toHaveBeenCalled();
+  });
+
+  it('shows again a row the drop animation hides when its view is pooled', () => {
+    const row = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+      '[data-draggable-id="item-1"]',
+    )!;
+    new DropAnimator({ dropDuration: 200 }).play(
+      document.createElement('div'),
+      { element: row, rect: row.getBoundingClientRect() },
+      () => undefined,
+    );
+    const hide = animations.at(-1)!;
+    expect(hide.id).toBe('item-1');
+    expect(hide.animation.cancel).not.toHaveBeenCalled();
+
+    // item-1 leaves the list: its view is pooled, to render another item that must not stay hidden
+    host.items.set(host.items().filter((item) => item.id !== 'item-1'));
+    appRef.tick();
+
+    expect(hide.animation.cancel).toHaveBeenCalled();
   });
 });

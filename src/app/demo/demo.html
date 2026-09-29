@@ -388,6 +388,7 @@
                 [itemIdFn]="getItemId"
                 [itemTemplate]="simplifiedItemTpl"
                 [constrainToContainer]="constrainToContainer()"
+                [recycleRows]="recycleRows"
                 (drop)="onDropSimplified($event)"
               />
             </div>
@@ -411,6 +412,7 @@
                 [itemIdFn]="getItemId"
                 [itemTemplate]="simplifiedItemTpl"
                 [constrainToContainer]="constrainToContainer()"
+                [recycleRows]="recycleRows"
                 (drop)="onDropSimplified($event)"
               />
             </div>
@@ -472,6 +474,7 @@
                 [itemIdFn]="getItemId"
                 [trackByFn]="trackById"
                 [itemTemplate]="itemTpl"
+                [recycleRows]="recycleRows"
               />
             </div>
           </div>
@@ -501,6 +504,7 @@
                 [itemIdFn]="getItemId"
                 [trackByFn]="trackById"
                 [itemTemplate]="itemTpl"
+                [recycleRows]="recycleRows"
               />
             </div>
           </div>

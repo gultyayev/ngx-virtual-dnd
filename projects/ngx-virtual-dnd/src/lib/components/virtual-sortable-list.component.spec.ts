@@ -72,6 +72,29 @@ class ListeningHostComponent {
   getId = (item: Item): string => item.id;
 }
 
+@Component({
+  template: `
+    <vdnd-sortable-list
+      droppableId="list"
+      group="g"
+      [items]="items"
+      [itemHeight]="50"
+      [containerHeight]="200"
+      [itemIdFn]="getId"
+      [itemTemplate]="tpl"
+      [recycleRows]="true"
+    />
+    <ng-template #tpl let-item>
+      <div [attr.data-draggable-id]="item.id">{{ item.id }}</div>
+    </ng-template>
+  `,
+  imports: [VirtualSortableListComponent],
+})
+class RecyclingHostComponent {
+  items: Item[] = Array.from({ length: 30 }, (_, i) => ({ id: `item-${i}` }));
+  getId = (item: Item): string => item.id;
+}
+
 describe('VirtualSortableListComponent', () => {
   let dragState: DragStateService;
 
@@ -145,6 +168,25 @@ describe('VirtualSortableListComponent', () => {
     expect(host.drops[0].destination).toEqual(
       expect.objectContaining({ droppableId: 'list', index: 2 }),
     );
+    fixture.destroy();
+  });
+
+  it('recycles the rows of its list with recycleRows', async () => {
+    const fixture = TestBed.createComponent(RecyclingHostComponent);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const scroller = element.querySelector('vdnd-virtual-scroll') as HTMLElement;
+    const first = element.querySelector('[data-draggable-id="item-0"]');
+
+    // First row in view 20: rows 17-27, and the views of rows 0-7 render some of them
+    scroller.scrollTop = 1000;
+    scroller.dispatchEvent(new Event('scroll'));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    fixture.detectChanges();
+
+    expect(element.querySelector('[data-draggable-id="item-0"]')).toBeNull();
+    expect(first?.isConnected).toBe(true);
+    expect(first?.textContent?.trim()).toBe(first?.getAttribute('data-draggable-id'));
     fixture.destroy();
   });
 

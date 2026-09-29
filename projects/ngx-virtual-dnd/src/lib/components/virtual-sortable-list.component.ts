@@ -100,6 +100,7 @@ class SortableListOutputsDirective {
         [autoStickyDraggedItem]="true"
         [containerHeight]="containerHeight()"
         [overscan]="overscan()"
+        [recycleRows]="recycleRows()"
         [autoScrollEnabled]="autoScrollEnabled()"
         [autoScrollConfig]="autoScrollConfig()"
       >
@@ -165,6 +166,14 @@ export class VirtualSortableListComponent<T> {
 
   /** Number of items to render above/below the visible area */
   overscan = input<number>(3);
+
+  /**
+   * Reuse the views of rows that scroll out to render the rows that scroll in, instead of
+   * destroying them and creating new ones. Scrolling creates fewer components and elements, but
+   * a row's components, element and DOM state (focus aside) then carry over to other items.
+   * @default false
+   */
+  recycleRows = input<boolean>(false);
 
   /** Enable auto-scroll when dragging near edges */
   autoScrollEnabled = input<boolean>(true);

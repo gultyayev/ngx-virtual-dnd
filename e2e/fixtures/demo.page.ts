@@ -29,6 +29,8 @@ export interface DemoSettings {
   shiftAnimation?: number;
   /** Drop animation duration in ms */
   dropAnimation?: number;
+  /** Reuse the views of rows that scroll out for the rows that scroll in */
+  recycleRows?: boolean;
 }
 
 export class DemoPage {

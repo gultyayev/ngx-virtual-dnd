@@ -27,6 +27,7 @@ import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
+import { revealDropTargetIn } from '../utils/drop-animator';
 
 /**
  * Context provided to the template for each virtual item.
@@ -718,14 +719,8 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     // Move unused views to pool
     for (const [key, view] of this.#activeViews) {
       if (!neededKeys.has(key)) {
-        const index = this.#viewContainer.indexOf(view);
-        if (index >= 0) {
-          this.#viewContainer.detach(index);
-        }
-        this.#unobserveViewElements(view);
-        this.#cancelShiftAnimation(view);
-        this.#viewPool.push(view);
         this.#activeViews.delete(key);
+        this.#poolView(view);
       }
     }
 
@@ -785,6 +780,36 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     this.#renderChangedViews(changedViews);
 
     return placeholderDomPosition;
+  }
+
+  /**
+   * Take a row's view out of the container and pool it. It keeps its element, so its shift
+   * animation is cancelled (the item it renders next must not slide from this one's position),
+   * and a drop animation that hides it shows it again.
+   */
+  #poolView(view: EmbeddedViewRef<VirtualForContext<T>>): void {
+    const index = this.#viewContainer.indexOf(view);
+    if (index >= 0) {
+      this.#viewContainer.detach(index);
+    }
+    this.#unobserveViewElements(view);
+    // A leave animation (`animate.leave`) keeps the row in the DOM, and Angular removes it when
+    // the animation ends: in the row of another item by then, if the view were reused. A row
+    // whose element is dragged (its draggable ID is not its track key) is destroyed too, which
+    // cancels the drag instead of handing it to another item.
+    const draggedElement = this.#dragState.draggedItem()?.element;
+    if (
+      view.rootNodes.some(
+        (node: Node) =>
+          node.parentNode !== null || (!!draggedElement && node.contains(draggedElement)),
+      )
+    ) {
+      view.destroy();
+      return;
+    }
+    this.#cancelShiftAnimation(view);
+    revealDropTargetIn(view.rootNodes);
+    this.#viewPool.push(view);
   }
 
   /**

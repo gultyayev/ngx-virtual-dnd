@@ -14,6 +14,7 @@ import { DragStateService } from '../services/drag-state.service';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-container.token';
 import { END_OF_LIST } from '../models/drag-drop.models';
+import { DropAnimator } from '../utils/drop-animator';
 
 const nextAnimationFrame = (): Promise<void> =>
   new Promise((resolve) => requestAnimationFrame(() => resolve()));
@@ -720,6 +721,25 @@ describe('VirtualForDirective (shift animation)', () => {
     expect(k1Animation.cancel).toHaveBeenCalled();
   });
 
+  it('shows again a row the drop animation hides when its view is pooled', () => {
+    const row = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+      '[data-id="k1"]',
+    )!;
+    new DropAnimator({ dropDuration: 200 }).play(
+      document.createElement('div'),
+      { element: row, rect: row.getBoundingClientRect() },
+      () => undefined,
+    );
+    const hide = animationsByKey.get('k1')!.at(-1)!;
+    expect(hide.cancel).not.toHaveBeenCalled();
+
+    // k1 leaves the list: its view is pooled, to render another item that must not stay hidden
+    component.items.set(component.items().filter((item) => item.key !== 'k1'));
+    render();
+
+    expect(hide.cancel).toHaveBeenCalled();
+  });
+
   it('animates the drag end render instead of snapping rows into place', () => {
     movePlaceholder(3);
     const displaced = ['k1', 'k2'].map((key) => animationsByKey.get(key)![0]);
@@ -978,6 +998,37 @@ describe('VirtualForDirective (change detection scope)', () => {
       Array.from({ length: 11 }, (_, i) => `${i + 1}`),
     );
     expect(rows.map((row) => row.textContent?.trim())).toEqual(renderedIds());
+  });
+
+  it('does not recycle the row that holds the dragged element', () => {
+    const rows = (): HTMLElement[] =>
+      fixture.debugElement.queryAll(By.css('.item')).map((el) => el.nativeElement as HTMLElement);
+    const dragged = rows()[0];
+    // The drag's ID is not the row's track key, so the list does not keep the row rendered
+    dragState.startDrag(
+      {
+        draggableId: 'row-of-k0',
+        droppableId: 'list',
+        element: dragged,
+        height: 50,
+        width: 100,
+      },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      null,
+      'list',
+      END_OF_LIST,
+      1,
+      0,
+    );
+    appRef.tick();
+
+    // First row in view 25: rows 22-29. k0 leaves the range
+    host.scrollTop.set(1250);
+    appRef.tick();
+
+    expect(renderedIds()).toContain('k22');
+    expect(rows()).not.toContain(dragged);
   });
 
   it('renders a pooled row again when it comes back for the same item', () => {

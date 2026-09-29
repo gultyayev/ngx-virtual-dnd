@@ -38,6 +38,7 @@ High-level component combining droppable, virtual scroll, and placeholder. Defau
 | `disabled` | `boolean` | `false` | No | Disable dropping into this list (forwarded to its droppable). Items can still be dragged out; disable the draggables too for a read-only list |
 | `containerHeight` | `number` | `undefined` | No | Container height in pixels. Without it, the inner `vdnd-virtual-scroll` must get a CSS height |
 | `overscan` | `number` | `3` | No | Number of items to render beyond visible viewport |
+| `recycleRows` | `boolean` | `false` | No | Render rows that scroll in with the views of rows that scroll out. Their components are not re-created (`ngOnInit` runs once) and unbound state carries over, so rows must render only from their item |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling during drag |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
 | `constrainToContainer` | `boolean` | `false` | No | Clamp drag preview and drop position to container boundaries |
@@ -72,6 +73,7 @@ Low-level virtual scroll container. Use with `DroppableDirective` for custom lay
 | `dynamicItemHeight` | `boolean` | `false` | No | Enable auto-measured variable heights |
 | `containerHeight` | `number` | `undefined` | No | Container height in pixels. Without it, give the element a CSS height (measured via ResizeObserver) |
 | `overscan` | `number` | `3` | No | Items to render beyond visible viewport |
+| `recycleRows` | `boolean` | `false` | No | Render rows that scroll in with the views of rows that scroll out (see `vdnd-sortable-list`) |
 | `stickyItemIds` | `string[]` | `[]` | No | Item IDs to keep rendered regardless of scroll position |
 | `trackByFn` | `(index: number, item: T) => string \| number` | derived from `itemIdFn` | No | Track-by function |
 | `autoStickyDraggedItem` | `boolean` | `true` | No | Auto-stick dragged item during drag |
@@ -284,7 +286,7 @@ Marks a scrollable element (it must have `overflow: auto`/`scroll` and a height)
 
 **Selector:** `[vdndVirtualFor][vdndVirtualForOf]` (used as `*vdndVirtualFor`)
 
-Structural directive that renders only the visible items. Must be inside `vdnd-virtual-viewport`, `vdnd-virtual-content`, or a `vdndScrollable` element. Inside a viewport component it inherits `itemHeight`/`dynamicItemHeight`; directly inside `vdndScrollable` it needs `itemHeight` (falls back to 50 with a dev-mode warning). `droppableId` is inherited from an enclosing `vdndDroppable`. The `trackBy` key should equal the item's `vdndDraggable` ID.
+Structural directive that renders only the visible items. Must be inside `vdnd-virtual-viewport`, `vdnd-virtual-content`, or a `vdndScrollable` element. Inside a viewport component it inherits `itemHeight`/`dynamicItemHeight`; directly inside `vdndScrollable` it needs `itemHeight` (falls back to 50 with a dev-mode warning). `droppableId` is inherited from an enclosing `vdndDroppable`. The `trackBy` key should equal the item's `vdndDraggable` ID. It always recycles rows: the view of a row that scrolls out renders a row that scrolls in (as `recycleRows` does on `vdnd-virtual-scroll`).
 
 **Microsyntax:**
 

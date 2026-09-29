@@ -20,6 +20,8 @@ export interface PointerDragCallbacks {
  */
 export interface PointerDragContext {
   element: HTMLElement;
+  /** The item the draggable renders (a recycled row renders another one later) */
+  draggableId: string;
   groupName: string | null;
   disabled: boolean;
   dragHandle: string | undefined;
@@ -56,6 +58,12 @@ export class PointerDragHandler {
 
   /** Whether we're currently tracking a potential drag */
   #isTracking = false;
+
+  /** The item the tracked press landed on */
+  #pressedId: string | null = null;
+
+  /** Whether the document and window listeners of a press are added */
+  #listening = false;
 
   /** Identifier of the finger that pressed, for touch gestures (other fingers are ignored) */
   #touchId: number | null = null;
@@ -158,6 +166,7 @@ export class PointerDragHandler {
     }
 
     this.#isTracking = true;
+    this.#pressedId = ctx.draggableId;
     if (touch) {
       this.#touchId = touch.identifier;
       this.#startPosition = { x: touch.clientX, y: touch.clientY };
@@ -172,9 +181,12 @@ export class PointerDragHandler {
     if (delay > 0) {
       this.#delayTimerId = setTimeout(() => {
         this.#delayTimerId = null;
-        // Another drag started while this press was held: drop the press rather than show it
-        // as ready to drag during that drag.
-        if (this.#deps.callbacks.isOtherDragActive()) {
+        // Another drag started while this press was held, or the press no longer applies (see
+        // #isStalePress): drop it rather than show it as ready to drag.
+        if (
+          this.#deps.callbacks.isOtherDragActive() ||
+          this.#isStalePress(this.#deps.getContext())
+        ) {
           this.cleanup();
           return;
         }
@@ -202,6 +214,7 @@ export class PointerDragHandler {
       window.addEventListener('blur', this.#boundWindowBlur!);
       document.addEventListener('visibilitychange', this.#boundVisibilityChange!);
     });
+    this.#listening = true;
   }
 
   /**
@@ -210,15 +223,18 @@ export class PointerDragHandler {
    */
   cleanup(): void {
     this.#isTracking = false;
+    this.#pressedId = null;
     this.#startPosition = null;
     this.#touchId = null;
     this.#deps.callbacks.onPendingChange(false); // Clear pending state on cleanup
     this.#cancelDelayTimer();
 
-    // Server rendering destroys the directive without a global document, and never added any
-    if (typeof document === 'undefined') {
+    // Nothing to remove unless a press added listeners (most draggables are never pressed; a
+    // virtual list destroys one each time a row scrolls out). Server rendering adds none.
+    if (!this.#listening) {
       return;
     }
+    this.#listening = false;
 
     // Remove event listeners
     if (this.#boundPointerMove) {
@@ -276,6 +292,11 @@ export class PointerDragHandler {
 
     // Check if we've moved past the threshold
     if (!this.#deps.callbacks.isDragging() && this.#startPosition) {
+      if (this.#isStalePress(ctx)) {
+        this.cleanup();
+        return;
+      }
+
       const distance = Math.sqrt(
         Math.pow(position.x - this.#startPosition.x, 2) +
           Math.pow(position.y - this.#startPosition.y, 2),
@@ -350,6 +371,14 @@ export class PointerDragHandler {
     } finally {
       this.cleanup();
     }
+  }
+
+  /**
+   * Whether the tracked press no longer applies to the draggable: it renders another item now, or
+   * it left the page (a virtual list recycled or pooled its row).
+   */
+  #isStalePress(ctx: PointerDragContext): boolean {
+    return ctx.draggableId !== this.#pressedId || !ctx.element.isConnected;
   }
 
   /**

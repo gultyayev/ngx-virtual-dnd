@@ -89,8 +89,9 @@ describe('PointerDragHandler', () => {
       isOtherDragActive: jest.fn(() => otherDragActive),
     };
 
+    // A draggable element in the page (a pooled row's element is not)
     mockContext = {
-      element: createElement(),
+      element: document.body.appendChild(createElement()),
       groupName: 'test-group',
       disabled: false,
       dragHandle: undefined,
@@ -107,6 +108,7 @@ describe('PointerDragHandler', () => {
 
   afterEach(() => {
     handler.destroy();
+    mockContext.element.remove();
     jest.restoreAllMocks();
   });
 
@@ -919,6 +921,98 @@ describe('PointerDragHandler', () => {
     it('should clear pending state', () => {
       handler.cleanup();
       expect(mockCallbacks.onPendingChange).toHaveBeenCalledWith(false);
+    });
+
+    it('should remove no listeners when no press added them', () => {
+      const documentRemoveSpy = jest.spyOn(document, 'removeEventListener');
+      const windowRemoveSpy = jest.spyOn(window, 'removeEventListener');
+
+      handler.cleanup();
+      handler.destroy();
+
+      expect(documentRemoveSpy).not.toHaveBeenCalled();
+      expect(windowRemoveSpy).not.toHaveBeenCalled();
+    });
+
+    it('should remove the listeners of a press once', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      handler.cleanup();
+      const documentRemoveSpy = jest.spyOn(document, 'removeEventListener');
+
+      handler.destroy();
+
+      expect(documentRemoveSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the draggable changes to another item during a press', () => {
+    beforeEach(() => {
+      mockContext.draggableId = 'item-1';
+    });
+
+    it('should drop the press instead of starting a drag', () => {
+      const removeSpy = jest.spyOn(document, 'removeEventListener');
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      mockContext.draggableId = 'item-2';
+
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+      expect(handler.getStartPosition()).toBeNull();
+      expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+    });
+
+    it('should drop the press instead of marking it ready', () => {
+      jest.useFakeTimers();
+      try {
+        mockContext.dragDelay = 200;
+        handler.onPointerDown(createMouseDown(150, 220), false);
+        mockContext.draggableId = 'item-2';
+
+        jest.advanceTimersByTime(200);
+
+        expect(mockCallbacks.onPendingChange).not.toHaveBeenCalledWith(true);
+        expect(handler.getStartPosition()).toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should drop the press when the element leaves the page', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      // A pooled row: detached, and still rendering the pressed item
+      mockContext.element.remove();
+
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+      expect(handler.getStartPosition()).toBeNull();
+    });
+
+    it('should not mark a press on an element that left the page ready', () => {
+      jest.useFakeTimers();
+      try {
+        mockContext.dragDelay = 200;
+        handler.onPointerDown(createMouseDown(150, 220), false);
+        mockContext.element.remove();
+
+        jest.advanceTimersByTime(200);
+
+        expect(mockCallbacks.onPendingChange).not.toHaveBeenCalledWith(true);
+        expect(handler.getStartPosition()).toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should keep a drag that has started', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+      mockContext.draggableId = 'item-2';
+
+      document.dispatchEvent(createMouseEvent('mousemove', 170, 220));
+
+      expect(mockCallbacks.onDragMove).toHaveBeenLastCalledWith({ x: 170, y: 220 });
     });
   });
 

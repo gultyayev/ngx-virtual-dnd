@@ -118,7 +118,7 @@ They measure real autoscroll throughput, so they need spare CPU: CI runs 2 worke
 
 `DemoPage.goto({ ... })` opens the main demo pre-configured (`itemCount`, `lockAxis`,
 `dragEnabled`, `dragDelay`, `dragHandle`, `api: 'simplified'`, `constrainToContainer`,
-`list2Disabled`, `shiftAnimation`). Click through the settings panel only when the test is about
+`list2Disabled`, `shiftAnimation`, `recycleRows`). Click through the settings panel only when the test is about
 changing a setting at runtime, and then wait for a render that proves the change applied (for
 example the `vdnd-draggable-disabled` class) before interacting.
 
