@@ -1,4 +1,4 @@
-import { DropAnimator, findDropTarget } from './drop-animator';
+import { DropAnimator, findDropTarget, revealDropTargetIn } from './drop-animator';
 
 interface FakeAnimation {
   keyframes: Keyframe[];
@@ -109,6 +109,23 @@ describe('DropAnimator', () => {
     expect(glide.cancel).toHaveBeenCalled();
     expect(last(element).cancel).toHaveBeenCalled();
     expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('reveals the target when a pooled row holds it, and only then', () => {
+    const ghost = createGhost();
+    const row = document.createElement('div');
+    const element = row.appendChild(document.createElement('div'));
+    const animator = new DropAnimator({});
+    animator.play(ghost, { element, rect: rect(0, 0, 200, 50) }, jest.fn());
+    const hide = last(element);
+
+    revealDropTargetIn([document.createElement('div')]);
+    expect(hide.cancel).not.toHaveBeenCalled();
+
+    revealDropTargetIn([document.createComment('anchor'), row]);
+    expect(hide.cancel).toHaveBeenCalled();
+    // The ghost still glides
+    expect(last(ghost).cancel).not.toHaveBeenCalled();
   });
 
   it('is disabled when the duration is 0', () => {

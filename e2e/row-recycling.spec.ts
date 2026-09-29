@@ -148,3 +148,45 @@ for (const api of ['verbose', 'simplified'] as const) {
     });
   });
 }
+
+test.describe('Row recycling during the drop animation', () => {
+  test('does not keep hiding the row of the dropped item once it renders another item', async ({
+    page,
+  }) => {
+    const demoPage = new DemoPage(page);
+    // A long drop animation, so the list scrolls while it plays
+    await demoPage.goto({ recycleRows: true, dropAnimation: 3000 });
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+    await demoPage.keyboardMoveDown(1);
+    await demoPage.keyboardDrop();
+    await expect(demoPage.dropGhost).toBeVisible();
+    expect(await hiddenRowIds(demoPage)).toEqual(['list1-0']);
+
+    // list1-0 scrolls out: its row renders another item
+    await demoPage.scrollList('list1', 1000);
+    await expect(page.locator('[data-draggable-id="list1-20"]')).toBeAttached();
+    await expect(page.locator('[data-draggable-id="list1-0"]')).toHaveCount(0);
+
+    expect(await hiddenRowIds(demoPage)).toEqual([]);
+  });
+});
+
+/** IDs of the rows of list1 that an animation to `opacity: 0` hides */
+async function hiddenRowIds(demoPage: DemoPage): Promise<string[]> {
+  return demoPage.virtualScroll('list1').evaluate((container) =>
+    Array.from(container.querySelectorAll('[data-draggable-id]'))
+      .filter((row) =>
+        row
+          .getAnimations()
+          .some(
+            (animation) =>
+              animation.playState === 'running' &&
+              (animation.effect as KeyframeEffect | null)
+                ?.getKeyframes()
+                .some((frame) => String(frame['opacity']) === '0'),
+          ),
+      )
+      .map((row) => row.getAttribute('data-draggable-id') ?? ''),
+  );
+}

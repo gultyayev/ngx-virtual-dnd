@@ -5,9 +5,9 @@ import { poll } from './fixtures/polling';
 /**
  * Rows with a leave animation (`animate.leave`): Angular removes a leaving row's element when that
  * animation ends, so a view whose row left the range must not be recycled for a row that comes in.
- * Fixture: /row-leave-animation. "Rows" (`row-0`…`row-99`) is a `vdnd-sortable-list` with
- * `recycleRows`, "Viewport rows" (`vrow-0`…`vrow-99`) renders with `*vdndVirtualFor`. Both are
- * 400px tall, with 50px rows.
+ * Fixture: /row-leave-animation, where even rows fade out and odd rows don't. "Rows" (`row-0`…
+ * `row-99`) is a `vdnd-sortable-list` with `recycleRows`, "Viewport rows" (`vrow-0`…`vrow-99`)
+ * renders with `*vdndVirtualFor`. Both are 400px tall, with 50px rows.
  */
 test.describe('Rows with a leave animation', () => {
   test.beforeEach(async ({ page }) => {
@@ -17,25 +17,31 @@ test.describe('Rows with a leave animation', () => {
   });
 
   test.describe('in vdnd-virtual-scroll', () => {
-    test('keeps the rows that scroll in once the rows that scrolled out animated out', async ({
+    test('keeps the rows that scroll in, recycling only rows without a leave animation', async ({
       page,
     }) => {
       const list = page.locator('vdnd-virtual-scroll');
+      await tagRenderedRows(list);
 
-      // Row 20 at the top: rows 0-11 leave the range and fade out, rows 17-31 render
+      // Row 20 at the top: rows 0-11 leave the range (the even ones fade out), rows 17-31 render
       await scrollTo(list, 1000);
       await expect(page.locator('[data-draggable-id="row-20"]')).toBeAttached();
       await settleAnimations(page);
 
       expect(await renderedIds(list)).toEqual(range('row', 17, 31));
+      // The views of the odd rows that left render odd rows that came in, with their element
+      expect(await list.locator('[data-test-tagged]').count()).toBeGreaterThan(0);
     });
   });
 
   test.describe('in *vdndVirtualFor', () => {
-    test('keeps the rows that scroll in in recycled views', async ({ page }) => {
+    test('keeps the rows that scroll in, recycling only rows without a leave animation', async ({
+      page,
+    }) => {
       const list = page.locator('vdnd-virtual-viewport');
+      await tagRenderedRows(list);
 
-      // Row 20 at the top: the views of the rows that leave the range render the rows that come in
+      // Row 20 at the top: rows 0-11 leave the range (the even ones fade out)
       await scrollTo(list, 1000);
       await expect(page.locator('[data-draggable-id="vrow-20"]')).toBeAttached();
       await settleAnimations(page);
@@ -45,9 +51,19 @@ test.describe('Rows with a leave animation', () => {
       expect(ids).toEqual(range('vrow', first, first + ids.length - 1));
       // Rows 20-27 fill the viewport
       expect(ids).toEqual(expect.arrayContaining(range('vrow', 20, 27)));
+      expect(await list.locator('[data-test-tagged]').count()).toBeGreaterThan(0);
     });
   });
 });
+
+/** Tag the row elements rendered now, to recognize the recycled ones after a scroll */
+async function tagRenderedRows(list: Locator): Promise<void> {
+  await list.evaluate((element) =>
+    element
+      .querySelectorAll('[data-draggable-id]')
+      .forEach((row) => row.setAttribute('data-test-tagged', '')),
+  );
+}
 
 async function scrollTo(list: Locator, scrollTop: number): Promise<void> {
   await list.evaluate((element, top) => {

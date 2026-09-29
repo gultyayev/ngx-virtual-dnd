@@ -29,6 +29,7 @@ import {
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { DragStateService } from '../services/drag-state.service';
+import type { DraggedItem } from '../models/drag-drop.models';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
 import { DragIndexCalculatorService } from '../services/drag-index-calculator.service';
@@ -44,6 +45,7 @@ import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
 import { queryByAttribute } from '../utils/attribute-selectors';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
+import { revealDropTargetIn } from '../utils/drop-animator';
 
 /**
  * Context provided to the item template.
@@ -963,12 +965,12 @@ export class VirtualScrollContainerComponent<T>
 
     // Remove the rows that left, then keep in place the longest run of kept views that is
     // already in order (their positions in the outlet, which now holds only kept views)
-    const draggedId = this.draggedItemId();
+    const dragged = this.#dragState.draggedItem();
     for (const views of previous.values()) {
       for (const row of views) {
         // The dragged item's view is destroyed, as without recycling: that cancels the drag
         // instead of handing it to another item
-        if (recycle && !this.#rendersItem(row.view, draggedId)) {
+        if (recycle && !this.#rendersDraggedItem(row.view, dragged)) {
           this.#poolRow(outlet, row.view);
         } else {
           row.view.destroy();
@@ -1031,14 +1033,25 @@ export class VirtualScrollContainerComponent<T>
     this.#rowEntries = entries;
   }
 
-  /** Whether a row's view renders the item with this ID. */
-  #rendersItem(view: EmbeddedViewRef<VirtualScrollItemContext<T>>, id: string | null): boolean {
-    return id !== null && this.itemIdFn()(view.context.$implicit) === id;
+  /**
+   * Whether a row's view renders the dragged item: its item has the dragged ID, or the view holds
+   * the dragged element (its draggable ID need not be the item's ID).
+   */
+  #rendersDraggedItem(
+    view: EmbeddedViewRef<VirtualScrollItemContext<T>>,
+    dragged: DraggedItem | null,
+  ): boolean {
+    if (!dragged) return false;
+    return (
+      this.itemIdFn()(view.context.$implicit) === dragged.draggableId ||
+      view.rootNodes.some((node: Node) => node.contains(dragged.element))
+    );
   }
 
   /**
    * Take a row's view out of the outlet and pool it. It keeps its element, so its shift
-   * animation is cancelled: the item it renders next must not slide from this one's position.
+   * animation is cancelled (the item it renders next must not slide from this one's position),
+   * and a drop animation that hides it shows it again.
    */
   #poolRow(outlet: ViewContainerRef, view: EmbeddedViewRef<VirtualScrollItemContext<T>>): void {
     outlet.detach(outlet.indexOf(view));
@@ -1054,6 +1067,7 @@ export class VirtualScrollContainerComponent<T>
         this.#shiftAnimator?.cancel(node);
       }
     }
+    revealDropTargetIn(nodes);
     this.#rowPool.push(view);
   }
 

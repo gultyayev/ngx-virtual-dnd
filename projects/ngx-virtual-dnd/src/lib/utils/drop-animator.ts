@@ -13,6 +13,23 @@ export interface DropAnimationTarget {
   rect: DOMRect;
 }
 
+/** The elements drop animations hide, with the animation hiding each */
+const hiddenTargets = new Map<Element, Animation>();
+
+/**
+ * Show again an element a drop animation hides, if one of these nodes holds it. A virtual list
+ * calls it for the row it pools: that row's element renders another item next.
+ * @internal
+ */
+export function revealDropTargetIn(nodes: readonly Node[]): void {
+  for (const [element, animation] of hiddenTargets) {
+    if (nodes.some((node) => node.contains(element))) {
+      hiddenTargets.delete(element);
+      animation.cancel();
+    }
+  }
+}
+
 /**
  * Plays the drop ("settle") animation: the drag preview glides from where it was released
  * into the dropped item's final position, while that item stays invisible underneath.
@@ -26,7 +43,7 @@ export class DropAnimator {
   readonly #config: VdndAnimationConfig;
 
   #ghostAnimation: Animation | null = null;
-  #hideAnimation: Animation | null = null;
+  #hidden: { element: Element; animation: Animation } | null = null;
 
   constructor(config: VdndAnimationConfig) {
     this.#config = config;
@@ -79,9 +96,11 @@ export class DropAnimator {
         timing,
       );
       // Keep the real item invisible until the ghost lands on it, so it is never seen twice.
-      this.#hideAnimation = target.element.animate([{ opacity: 0 }, { opacity: 0 }], {
+      const hideAnimation = target.element.animate([{ opacity: 0 }, { opacity: 0 }], {
         duration: timing.duration,
       });
+      this.#hidden = { element: target.element, animation: hideAnimation };
+      hiddenTargets.set(target.element, hideAnimation);
     } else {
       ghostAnimation = ghost.animate([{ opacity: 1 }, { opacity: 0 }], timing);
     }
@@ -97,11 +116,16 @@ export class DropAnimator {
   /** Stop the running animation immediately and reveal the real item. */
   cancel(): void {
     const ghostAnimation = this.#ghostAnimation;
-    const hideAnimation = this.#hideAnimation;
+    const hidden = this.#hidden;
     this.#ghostAnimation = null;
-    this.#hideAnimation = null;
+    this.#hidden = null;
     ghostAnimation?.cancel();
-    hideAnimation?.cancel();
+    if (hidden) {
+      if (hiddenTargets.get(hidden.element) === hidden.animation) {
+        hiddenTargets.delete(hidden.element);
+      }
+      hidden.animation.cancel();
+    }
   }
 
   #duration(): number {

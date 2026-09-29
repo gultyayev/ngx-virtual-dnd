@@ -25,6 +25,7 @@ import { KeyboardDragService } from '../services/keyboard-drag.service';
 import { DraggedItem, END_OF_LIST } from '../models/drag-drop.models';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { DragPlaceholderComponent } from './drag-placeholder.component';
+import { DropAnimator } from '../utils/drop-animator';
 import { DragIndexCalculatorService } from '../services/drag-index-calculator.service';
 
 // Mock ResizeObserver for JSDOM
@@ -1522,6 +1523,35 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
       expect(rowViews.destroyed).toBe(1);
     });
 
+    it('destroys the row that holds the dragged element when its ID is not the item ID', async () => {
+      host.autoStickyDraggedItem.set(false);
+      render();
+      // The draggable ID of the row is not what itemIdFn returns for its item
+      const dragged = rowElement('item-0')!;
+      dragState.startDrag(
+        {
+          draggableId: 'row-of-item-0',
+          droppableId: 'list',
+          element: dragged,
+          height: 50,
+          width: 100,
+        },
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'list',
+        END_OF_LIST,
+        1,
+        0,
+      );
+      render();
+
+      await scrollTo(1000);
+
+      expect(items(17, 27).map(rowElement)).not.toContain(dragged);
+      expect(rowViews.destroyed).toBe(1);
+    });
+
     it('destroys the pooled views when recycling is turned off', () => {
       // Rows 5-7 leave: their views wait in the pool
       host.items.set(host.items().slice(0, 5));
@@ -1865,5 +1895,25 @@ describe('VirtualScrollContainerComponent (shift animation of recycled rows)', (
     appRef.tick();
 
     expect(slide?.cancel).toHaveBeenCalled();
+  });
+
+  it('shows again a row the drop animation hides when its view is pooled', () => {
+    const row = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+      '[data-draggable-id="item-1"]',
+    )!;
+    new DropAnimator({ dropDuration: 200 }).play(
+      document.createElement('div'),
+      { element: row, rect: row.getBoundingClientRect() },
+      () => undefined,
+    );
+    const hide = animations.at(-1)!;
+    expect(hide.id).toBe('item-1');
+    expect(hide.animation.cancel).not.toHaveBeenCalled();
+
+    // item-1 leaves the list: its view is pooled, to render another item that must not stay hidden
+    host.items.set(host.items().filter((item) => item.id !== 'item-1'));
+    appRef.tick();
+
+    expect(hide.animation.cancel).toHaveBeenCalled();
   });
 });

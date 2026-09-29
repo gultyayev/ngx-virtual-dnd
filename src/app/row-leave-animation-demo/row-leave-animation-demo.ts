@@ -12,17 +12,24 @@ import {
 interface Row {
   id: string;
   name: string;
+  /** Whether the row fades out when it leaves (`animate.leave`) */
+  fades: boolean;
 }
 
 function createRows(prefix: string, label: string, count: number): Row[] {
-  return Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}`, name: `${label} ${i}` }));
+  return Array.from({ length: count }, (_, i) => ({
+    id: `${prefix}-${i}`,
+    name: `${label} ${i}`,
+    fades: i % 2 === 0,
+  }));
 }
 
 /**
- * E2E fixture: rows that play a leave animation (`animate.leave`). Angular removes a leaving
- * row's element only when that animation ends, so the view of a row that scrolls out must not
- * render a row that scrolls in. "Rows" is a `vdnd-sortable-list` with `recycleRows`; "Viewport
- * rows" renders its rows with `*vdndVirtualFor`, which always recycles.
+ * E2E fixture: even rows play a leave animation (`animate.leave`), odd rows don't. Angular removes
+ * a leaving row's element only when that animation ends, so the view of a row that fades out
+ * must not render a row that scrolls in; the views of the other rows are recycled. "Rows" is a
+ * `vdnd-sortable-list` with `recycleRows`; "Viewport rows" renders its rows with
+ * `*vdndVirtualFor`, which always recycles.
  */
 @Component({
   selector: 'app-row-leave-animation-demo',
@@ -40,8 +47,8 @@ function createRows(prefix: string, label: string, count: number): Row[] {
     <main class="rla">
       <h1 class="rla-title">Row leave animation</h1>
       <p class="rla-hint">
-        Both lists recycle their rows, and each row fades out when it leaves the list, including
-        when it scrolls out of range.
+        Even rows fade out when they leave the list, including when they scroll out of range. Both
+        lists recycle the rows that don't fade out.
       </p>
       <div class="lists">
         <div class="listcard" vdndGroup="leave-animation">
@@ -59,11 +66,19 @@ function createRows(prefix: string, label: string, count: number): Row[] {
           />
           <!-- Declared inside vdndGroup so the rendered draggables inherit the group. -->
           <ng-template #rowTpl let-row>
-            <div class="item" animate.leave="rla-leave" [vdndDraggable]="row.id">
-              <div class="item-inner">
-                <span class="item-text">{{ row.name }}</span>
+            @if (row.fades) {
+              <div class="item" animate.leave="rla-leave" [vdndDraggable]="row.id">
+                <div class="item-inner">
+                  <span class="item-text">{{ row.name }}</span>
+                </div>
               </div>
-            </div>
+            } @else {
+              <div class="item" [vdndDraggable]="row.id">
+                <div class="item-inner">
+                  <span class="item-text">{{ row.name }}</span>
+                </div>
+              </div>
+            }
           </ng-template>
         </div>
 
@@ -77,11 +92,19 @@ function createRows(prefix: string, label: string, count: number): Row[] {
             [itemHeight]="50"
           >
             <ng-container *vdndVirtualFor="let row of viewportRows(); trackBy: trackById">
-              <div class="item" animate.leave="rla-leave" [vdndDraggable]="row.id">
-                <div class="item-inner">
-                  <span class="item-text">{{ row.name }}</span>
+              @if (row.fades) {
+                <div class="item" animate.leave="rla-leave" [vdndDraggable]="row.id">
+                  <div class="item-inner">
+                    <span class="item-text">{{ row.name }}</span>
+                  </div>
                 </div>
-              </div>
+              } @else {
+                <div class="item" [vdndDraggable]="row.id">
+                  <div class="item-inner">
+                    <span class="item-text">{{ row.name }}</span>
+                  </div>
+                </div>
+              }
             </ng-container>
           </vdnd-virtual-viewport>
         </div>
