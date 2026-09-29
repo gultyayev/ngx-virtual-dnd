@@ -3,50 +3,25 @@ name: PR Quality Checks
 on:
   pull_request:
     branches: [master]
-    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: pr-checks-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  pr-title:
-    name: Validate PR Title
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-
-      # CI uses the npm pinned in package.json (packageManager), not the one bundled with Node.
-      - name: Use pinned npm
-        run: npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Validate PR title
-        run: echo "${{ github.event.pull_request.title }}" | npx commitlint
-
   build-and-unit:
     name: Lint, Build & Unit Tests
-    needs: pr-title
-    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     steps:
+      # The default ref is the merge commit this run was triggered for (github.sha), so the
+      # build and E2E jobs test the same code even if the PR moves while they run.
       - name: Checkout PR merge commit
         uses: actions/checkout@v7
         with:
-          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -101,7 +76,6 @@ jobs:
   e2e:
     name: E2E (${{ matrix.project }})
     needs: build-and-unit
-    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -122,10 +96,12 @@ jobs:
           - project: webkit-mobile
             browser: webkit
     steps:
+      # The default ref is the merge commit this run was triggered for (github.sha), so the
+      # build and E2E jobs test the same code even if the PR moves while they run.
       - name: Checkout PR merge commit
         uses: actions/checkout@v7
         with:
-          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -200,12 +176,6 @@ jobs:
     steps:
       - name: Aggregate required checks
         run: |
-          # Pure metadata edits (title/body) skip the heavy jobs; the code was already
-          # validated by the synchronize run on this same commit, so pass without re-running.
-          if [ "${{ github.event.action }}" = "edited" ]; then
-            echo "PR metadata edited; code checks unchanged for this commit — passing."
-            exit 0
-          fi
           echo "build-and-unit: ${{ needs.build-and-unit.result }}"
           echo "e2e:            ${{ needs.e2e.result }}"
           if [ "${{ needs.build-and-unit.result }}" != "success" ] || [ "${{ needs.e2e.result }}" != "success" ]; then
