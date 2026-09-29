@@ -47,6 +47,7 @@ interface DemoSettings {
   constrainToContainer: boolean;
   list2DroppableDisabled: boolean;
   dragStateDebug: boolean;
+  recycleRows: boolean;
 }
 
 /**
@@ -128,6 +129,9 @@ export class DemoComponent {
    * E2E tests read its `drag-state-debug` element.
    */
   readonly dragStateDebug = this.#initial.dragStateDebug;
+
+  /** Whether the lists reuse the views of rows that scroll out (`?recycleRows=true`) */
+  readonly recycleRows = this.#initial.recycleRows;
 
   /** Whether debug panel is expanded */
   readonly debugExpanded = signal(false);
@@ -368,5 +372,6 @@ function readDemoSettings(params: ParamMap): DemoSettings {
     constrainToContainer: flag('constrainToContainer', false),
     list2DroppableDisabled: flag('list2Disabled', false),
     dragStateDebug: flag('dragStateDebug', true),
+    recycleRows: flag('recycleRows', false),
   };
 }

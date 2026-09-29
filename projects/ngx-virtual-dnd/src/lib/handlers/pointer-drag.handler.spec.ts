@@ -920,6 +920,71 @@ describe('PointerDragHandler', () => {
       handler.cleanup();
       expect(mockCallbacks.onPendingChange).toHaveBeenCalledWith(false);
     });
+
+    it('should remove no listeners when no press added them', () => {
+      const documentRemoveSpy = jest.spyOn(document, 'removeEventListener');
+      const windowRemoveSpy = jest.spyOn(window, 'removeEventListener');
+
+      handler.cleanup();
+      handler.destroy();
+
+      expect(documentRemoveSpy).not.toHaveBeenCalled();
+      expect(windowRemoveSpy).not.toHaveBeenCalled();
+    });
+
+    it('should remove the listeners of a press once', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      handler.cleanup();
+      const documentRemoveSpy = jest.spyOn(document, 'removeEventListener');
+
+      handler.destroy();
+
+      expect(documentRemoveSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the draggable changes to another item during a press', () => {
+    beforeEach(() => {
+      mockContext.draggableId = 'item-1';
+    });
+
+    it('should drop the press instead of starting a drag', () => {
+      const removeSpy = jest.spyOn(document, 'removeEventListener');
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      mockContext.draggableId = 'item-2';
+
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+      expect(handler.getStartPosition()).toBeNull();
+      expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+    });
+
+    it('should drop the press instead of marking it ready', () => {
+      jest.useFakeTimers();
+      try {
+        mockContext.dragDelay = 200;
+        handler.onPointerDown(createMouseDown(150, 220), false);
+        mockContext.draggableId = 'item-2';
+
+        jest.advanceTimersByTime(200);
+
+        expect(mockCallbacks.onPendingChange).not.toHaveBeenCalledWith(true);
+        expect(handler.getStartPosition()).toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should keep a drag that has started', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+      mockContext.draggableId = 'item-2';
+
+      document.dispatchEvent(createMouseEvent('mousemove', 170, 220));
+
+      expect(mockCallbacks.onDragMove).toHaveBeenLastCalledWith({ x: 170, y: 220 });
+    });
   });
 
   describe('destroy', () => {

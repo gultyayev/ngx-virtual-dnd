@@ -32,6 +32,17 @@ import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
 import { findNoDragElement, INTERACTIVE_ELEMENT_SELECTOR } from '../utils/interactive-elements';
 
+/** Key names as Angular's `keydown.<key>` bindings spell them, for the `event.key` values that differ */
+const KEY_NAMES: Record<string, string> = {
+  ' ': 'space',
+  Esc: 'escape',
+  '\x1B': 'escape',
+  Up: 'arrowup',
+  Down: 'arrowdown',
+  Left: 'arrowleft',
+  Right: 'arrowright',
+};
+
 /**
  * Makes an element draggable within the virtual scroll drag-and-drop system.
  *
@@ -66,13 +77,6 @@ import { findNoDragElement, INTERACTIVE_ELEMENT_SELECTOR } from '../utils/intera
     '[tabindex]': 'disabled() ? -1 : 0',
     '(mousedown)': 'onPointerDown($event, false)',
     '(touchstart)': 'onPointerDown($event, true)',
-    '(keydown.space)': 'onKeyboardActivate($event)',
-    '(keydown.enter)': 'onEnterKey($event)',
-    '(keydown.arrowup)': 'onArrowKey($event)',
-    '(keydown.arrowdown)': 'onArrowKey($event)',
-    '(keydown.arrowleft)': 'onArrowKey($event)',
-    '(keydown.arrowright)': 'onArrowKey($event)',
-    '(keydown.escape)': 'onEscape()',
   },
 })
 export class DraggableDirective implements OnInit, OnDestroy {
@@ -158,6 +162,38 @@ export class DraggableDirective implements OnInit, OnDestroy {
   /** Set by ngOnInit, which creates the handlers */
   #initialized = false;
 
+  /**
+   * Keys pressed on the item: one listener, added outside Angular's zone, instead of a
+   * `(keydown.<key>)` host binding per key, as Angular adds a listener to every row for each.
+   * Like those bindings, it ignores a key pressed with Shift, Ctrl, Alt or Meta, and runs the
+   * handler of a key it handles in the zone, so zone.js apps still render after it.
+   */
+  readonly #onKeydown = (event: KeyboardEvent): void => {
+    if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || !event.key) {
+      return;
+    }
+    const key = KEY_NAMES[event.key] ?? event.key.toLowerCase();
+    switch (key) {
+      case 'space':
+        this.#ngZone.runGuarded(() => this.onKeyboardActivate(event));
+        break;
+      case 'enter':
+        this.#ngZone.runGuarded(() => this.onEnterKey(event));
+        break;
+      case 'arrowup':
+      case 'arrowdown':
+      case 'arrowleft':
+      case 'arrowright':
+        this.#ngZone.runGuarded(() => this.onArrowKey(event));
+        break;
+      case 'escape':
+        if (this.#ngZone.runGuarded(() => this.onEscape()) === false) {
+          event.preventDefault();
+        }
+        break;
+    }
+  };
+
   /** Cached constraint flag from source droppable */
   #constrainToContainer = false;
 
@@ -230,6 +266,7 @@ export class DraggableDirective implements OnInit, OnDestroy {
       },
       getContext: () => ({
         element: this.#elementRef.nativeElement,
+        draggableId: this.vdndDraggable(),
         groupName: this.#effectiveGroup(),
         disabled: this.disabled(),
         dragHandle: this.dragHandle(),
@@ -237,6 +274,10 @@ export class DraggableDirective implements OnInit, OnDestroy {
         dragDelay: this.dragDelay(),
       }),
     });
+
+    this.#ngZone.runOutsideAngular(() =>
+      this.#elementRef.nativeElement.addEventListener('keydown', this.#onKeydown),
+    );
 
     this.#initialized = true;
   }
@@ -247,6 +288,8 @@ export class DraggableDirective implements OnInit, OnDestroy {
     if (!this.#initialized) {
       return;
     }
+
+    this.#elementRef.nativeElement.removeEventListener('keydown', this.#onKeydown);
 
     // If destroyed mid-drag, cancel to avoid stale global state / ongoing RAF loops.
     if (this.isDragging()) {

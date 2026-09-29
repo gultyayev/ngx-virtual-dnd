@@ -72,6 +72,13 @@ interface RowView<T> {
   view: EmbeddedViewRef<VirtualScrollItemContext<T>>;
 }
 
+/**
+ * How many views of rows that left a list stay pooled for rows that come in (recycleRows). A
+ * scroll step reuses the views it pools right away; the pool keeps the rest, for example when
+ * fewer rows render after the list shrinks.
+ */
+const MAX_POOLED_ROWS = 10;
+
 /** `Node.DOCUMENT_POSITION_FOLLOWING`, without the `Node` global (servers have none) */
 const DOCUMENT_POSITION_FOLLOWING = 4;
 
@@ -262,6 +269,9 @@ export class VirtualScrollContainerComponent<T>
   /** The track function that gave the rendered rows their keys */
   #rowTrackBy: unknown = null;
 
+  /** Views of rows that left, detached, to render rows that come in (recycleRows) */
+  #rowPool: EmbeddedViewRef<VirtualScrollItemContext<T>>[] = [];
+
   /**
    * Set while this component's view is about to be checked in the current change detection pass:
    * from an input change (ngOnChanges, which runs before its effects; the first render included)
@@ -343,6 +353,14 @@ export class VirtualScrollContainerComponent<T>
    * Required for placeholder positioning.
    */
   droppableId = input<string>();
+
+  /**
+   * Reuse the views of rows that scroll out to render the rows that scroll in, instead of
+   * destroying them and creating new ones. Scrolling creates fewer components and elements, but
+   * a row's components, element and DOM state (focus aside) then carry over to other items.
+   * @default false
+   */
+  recycleRows = input<boolean>(false);
 
   /**
    * Whether to automatically add the dragged item to the sticky list.
@@ -865,6 +883,7 @@ export class VirtualScrollContainerComponent<T>
     const entries = this.#renderedRows();
     const keys = this.#rowKeys();
     const trackBy = this.effectiveTrackByFn();
+    const recycle = this.recycleRows();
     const transform = this.contentTransform();
     const slot = this.#placeholderSlot();
     const placeholderHeight = slot >= 0 ? this.placeholderHeight() : null;
@@ -875,17 +894,17 @@ export class VirtualScrollContainerComponent<T>
         wrapper.style.transform = transform;
         this.#contentTransformSet = transform;
       }
-      this.#renderRows(outlet, template, entries, keys, trackBy);
+      this.#renderRows(outlet, template, entries, keys, trackBy, recycle);
       this.#renderPlaceholder(outlet, slot, placeholderHeight);
     });
   }
 
   /**
    * Give each entry a view of the item template, in order. As with `@for`, a row keeps its view
-   * (and the components in it) while its track key stays rendered, a view never renders another
-   * item, and only the rows out of order move. Only new views and views whose context changed are
-   * checked, with `detectChanges()`: `markForCheck()` would mark every ancestor view up to the
-   * root too.
+   * (and the components in it) while its track key stays rendered, and only the rows out of order
+   * move. The view of a row that leaves is destroyed, or with `recycle` pooled and given to a row
+   * that comes in. Only new, pooled and changed views are checked, with `detectChanges()`:
+   * `markForCheck()` would mark every ancestor view up to the root too.
    */
   #renderRows(
     outlet: ViewContainerRef,
@@ -893,7 +912,12 @@ export class VirtualScrollContainerComponent<T>
     entries: RenderedEntry<T>[],
     keys: unknown[],
     trackBy: unknown,
+    recycle: boolean,
   ): void {
+    if (!recycle) {
+      this.#destroyRowPool();
+    }
+
     // Nothing to do, as on a placeholder move
     if (
       entries === this.#rowEntries &&
@@ -909,6 +933,7 @@ export class VirtualScrollContainerComponent<T>
         row.view.destroy();
       }
       this.#rows = [];
+      this.#destroyRowPool();
       this.#rowTemplate = template;
     }
     if (!template) return;
@@ -938,14 +963,21 @@ export class VirtualScrollContainerComponent<T>
 
     // Remove the rows that left, then keep in place the longest run of kept views that is
     // already in order (their positions in the outlet, which now holds only kept views)
+    const draggedId = this.draggedItemId();
     for (const views of previous.values()) {
       for (const row of views) {
-        row.view.destroy();
+        // The dragged item's view is destroyed, as without recycling: that cancels the drag
+        // instead of handing it to another item
+        if (recycle && !this.#rendersItem(row.view, draggedId)) {
+          this.#poolRow(outlet, row.view);
+        } else {
+          row.view.destroy();
+        }
       }
     }
-    const positions = new Map<EmbeddedViewRef<VirtualScrollItemContext<T>>, number>();
-    for (const row of this.#rows) {
-      if (!row.view.destroyed) positions.set(row.view, positions.size);
+    const positions = new Map<unknown, number>();
+    for (let i = 0; i < outlet.length; i++) {
+      positions.set(outlet.get(i), i);
     }
     const inPlace = longestIncreasingRun(kept.map((row) => (row ? positions.get(row.view)! : -1)));
 
@@ -964,19 +996,30 @@ export class VirtualScrollContainerComponent<T>
           toCheck.push(row.view);
         }
       } else {
-        const context: VirtualScrollItemContext<T> = {
-          $implicit: entry.data as T,
-          index: entry.index,
-          isSticky: entry.isSticky,
-        };
         const index: number = next ? outlet.indexOf(next) : outlet.length;
-        row = { key: keys[i], view: outlet.createEmbeddedView(template, context, index) };
-        toCheck.push(row.view);
+        // A pooled view is checked whatever its context: nothing checked it while detached
+        let view = this.#rowPool.pop();
+        if (view) {
+          this.#updateContext(view.context, entry);
+          outlet.insert(view, index);
+        } else {
+          const context: VirtualScrollItemContext<T> = {
+            $implicit: entry.data as T,
+            index: entry.index,
+            isSticky: entry.isSticky,
+          };
+          view = outlet.createEmbeddedView(template, context, index);
+        }
+        row = { key: keys[i], view };
+        toCheck.push(view);
       }
       rows[i] = row;
       next = row.view;
     }
     this.#rows = rows;
+    while (this.#rowPool.length > MAX_POOLED_ROWS) {
+      this.#rowPool.pop()!.destroy();
+    }
 
     // When this component's own view is checked later in this pass, that check renders every row
     if (!this.#viewCheckPending) {
@@ -986,6 +1029,32 @@ export class VirtualScrollContainerComponent<T>
       }
     }
     this.#rowEntries = entries;
+  }
+
+  /** Whether a row's view renders the item with this ID. */
+  #rendersItem(view: EmbeddedViewRef<VirtualScrollItemContext<T>>, id: string | null): boolean {
+    return id !== null && this.itemIdFn()(view.context.$implicit) === id;
+  }
+
+  /**
+   * Take a row's view out of the outlet and pool it. It keeps its element, so its shift
+   * animation is cancelled: the item it renders next must not slide from this one's position.
+   */
+  #poolRow(outlet: ViewContainerRef, view: EmbeddedViewRef<VirtualScrollItemContext<T>>): void {
+    outlet.detach(outlet.indexOf(view));
+    for (const node of view.rootNodes) {
+      if (node instanceof HTMLElement) {
+        this.#shiftAnimator?.cancel(node);
+      }
+    }
+    this.#rowPool.push(view);
+  }
+
+  #destroyRowPool(): void {
+    for (const view of this.#rowPool) {
+      view.destroy();
+    }
+    this.#rowPool = [];
   }
 
   /** Move a row's view right before `next` (last without one), unless it is there already. */
@@ -1089,6 +1158,8 @@ export class VirtualScrollContainerComponent<T>
     this.#observedElementByKey.clear();
     itemResizeObserver?.disconnect();
     this.#shiftAnimator?.cancelAll();
+    // Detached, so not destroyed with this view
+    this.#destroyRowPool();
     // Created outside this view, so not destroyed with it (and destroy() leaves it in the DOM)
     this.#placeholderElement()?.remove();
     this.#placeholder?.destroy();
@@ -1107,10 +1178,26 @@ export class VirtualScrollContainerComponent<T>
   }
 
   /**
-   * Rendered item roots and the placeholder. A row's view never renders another item (see
-   * #renderRows), so each element is its own stable identity.
+   * Rendered item roots, keyed by the row's track key (a recycled view renders another item, so
+   * its element is no identity), and the placeholder.
    */
   *#shiftAnimationEntries(): Iterable<ShiftAnimationEntry> {
+    if (this.rowOutlet()) {
+      for (const row of this.#rows) {
+        for (const node of row.view.rootNodes) {
+          if (node instanceof HTMLElement) {
+            yield [row.key, node];
+          }
+        }
+      }
+      const placeholder = this.#placeholderElement();
+      if (placeholder?.isConnected) {
+        yield [placeholder, placeholder];
+      }
+      return;
+    }
+
+    // A subclass's own template (see #render) never recycles: each element is its own identity
     const wrapper = this.#elementRef.nativeElement.querySelector(
       '.vdnd-virtual-scroll-content-wrapper',
     );
