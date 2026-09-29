@@ -29,6 +29,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'row-leave-animation',
+    loadComponent: () =>
+      import('./row-leave-animation-demo/row-leave-animation-demo').then(
+        (m) => m.RowLeaveAnimationDemoComponent,
+      ),
+  },
+  {
     path: 'virtual-viewport',
     loadComponent: () =>
       import('./virtual-viewport-demo/virtual-viewport-demo').then(

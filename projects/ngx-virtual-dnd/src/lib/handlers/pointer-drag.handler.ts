@@ -181,9 +181,12 @@ export class PointerDragHandler {
     if (delay > 0) {
       this.#delayTimerId = setTimeout(() => {
         this.#delayTimerId = null;
-        // Another drag started while this press was held, or the draggable renders another
-        // item now: drop the press rather than show it as ready to drag.
-        if (this.#deps.callbacks.isOtherDragActive() || this.#pressedAnotherItem()) {
+        // Another drag started while this press was held, or the press no longer applies (see
+        // #isStalePress): drop it rather than show it as ready to drag.
+        if (
+          this.#deps.callbacks.isOtherDragActive() ||
+          this.#isStalePress(this.#deps.getContext())
+        ) {
           this.cleanup();
           return;
         }
@@ -289,8 +292,7 @@ export class PointerDragHandler {
 
     // Check if we've moved past the threshold
     if (!this.#deps.callbacks.isDragging() && this.#startPosition) {
-      // The draggable renders another item now (a recycled row): the press was not on it
-      if (ctx.draggableId !== this.#pressedId) {
+      if (this.#isStalePress(ctx)) {
         this.cleanup();
         return;
       }
@@ -371,9 +373,12 @@ export class PointerDragHandler {
     }
   }
 
-  /** Whether the draggable renders another item than the one the tracked press landed on. */
-  #pressedAnotherItem(): boolean {
-    return this.#deps.getContext().draggableId !== this.#pressedId;
+  /**
+   * Whether the tracked press no longer applies to the draggable: it renders another item now, or
+   * it left the page (a virtual list recycled or pooled its row).
+   */
+  #isStalePress(ctx: PointerDragContext): boolean {
+    return ctx.draggableId !== this.#pressedId || !ctx.element.isConnected;
   }
 
   /**

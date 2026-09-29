@@ -3,6 +3,7 @@ import {
   Directive,
   ElementRef,
   EnvironmentInjector,
+  ErrorHandler,
   inject,
   input,
   NgZone,
@@ -42,6 +43,17 @@ const KEY_NAMES: Record<string, string> = {
   Left: 'arrowleft',
   Right: 'arrowright',
 };
+
+/** The keys an item handles */
+const HANDLED_KEYS = new Set([
+  'space',
+  'enter',
+  'arrowup',
+  'arrowdown',
+  'arrowleft',
+  'arrowright',
+  'escape',
+]);
 
 /**
  * Makes an element draggable within the virtual scroll drag-and-drop system.
@@ -146,9 +158,17 @@ export class DraggableDirective implements OnInit, OnDestroy {
   /** Emits when drag ends */
   dragEnd = output<DragEndEvent>();
 
-  /** Whether this element is in the "ready to drag" state (delay has passed) */
-  #isPending = signal(false);
-  readonly isPending = this.#isPending.asReadonly();
+  /** The item whose press is ready to drag (its delay has passed) */
+  readonly #pendingId = signal<string | null>(null);
+
+  /**
+   * Whether this element is in the "ready to drag" state (delay has passed). Tied to the pressed
+   * item: a recycled row that renders another item is not ready to drag.
+   */
+  readonly isPending = computed(() => {
+    const pendingId = this.#pendingId();
+    return pendingId !== null && pendingId === this.vdndDraggable();
+  });
 
   /** Whether this element is currently being dragged (based on global drag state) */
   readonly isDragging = computed(() => {
@@ -165,34 +185,36 @@ export class DraggableDirective implements OnInit, OnDestroy {
   /**
    * Keys pressed on the item: one listener, added outside Angular's zone, instead of a
    * `(keydown.<key>)` host binding per key, as Angular adds a listener to every row for each.
-   * Like those bindings, it ignores a key pressed with Shift, Ctrl, Alt or Meta, and runs the
-   * handler of a key it handles in the zone, so zone.js apps still render after it.
+   * Like those bindings, it ignores a key pressed with Shift, Ctrl, Alt or Meta, runs the handler
+   * of a key it handles in the zone (so zone.js apps still render after it), prevents the key's
+   * default action when the handler returns false, and reports what the handler throws to the
+   * ErrorHandler. Added in the constructor, so it runs before the element's template listeners,
+   * as host listeners do.
    */
   readonly #onKeydown = (event: KeyboardEvent): void => {
-    if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || !event.key) {
+    if (!this.#initialized || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
       return;
     }
-    const key = KEY_NAMES[event.key] ?? event.key.toLowerCase();
-    switch (key) {
-      case 'space':
-        this.#ngZone.runGuarded(() => this.onKeyboardActivate(event));
-        break;
-      case 'enter':
-        this.#ngZone.runGuarded(() => this.onEnterKey(event));
-        break;
-      case 'arrowup':
-      case 'arrowdown':
-      case 'arrowleft':
-      case 'arrowright':
-        this.#ngZone.runGuarded(() => this.onArrowKey(event));
-        break;
-      case 'escape':
-        if (this.#ngZone.runGuarded(() => this.onEscape()) === false) {
+    const key = event.key ? (KEY_NAMES[event.key] ?? event.key.toLowerCase()) : '';
+    if (!HANDLED_KEYS.has(key)) {
+      return;
+    }
+    this.#ngZone.run(() => {
+      try {
+        if (this.#handleKey(key, event) === false) {
           event.preventDefault();
         }
-        break;
-    }
+      } catch (error) {
+        this.#envInjector.get(ErrorHandler).handleError(error);
+      }
+    });
   };
+
+  constructor() {
+    this.#ngZone.runOutsideAngular(() =>
+      this.#elementRef.nativeElement.addEventListener('keydown', this.#onKeydown),
+    );
+  }
 
   /** Cached constraint flag from source droppable */
   #constrainToContainer = false;
@@ -207,9 +229,7 @@ export class DraggableDirective implements OnInit, OnDestroy {
    * Update the pending state and emit the change event.
    */
   #setPending(pending: boolean): void {
-    if (this.#isPending() !== pending) {
-      this.#isPending.set(pending);
-    }
+    this.#pendingId.set(pending ? this.vdndDraggable() : null);
   }
 
   /**
@@ -275,21 +295,17 @@ export class DraggableDirective implements OnInit, OnDestroy {
       }),
     });
 
-    this.#ngZone.runOutsideAngular(() =>
-      this.#elementRef.nativeElement.addEventListener('keydown', this.#onKeydown),
-    );
-
     this.#initialized = true;
   }
 
   ngOnDestroy(): void {
+    this.#elementRef.nativeElement.removeEventListener('keydown', this.#onKeydown);
+
     // Destroyed before its first change detection: there are no handlers yet, and its inputs
     // have no values (reading a bound ID would throw).
     if (!this.#initialized) {
       return;
     }
-
-    this.#elementRef.nativeElement.removeEventListener('keydown', this.#onKeydown);
 
     // If destroyed mid-drag, cancel to avoid stale global state / ongoing RAF loops.
     if (this.isDragging()) {
@@ -297,6 +313,20 @@ export class DraggableDirective implements OnInit, OnDestroy {
     }
     this.#pointerHandler.destroy();
     this.#keyboardHandler.destroy();
+  }
+
+  /** Run the handler of a key the item handles (see HANDLED_KEYS), returning what it returns. */
+  #handleKey(key: string, event: KeyboardEvent): unknown {
+    switch (key) {
+      case 'space':
+        return this.onKeyboardActivate(event);
+      case 'enter':
+        return this.onEnterKey(event);
+      case 'escape':
+        return this.onEscape();
+      default:
+        return this.onArrowKey(event);
+    }
   }
 
   /**

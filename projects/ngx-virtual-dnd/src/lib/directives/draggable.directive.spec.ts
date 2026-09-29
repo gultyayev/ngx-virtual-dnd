@@ -1,4 +1,12 @@
-import { Component, DebugElement, Directive, NgZone, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  DebugElement,
+  Directive,
+  ErrorHandler,
+  NgZone,
+  OnInit,
+  signal,
+} from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DraggableDirective } from './draggable.directive';
@@ -45,6 +53,7 @@ if (!customElements.get('test-shadow-input')) {
         style="height: 50px; width: 200px;"
         (dragStart)="onDragStart($event)"
         (dragEnd)="onDragEnd($event)"
+        (keydown)="keysSeenPrevented.push($event.defaultPrevented)"
       >
         <span class="handle">Handle</span>
         <span class="content">Content</span>
@@ -72,6 +81,8 @@ class TestHostComponent {
   dragStartEvents: DragStartEvent[] = [];
   dragEndEvents: DragEndEvent[] = [];
   dropEvents: DropEvent[] = [];
+  /** `defaultPrevented` of each key event a (keydown) listener of the consumer saw on the item */
+  keysSeenPrevented: boolean[] = [];
   /** Order in which the end-of-drag outputs fired */
   endOutputs: string[] = [];
 
@@ -133,6 +144,37 @@ class ExtendedDraggableDirective extends DraggableDirective implements OnInit {
     this.setUp = true;
   }
 }
+
+// A consumer directive that overrides a key handler
+@Directive({ selector: '[vdndTestKeyOverridingDraggable]' })
+class KeyOverridingDraggableDirective extends DraggableDirective {
+  failure: Error | null = null;
+
+  protected override onEnterKey(): boolean {
+    return false;
+  }
+
+  protected override onKeyboardActivate(event: Event): void {
+    if (this.failure) {
+      throw this.failure;
+    }
+    super.onKeyboardActivate(event);
+  }
+}
+
+@Component({
+  template: `
+    <div vdndDroppable="overriding-list" vdndDroppableGroup="test-group">
+      <div
+        vdndTestKeyOverridingDraggable
+        vdndDraggable="overriding-item"
+        vdndDraggableGroup="test-group"
+      ></div>
+    </div>
+  `,
+  imports: [KeyOverridingDraggableDirective, DroppableDirective],
+})
+class KeyOverridingHostComponent {}
 
 @Component({
   template: `
@@ -1016,7 +1058,8 @@ describe('DraggableDirective', () => {
 
     it('should listen for keydown on the item once', () => {
       const addEventListener = jest.spyOn(HTMLElement.prototype, 'addEventListener');
-      const other = TestBed.createComponent(TestHostComponent);
+      // An item without keydown listeners of its own
+      const other = TestBed.createComponent(BoundIdHostComponent);
       other.detectChanges();
       const item = other.debugElement.query(By.directive(DraggableDirective)).nativeElement;
 
@@ -1026,6 +1069,51 @@ describe('DraggableDirective', () => {
       expect(keydownListeners.length).toBe(1);
       addEventListener.mockRestore();
       other.destroy();
+    });
+
+    it("should handle a key before the consumer's own keydown listener on the item", () => {
+      draggableNative.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+
+      // The item was picked up, and the consumer's listener saw that
+      expect(TestBed.inject(KeyboardDragService).isActive()).toBe(true);
+      expect(component.keysSeenPrevented).toEqual([true]);
+    });
+
+    it('should prevent the default action of a key whose handler returns false', () => {
+      const overriding = TestBed.createComponent(KeyOverridingHostComponent);
+      overriding.detectChanges();
+      const item = overriding.debugElement.query(
+        By.directive(KeyOverridingDraggableDirective),
+      ).nativeElement;
+
+      const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+      item.dispatchEvent(enter);
+
+      expect(enter.defaultPrevented).toBe(true);
+      overriding.destroy();
+    });
+
+    it('should report an error thrown by a key handler to the ErrorHandler', () => {
+      const errorHandler = TestBed.inject(ErrorHandler);
+      const handleError = jest.spyOn(errorHandler, 'handleError').mockImplementation(() => {
+        // Recorded below
+      });
+      const overriding = TestBed.createComponent(KeyOverridingHostComponent);
+      overriding.detectChanges();
+      const debugItem = overriding.debugElement.query(
+        By.directive(KeyOverridingDraggableDirective),
+      );
+      const failure = new Error('handler failed');
+      debugItem.injector.get(KeyOverridingDraggableDirective).failure = failure;
+
+      debugItem.nativeElement.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', cancelable: true }),
+      );
+
+      expect(handleError).toHaveBeenCalledWith(failure);
+      overriding.destroy();
     });
 
     it('should not pick the item up with Space while a modifier key is held', () => {
@@ -1187,6 +1275,25 @@ describe('DraggableDirective', () => {
         fixture.detectChanges();
 
         jest.advanceTimersByTime(100);
+        fixture.detectChanges();
+
+        expect(draggableNative.classList.contains('vdnd-drag-pending')).toBe(false);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('should stop showing the item as ready to drag when it changes to another one', () => {
+      component.dragDelay.set(100);
+      fixture.detectChanges();
+      jest.useFakeTimers();
+      try {
+        press();
+        jest.advanceTimersByTime(100);
+        fixture.detectChanges();
+        expect(draggableNative.classList.contains('vdnd-drag-pending')).toBe(true);
+
+        component.draggableId.set('other-item');
         fixture.detectChanges();
 
         expect(draggableNative.classList.contains('vdnd-drag-pending')).toBe(false);

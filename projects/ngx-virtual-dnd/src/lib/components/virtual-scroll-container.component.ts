@@ -1042,7 +1042,14 @@ export class VirtualScrollContainerComponent<T>
    */
   #poolRow(outlet: ViewContainerRef, view: EmbeddedViewRef<VirtualScrollItemContext<T>>): void {
     outlet.detach(outlet.indexOf(view));
-    for (const node of view.rootNodes) {
+    const nodes = view.rootNodes;
+    // A leave animation (`animate.leave`) keeps the row in the DOM, and Angular removes it when
+    // the animation ends: in the row of another item by then, if the view were reused
+    if (nodes.some((node) => node.parentNode !== null)) {
+      view.destroy();
+      return;
+    }
+    for (const node of nodes) {
       if (node instanceof HTMLElement) {
         this.#shiftAnimator?.cancel(node);
       }
