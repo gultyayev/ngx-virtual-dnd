@@ -78,6 +78,11 @@ interface TestItem {
         {{ item.name }}
       </div>
     </ng-template>
+    <ng-template #otherItemTpl let-item let-index="index">
+      <div class="item other" [attr.data-index]="index" [attr.data-draggable-id]="item.id">
+        {{ item.name }}
+      </div>
+    </ng-template>
 
     <vdnd-virtual-scroll
       [items]="items()"
@@ -87,7 +92,7 @@ interface TestItem {
       [stickyItemIds]="stickyItemIds()"
       [itemIdFn]="itemIdFn"
       [trackByFn]="trackByFn"
-      [itemTemplate]="itemTpl"
+      [itemTemplate]="otherTemplate() ? otherItemTpl : itemTpl"
       [dynamicItemHeight]="dynamicItemHeight()"
       [scrollContainerId]="scrollContainerId()"
       [droppableId]="droppableId()"
@@ -111,6 +116,7 @@ class TestHostComponent {
   autoScrollConfig = signal<Partial<AutoScrollConfig>>({});
   dynamicItemHeight = signal(false);
   itemHeight = signal(50);
+  otherTemplate = signal(false);
 
   readonly itemIdFn = (item: TestItem): string => item.id;
   readonly trackByFn = (_: number, item: TestItem): string => item.id;
@@ -639,6 +645,22 @@ describe('VirtualScrollContainerComponent', () => {
 
       expect(MockResizeObserver.measuringRows()).toEqual([]);
       serverFixture.destroy();
+    });
+
+    it('should measure the rows a new item template renders, and stop measuring the old ones', () => {
+      setDynamic(true);
+      const [observer] = MockResizeObserver.measuringRows();
+      const before = renderedItems();
+
+      component.otherTemplate.set(true);
+      fixture.detectChanges();
+      fixture.detectChanges();
+
+      const after = renderedItems();
+      // The new template renders every row anew
+      expect(after.length).toBe(before.length);
+      expect(after.some((element) => before.includes(element))).toBe(false);
+      expect(observer.observedElements()).toEqual(after);
     });
 
     it('should measure every rendered row again when dynamic heights are turned back on', () => {

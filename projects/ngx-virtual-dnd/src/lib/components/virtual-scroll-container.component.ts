@@ -1151,13 +1151,15 @@ export class VirtualScrollContainerComponent<T>
    */
   #observeRenderedItems(): void {
     // Re-observe whenever the rows change, once #render has put them in the DOM. The rows, not
-    // renderedItems(): a placeholder move changes no row.
+    // renderedItems(): a placeholder move changes no row. A new item template changes no entry
+    // but renders every row anew, as new elements.
     afterRenderEffect(
       () => {
         const observer = this.#itemResizeObserver();
         if (!observer) return;
         const rendered = this.#renderedRows();
         const idFn = this.itemIdFn();
+        this.itemTemplate();
 
         // Find the content wrapper and observe item elements
         const wrapper = this.#elementRef.nativeElement.querySelector(
