@@ -7,6 +7,7 @@ import {
   TemplateRef,
   viewChild,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import {
@@ -866,6 +867,7 @@ describe('VirtualScrollContainerComponent', () => {
         [attr.data-draggable-id]="item.id"
         [attr.data-index]="index"
         [attr.data-sticky]="isSticky"
+        [attr.data-name]="item.name"
       >
         {{ countRowRender(item.id) }}
       </div>
@@ -883,7 +885,10 @@ describe('VirtualScrollContainerComponent', () => {
       [itemHeight]="50"
       [containerHeight]="200"
       [itemIdFn]="itemIdFn"
-      [itemTemplate]="controlFlow() ? controlFlowTpl : itemTpl"
+      [trackByFn]="trackByFn()"
+      [itemTemplate]="
+        template() === 'controlFlow' ? controlFlowTpl : template() === 'none' ? noTemplate : itemTpl
+      "
       droppableId="list"
     />
   `,
@@ -895,8 +900,11 @@ class RenderCountingHostComponent {
   readonly items = signal<TestItem[]>(
     Array.from({ length: 30 }, (_, i) => ({ id: `item-${i}`, name: `Item ${i}` })),
   );
-  readonly controlFlow = signal(false);
+  readonly template = signal<'plain' | 'controlFlow' | 'none'>('plain');
+  readonly trackByFn = signal<((index: number, item: TestItem) => string) | undefined>(undefined);
   readonly itemIdFn = (item: TestItem): string => item.id;
+  // A misconfigured list: the template input is required, but a bound value can still be missing
+  readonly noTemplate = undefined as unknown as TemplateRef<VirtualScrollItemContext<TestItem>>;
 
   hostRenders = 0;
   readonly rowRenders: string[] = [];
@@ -992,6 +1000,22 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
       placeholderIndex,
     });
     render();
+  };
+
+  /** From now on, record the rows the DOM removes (moved or destroyed); call to read them */
+  const watchRemovedRows = (): (() => string[]) => {
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver((delivered) => records.push(...delivered));
+    observer.observe(listElement(), { childList: true, subtree: true });
+    return () => {
+      records.push(...observer.takeRecords());
+      observer.disconnect();
+      return records
+        .flatMap((record) => Array.from(record.removedNodes))
+        .filter((node): node is HTMLElement => node instanceof HTMLElement)
+        .map((node) => node.getAttribute('data-draggable-id') ?? '')
+        .filter((id) => id !== '');
+    };
   };
 
   const scrollTo = async (scrollTop: number): Promise<void> => {
@@ -1107,13 +1131,13 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
     render();
 
     expect(rowElement('item-3')).toBe(row);
-    expect(host.rowRenders).toContain('item-3');
+    expect(rowElement('item-3')?.getAttribute('data-name')).toBe('Renamed');
   });
 
   it('renders every row anew when the item template changes', () => {
     const before = rowElement('item-0');
 
-    host.controlFlow.set(true);
+    host.template.set('controlFlow');
     render();
 
     expect(renderedOrder()).toEqual(items(0, 7));
@@ -1121,7 +1145,7 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
   });
 
   it('places the placeholder before a row whose template starts with a control flow block', () => {
-    host.controlFlow.set(true);
+    host.template.set('controlFlow');
     render();
     startDrag('list', 1);
 
@@ -1208,6 +1232,108 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
+
+  it('renders each row once when the list first renders', () => {
+    const other = TestBed.createComponent(RenderCountingHostComponent);
+    other.detectChanges();
+
+    expect([...other.componentInstance.rowRenders].sort()).toEqual(items(0, 7).sort());
+    other.destroy();
+  });
+
+  it('renders each row once when the items change', () => {
+    const reordered = [...host.items()];
+    const [first] = reordered.splice(0, 1);
+    reordered.splice(3, 0, first);
+    host.items.set(reordered);
+    render();
+
+    expect([...host.rowRenders].sort()).toEqual(items(0, 7).sort());
+  });
+
+  it('moves only the row of an item moved down the list', () => {
+    const removedRows = watchRemovedRows();
+    const reordered = [...host.items()];
+    const [first] = reordered.splice(0, 1);
+    reordered.splice(6, 0, first);
+    host.items.set(reordered);
+    render();
+
+    expect(renderedOrder()).toEqual([...items(1, 6), 'item-0', 'item-7']);
+    expect(removedRows()).toEqual(['item-0']);
+  });
+
+  it('renders any mix of removals, insertions and moves in order, keeping the rows that stay', () => {
+    // A seeded pseudo-random sequence; at most 8 items, so every item renders
+    let seed = 7;
+    const random = (count: number): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % count;
+    };
+    let added = 0;
+    let list = host.items().slice(0, 6);
+    host.items.set(list);
+    render();
+
+    for (let step = 0; step < 60; step++) {
+      const elements = new Map(list.map((item) => [item.id, rowElement(item.id)]));
+      const next = [...list];
+      if (next.length > 2 && random(3) === 0) {
+        next.splice(random(next.length), 1);
+      }
+      if (next.length < 8 && random(2) === 0) {
+        next.splice(random(next.length + 1), 0, { id: `new-${added}`, name: `New ${added++}` });
+      }
+      const [moved] = next.splice(random(next.length), 1);
+      next.splice(random(next.length + 1), 0, moved);
+      host.items.set(next);
+      render();
+
+      expect(renderedOrder()).toEqual(next.map((item) => item.id));
+      for (const item of next) {
+        if (elements.has(item.id)) {
+          expect(rowElement(item.id)).toBe(elements.get(item.id));
+        }
+      }
+      list = next;
+    }
+  });
+
+  it('moves only the dragged row when the rows before it scroll out of range', async () => {
+    // item-0 is dragged (and kept rendered as a sticky row)
+    startDrag('list', 1);
+    const removedRows = watchRemovedRows();
+
+    // First row in view 5: rows 2-12 in range, then item-0
+    await scrollTo(250);
+
+    expect(renderedOrder()).toEqual([...items(2, 12), 'item-0']);
+    expect(removedRows().sort()).toEqual(['item-0', 'item-1']);
+  });
+
+  it('keeps the rows when the track function changes', async () => {
+    const row = rowElement('item-5');
+
+    // The same items get other keys
+    host.trackByFn.set((_index, item) => item.name);
+    render();
+    await scrollTo(200);
+
+    expect(rowElement('item-5')).toBe(row);
+  });
+
+  it('renders no row, without throwing, while it has no item template', () => {
+    host.template.set('none');
+    render();
+    expect(renderedOrder()).toEqual([]);
+
+    startDrag('list', 2);
+    expect(renderedOrder()).toEqual(['P']);
+
+    host.template.set('plain');
+    render();
+    expect(renderedOrder()).toEqual([...items(0, 1), 'P', ...items(2, 7)]);
+  });
 });
 
 @Component({
@@ -1235,7 +1361,54 @@ class AnimatedHostComponent {
   readonly itemIdFn = (item: TestItem): string => item.id;
 }
 
-describe('VirtualScrollContainerComponent (shift animation)', () => {
+/** A subclass that renders renderedItems() with a template of its own (the one before #103) */
+@Component({
+  selector: 'vdnd-test-legacy-template-list',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [NgTemplateOutlet, DragPlaceholderComponent],
+  template: `
+    <div class="vdnd-virtual-scroll-spacer" [style.height.px]="totalHeight()"></div>
+    <div class="vdnd-virtual-scroll-content-wrapper" [style.transform]="contentTransform()">
+      @for (entry of renderedItems(); track trackEntry($index, entry)) {
+        @if (entry.type === 'placeholder') {
+          <vdnd-drag-placeholder [itemHeight]="placeholderHeight()" />
+        } @else {
+          <ng-container
+            *ngTemplateOutlet="
+              itemTemplate();
+              context: { $implicit: entry.data, index: entry.index, isSticky: entry.isSticky }
+            "
+          />
+        }
+      }
+    </div>
+  `,
+})
+class LegacyTemplateListComponent<T> extends VirtualScrollContainerComponent<T> {}
+
+@Component({
+  template: `
+    <ng-template #itemTpl let-item>
+      <div class="item" [attr.data-draggable-id]="item.id">{{ item.name }}</div>
+    </ng-template>
+    <vdnd-test-legacy-template-list
+      [items]="items"
+      [itemHeight]="50"
+      [containerHeight]="200"
+      [itemIdFn]="itemIdFn"
+      [itemTemplate]="itemTpl"
+      droppableId="list"
+    />
+  `,
+  imports: [LegacyTemplateListComponent],
+  providers: [{ provide: VDND_ANIMATION_CONFIG, useValue: { shiftDuration: 200 } }],
+})
+class LegacyTemplateAnimatedHostComponent extends AnimatedHostComponent {}
+
+describe.each([
+  ['vdnd-virtual-scroll', AnimatedHostComponent],
+  ['a subclass rendering its own template', LegacyTemplateAnimatedHostComponent],
+])('VirtualScrollContainerComponent (shift animation, %s)', (_name, hostType) => {
   let fixture: ComponentFixture<AnimatedHostComponent>;
   let dragState: DragStateService;
   let appRef: ApplicationRef;
@@ -1261,8 +1434,8 @@ describe('VirtualScrollContainerComponent (shift animation)', () => {
       } as unknown as Animation;
     } as typeof Element.prototype.animate;
 
-    TestBed.configureTestingModule({ imports: [AnimatedHostComponent] });
-    fixture = TestBed.createComponent(AnimatedHostComponent);
+    TestBed.configureTestingModule({ imports: [hostType] });
+    fixture = TestBed.createComponent(hostType);
     dragState = TestBed.inject(DragStateService);
     appRef = TestBed.inject(ApplicationRef);
     fixture.detectChanges();

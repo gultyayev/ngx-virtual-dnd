@@ -1,6 +1,7 @@
 import {
   afterNextRender,
   afterRenderEffect,
+  AfterViewChecked,
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
@@ -16,6 +17,7 @@ import {
   input,
   isDevMode,
   NgZone,
+  OnChanges,
   OnDestroy,
   OnInit,
   PLATFORM_ID,
@@ -85,6 +87,39 @@ function firstInDocumentOrder(nodes: Node[]): Node | null {
     }
   }
   return first;
+}
+
+/**
+ * Which values belong to a longest increasing subsequence of `values` (negative values never
+ * do). For rows: the views that can stay where they are while the others move around them, as
+ * few as possible. A moved row loses focus and restarts its CSS transitions.
+ */
+function longestIncreasingRun(values: number[]): boolean[] {
+  // tails[k]: the index of the smallest value that ends an increasing run of length k + 1
+  const tails: number[] = [];
+  const previous = new Array<number>(values.length).fill(-1);
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+    if (value < 0) continue;
+    let low = 0;
+    let high = tails.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (values[tails[middle]] < value) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    previous[i] = low > 0 ? tails[low - 1] : -1;
+    tails[low] = i;
+  }
+
+  const inRun = new Array<boolean>(values.length).fill(false);
+  for (let i = tails.length > 0 ? tails[tails.length - 1] : -1; i >= 0; i = previous[i]) {
+    inRun[i] = true;
+  }
+  return inRun;
 }
 
 /**
@@ -175,7 +210,9 @@ function firstInDocumentOrder(nodes: Node[]): Node | null {
     }
   `,
 })
-export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit, OnDestroy {
+export class VirtualScrollContainerComponent<T>
+  implements OnChanges, OnInit, AfterViewInit, AfterViewChecked, OnDestroy
+{
   readonly #dragState = inject(DragStateService);
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #autoScrollService = inject(AutoScrollService);
@@ -221,6 +258,16 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
 
   /** The template the rendered rows were created from */
   #rowTemplate: TemplateRef<VirtualScrollItemContext<T>> | null = null;
+
+  /** The track function that gave the rendered rows their keys */
+  #rowTrackBy: unknown = null;
+
+  /**
+   * Set while this component's view is about to be checked in the current change detection pass:
+   * from an input change (ngOnChanges, which runs before its effects; the first render included)
+   * until the check (ngAfterViewChecked). That check renders every row.
+   */
+  #viewCheckPending = false;
 
   /** The placeholder, created on its first render and reused */
   #placeholder: ComponentRef<DragPlaceholderComponent> | null = null;
@@ -698,6 +745,10 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
     effect(() => this.#render());
   }
 
+  ngOnChanges(): void {
+    this.#viewCheckPending = true;
+  }
+
   ngOnInit(): void {
     // Measure rows in dynamic height mode. dynamicItemHeight can change at runtime, and the
     // strategy is replaced when it (or itemHeight) does, so this creates, replaces or removes the
@@ -741,6 +792,10 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
 
     // Observe rendered items for dynamic height measurement
     this.#observeRenderedItems();
+  }
+
+  ngAfterViewChecked(): void {
+    this.#viewCheckPending = false;
   }
 
   /**
@@ -795,56 +850,76 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
    * Here a placeholder move only moves the placeholder, and a row renders when its context does.
    */
   #render(): void {
+    // Snapshot the rendered positions before anything moves, so displaced rows can slide. First,
+    // as a subclass that renders its own template relies on it too.
+    const isDragging = this.#dragState.isDragging();
+    const placeholderIndex = this.placeholderIndex();
+    untracked(() => this.#shiftAnimator?.beforeUpdate(isDragging, placeholderIndex));
+
     const outlet = this.rowOutlet();
     const wrapper = this.contentWrapper()?.nativeElement;
     // Not this component's template (a subclass's own): it renders renderedItems() itself
     if (!outlet || !wrapper) return;
 
-    const template = this.itemTemplate();
+    const template = this.itemTemplate() ?? null;
     const entries = this.#renderedRows();
     const keys = this.#rowKeys();
+    const trackBy = this.effectiveTrackByFn();
     const transform = this.contentTransform();
     const slot = this.#placeholderSlot();
     const placeholderHeight = slot >= 0 ? this.placeholderHeight() : null;
-    const isDragging = this.#dragState.isDragging();
-    const placeholderIndex = this.placeholderIndex();
 
     // Untracked: the signals the rows' templates read must not become this effect's
     untracked(() => {
-      // Snapshot the rendered positions before anything moves, so displaced rows can slide
-      this.#shiftAnimator?.beforeUpdate(isDragging, placeholderIndex);
-
       if (transform !== this.#contentTransformSet) {
         wrapper.style.transform = transform;
         this.#contentTransformSet = transform;
       }
-      this.#renderRows(outlet, template, entries, keys);
+      this.#renderRows(outlet, template, entries, keys, trackBy);
       this.#renderPlaceholder(outlet, slot, placeholderHeight);
     });
   }
 
   /**
    * Give each entry a view of the item template, in order. As with `@for`, a row keeps its view
-   * (and the components in it) while its track key stays rendered, and a view never renders
-   * another item. Only new views and views whose context changed are checked, with
-   * `detectChanges()`: `markForCheck()` would mark every ancestor view up to the root too.
+   * (and the components in it) while its track key stays rendered, a view never renders another
+   * item, and only the rows out of order move. Only new views and views whose context changed are
+   * checked, with `detectChanges()`: `markForCheck()` would mark every ancestor view up to the
+   * root too.
    */
   #renderRows(
     outlet: ViewContainerRef,
-    template: TemplateRef<VirtualScrollItemContext<T>>,
+    template: TemplateRef<VirtualScrollItemContext<T>> | null,
     entries: RenderedEntry<T>[],
     keys: unknown[],
+    trackBy: unknown,
   ): void {
     // Nothing to do, as on a placeholder move
-    if (entries === this.#rowEntries && template === this.#rowTemplate) return;
+    if (
+      entries === this.#rowEntries &&
+      template === this.#rowTemplate &&
+      trackBy === this.#rowTrackBy
+    ) {
+      return;
+    }
 
-    // A new template renders every row anew
+    // A new template renders every row anew; without one there is no row (as ngTemplateOutlet)
     if (template !== this.#rowTemplate) {
       for (const row of this.#rows) {
         row.view.destroy();
       }
       this.#rows = [];
       this.#rowTemplate = template;
+    }
+    if (!template) return;
+
+    // A new track function gives the rendered rows new keys; they keep their views (as with @for)
+    if (trackBy !== this.#rowTrackBy) {
+      for (const row of this.#rows) {
+        const { $implicit, index } = row.view.context;
+        row.key = this.trackEntry(index, { type: 'item', data: $implicit, index });
+      }
+      this.#rowTrackBy = trackBy;
     }
 
     // The last render's views by key, in order: an entry takes the first view left for its key
@@ -861,21 +936,29 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
     const kept = keys.map((key) => previous.get(key)?.shift());
     this.#warnDuplicateKeys(keys);
 
-    // Remove the rows that left first, so the kept views are in order from the first position on
+    // Remove the rows that left, then keep in place the longest run of kept views that is
+    // already in order (their positions in the outlet, which now holds only kept views)
     for (const views of previous.values()) {
       for (const row of views) {
         row.view.destroy();
       }
     }
+    const positions = new Map<EmbeddedViewRef<VirtualScrollItemContext<T>>, number>();
+    for (const row of this.#rows) {
+      if (!row.view.destroyed) positions.set(row.view, positions.size);
+    }
+    const inPlace = longestIncreasingRun(kept.map((row) => (row ? positions.get(row.view)! : -1)));
 
-    const rows: RowView<T>[] = [];
+    // From the last row up, so each row goes right before the next one, already in place
+    const rows: RowView<T>[] = new Array(entries.length);
     const toCheck: EmbeddedViewRef<VirtualScrollItemContext<T>>[] = [];
-    for (let i = 0; i < entries.length; i++) {
+    let next: EmbeddedViewRef<VirtualScrollItemContext<T>> | null = null;
+    for (let i = entries.length - 1; i >= 0; i--) {
       const entry = entries[i];
       let row = kept[i];
       if (row) {
-        if (outlet.get(i) !== row.view) {
-          outlet.move(row.view, i);
+        if (!inPlace[i]) {
+          this.#moveBefore(outlet, row.view, next);
         }
         if (this.#updateContext(row.view.context, entry)) {
           toCheck.push(row.view);
@@ -886,17 +969,36 @@ export class VirtualScrollContainerComponent<T> implements OnInit, AfterViewInit
           index: entry.index,
           isSticky: entry.isSticky,
         };
-        row = { key: keys[i], view: outlet.createEmbeddedView(template, context, i) };
+        const index: number = next ? outlet.indexOf(next) : outlet.length;
+        row = { key: keys[i], view: outlet.createEmbeddedView(template, context, index) };
         toCheck.push(row.view);
       }
-      rows.push(row);
+      rows[i] = row;
+      next = row.view;
     }
     this.#rows = rows;
 
-    for (const view of toCheck) {
-      view.detectChanges();
+    // When this component's own view is checked later in this pass, that check renders every row
+    if (!this.#viewCheckPending) {
+      // Top to bottom (toCheck lists them bottom up)
+      for (let i = toCheck.length - 1; i >= 0; i--) {
+        toCheck[i].detectChanges();
+      }
     }
     this.#rowEntries = entries;
+  }
+
+  /** Move a row's view right before `next` (last without one), unless it is there already. */
+  #moveBefore(
+    outlet: ViewContainerRef,
+    view: EmbeddedViewRef<VirtualScrollItemContext<T>>,
+    next: EmbeddedViewRef<VirtualScrollItemContext<T>> | null,
+  ): void {
+    const target = next ? outlet.indexOf(next) : outlet.length;
+    const current = outlet.indexOf(view);
+    if (current === target - 1) return;
+    // move() takes the view out before inserting it, which shifts the views after it
+    outlet.move(view, current < target ? target - 1 : target);
   }
 
   /** Copy an entry into a row's context. Returns whether the context changed. */
