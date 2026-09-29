@@ -3,6 +3,14 @@ name: Performance Benchmarks
 on:
   pull_request:
     branches: [master]
+    # Not a required check, so skipping it on docs-only PRs does not block merging.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '**/*.mdx'
+      - '.claude/**'
+      - '.ai/**'
+      - 'skills/**'
 
 permissions:
   contents: read
@@ -17,10 +25,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
 
@@ -39,18 +49,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head (merge commit)
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: head
+          persist-credentials: false
 
       - name: Checkout PR base
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: base
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -127,9 +139,12 @@ jobs:
             echo "regression=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Fork PRs get a read-only token, so the comment fails there; the step summary and the
+      # gate below still report the result.
       - name: Comment on PR
         if: always()
-        uses: actions/github-script@v9
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const { readFileSync, existsSync } = require('fs');
@@ -150,10 +165,11 @@ jobs:
             const marker = '<!-- perf-benchmark-results -->';
             const body = `${marker}\n${report}${comparison}`;
 
-            const { data: comments } = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
+              per_page: 100,
             });
 
             const existing = comments.find(c => c.body?.includes(marker));
@@ -176,7 +192,7 @@ jobs:
 
       - name: Upload results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: perf-results
           path: |

@@ -19,12 +19,12 @@ jobs:
       # The default ref is the merge commit this run was triggered for (github.sha), so the
       # build and E2E jobs test the same code even if the PR moves while they run.
       - name: Checkout PR merge commit
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -57,10 +57,10 @@ jobs:
 
       # Share the built library and demo so E2E jobs serve the production demo without
       # rebuilding it 5x.
-      - name: Upload built library
-        uses: actions/upload-artifact@v4
+      - name: Upload built library and demo
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: dist-lib
+          name: dist-build
           path: dist/
           retention-days: 1
 
@@ -99,12 +99,12 @@ jobs:
       # The default ref is the merge commit this run was triggered for (github.sha), so the
       # build and E2E jobs test the same code even if the PR moves while they run.
       - name: Checkout PR merge commit
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -117,10 +117,10 @@ jobs:
         run: npm ci
 
       # playwright.config.ts serves dist/dnd/browser (production build) when CI is set.
-      - name: Download built library
-        uses: actions/download-artifact@v4
+      - name: Download built library and demo
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: dist-lib
+          name: dist-build
           path: dist/
 
       - name: Install Playwright browser
