@@ -4,7 +4,7 @@ import { poll } from './fixtures/polling';
 
 /**
  * Rows with a leave animation (`animate.leave`): Angular removes a leaving row's element when that
- * animation ends, so a row that moves or whose view is recycled must not play it.
+ * animation ends, so a view whose row left the range must not be recycled for a row that comes in.
  * Fixture: /row-leave-animation. "Rows" (`row-0`…`row-99`) is a `vdnd-sortable-list` with
  * `recycleRows`, "Viewport rows" (`vrow-0`…`vrow-99`) renders with `*vdndVirtualFor`. Both are
  * 400px tall, with 50px rows.
@@ -29,35 +29,9 @@ test.describe('Rows with a leave animation', () => {
 
       expect(await renderedIds(list)).toEqual(range('row', 17, 31));
     });
-
-    test('keeps a row it moved', async ({ page }) => {
-      const list = page.locator('vdnd-virtual-scroll');
-
-      await keyboardMoveDown(page, 'row-0', 3);
-      await settleAnimations(page);
-
-      expect(await renderedIds(list)).toEqual([
-        'row-1',
-        'row-2',
-        'row-3',
-        'row-0',
-        ...range('row', 4, 11),
-      ]);
-    });
   });
 
   test.describe('in *vdndVirtualFor', () => {
-    test('keeps the rows it moved', async ({ page }) => {
-      const list = page.locator('vdnd-virtual-viewport');
-
-      await keyboardMoveDown(page, 'vrow-0', 3);
-      await settleAnimations(page);
-
-      const ids = await renderedIds(list);
-      expect(ids.slice(0, 5)).toEqual(['vrow-1', 'vrow-2', 'vrow-3', 'vrow-0', 'vrow-4']);
-      expect(ids).toEqual(expect.arrayContaining(range('vrow', 0, 7)));
-    });
-
     test('keeps the rows that scroll in in recycled views', async ({ page }) => {
       const list = page.locator('vdnd-virtual-viewport');
 
@@ -74,18 +48,6 @@ test.describe('Rows with a leave animation', () => {
     });
   });
 });
-
-async function keyboardMoveDown(page: Page, rowId: string, steps: number): Promise<void> {
-  const preview = page.getByTestId('vdnd-drag-preview');
-  await page.locator(`[data-draggable-id="${rowId}"]`).focus();
-  await page.keyboard.press('Space');
-  await expect(preview, 'The keyboard drag should start').toBeVisible();
-  for (let step = 0; step < steps; step++) {
-    await page.keyboard.press('ArrowDown');
-  }
-  await page.keyboard.press('Space');
-  await expect(preview).toBeHidden();
-}
 
 async function scrollTo(list: Locator, scrollTop: number): Promise<void> {
   await list.evaluate((element, top) => {

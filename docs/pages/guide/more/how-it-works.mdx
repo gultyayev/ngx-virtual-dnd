@@ -45,13 +45,13 @@ A recycled view renders another item, and keeps whatever does not come from its 
 - **Local state stays with the view.** A component's own fields and signals, and the value of an input field that is not bound to the item, show up on the next item.
 - **DOM state that no binding sets stays**: classes or styles set from code, an element's scroll position, an `<img>` until its new `src` loads.
 
-Focus does not carry over: a view leaves the DOM before it renders another item. A row keeps its view while its item stays rendered, as without recycling. A row whose root element has a leave animation (`animate.leave`) is not recycled: it plays the animation, and Angular removes it when the animation ends.
-
-Rows change order by moving their elements, not their views, in every list. A row that moves, for example after a drop, keeps its view and plays no leave animation. A query over the rows (`viewChildren()`, `contentChildren()`) can list them in an order other than the page's.
+Focus does not carry over: a view leaves the DOM before it renders another item. A row keeps its view while its item stays rendered, as without recycling. A row whose root element has a leave animation (`animate.leave`) is not recycled, by `*vdndVirtualFor` either: Angular keeps it in the DOM until the animation ends.
 
 Turn it on for rows that are costly to create (several components, many elements) and render only from their item.
 
 ## Known limitations
+
+### Hit-testing
 
 Because hit-testing uses geometry rather than `elementFromPoint()`, some browser behavior is not reproduced:
 
@@ -59,6 +59,44 @@ Because hit-testing uses geometry rather than `elementFromPoint()`, some browser
 - **Stacking order is approximated.** "Last in document order wins" matches the paint order in most layouts. It does not follow `z-index` or stacking contexts, so a droppable earlier in the DOM but raised visually loses to a later sibling.
 
 If your layout depends on either, keep overlapping droppables in different groups, or avoid painting interactive overlays across active drop targets during a drag.
+
+### Leave animations on rows that move
+
+This is a limitation of Angular. The lists move a row's view with `ViewContainerRef.move()`, as `*ngFor` does, and Angular plays the leave animation (`animate.leave`) of a view that moves, as if it left. Only `@for` avoids that. So when the items change order, for example after a drop or a sort, each row that moves plays its leave animation:
+
+- From Angular 21.2.1, the row then stays in place.
+- Before Angular 21.2.1, Angular also removes the row from the page when the animation ends, so it disappears.
+
+To avoid it, turn the leave animation off for the drag: give `[animate.leave]` an empty value from `dragStart` until the drop has rendered. Angular reads the value when the animation runs, after the render that moves the rows, so turn it back on in the `read` phase of that render:
+
+```ts
+readonly leaveAnimation = signal('row-leave');
+readonly #injector = inject(Injector);
+
+onDragStart(): void {
+  this.leaveAnimation.set('');
+}
+
+onDragEnd(): void {
+  // Angular runs the leave animations of the moved rows before the read phase of the next render
+  afterNextRender(
+    { read: () => this.leaveAnimation.set('row-leave') },
+    { injector: this.#injector },
+  );
+}
+```
+
+```html
+<div
+  class="item"
+  [animate.leave]="leaveAnimation()"
+  [vdndDraggable]="item.id"
+  (dragStart)="onDragStart()"
+  (dragEnd)="onDragEnd()"
+></div>
+```
+
+Before Angular 21.2.1 this is not enough, because Angular removes a row that moves even when its leave animation is empty. Update Angular, or keep `animate.leave` off rows that can move.
 
 ## Browser support
 

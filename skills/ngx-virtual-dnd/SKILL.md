@@ -390,6 +390,8 @@ Items then slide into their new position (works with virtual scrolling and dynam
 
 With the config present, the drop animation also plays: on drop or cancel the preview stays up (class `vdnd-drag-preview-dropping`) and glides from the release point onto the item's final position, while that item stays invisible (`opacity` animation) until it lands. `drop`/`dragEnd` still fire immediately — it is purely visual. It lands on the item as rendered after your `(drop)` handler, so commit the move synchronously (`moveItem()`/`reorderItems()`); if the item is not rendered or scrolled out of view, the preview fades out in place. A new drag cuts it short. Set `dropDuration: 0` to keep shift animations only.
 
+**Rows with `animate.leave` (Angular limitation).** The lists move rows with `ViewContainerRef.move()` (as `*ngFor` does), and Angular plays the leave animation of a view that moves; only `@for` avoids it. So when items change order (a drop, a sort), each moved row plays its leave animation, then stays (Angular 21.2.1+) or is removed from the page (earlier versions). To avoid it, turn the animation off for the drag: bind `[animate.leave]="leaveAnimation()"`, set `leaveAnimation` to `''` in `(dragStart)`, and back from `(dragEnd)` with `afterNextRender({ read: () => ... }, { injector })` (Angular reads the value when the animation runs, after the render that moves the rows). Before Angular 21.2.1 a moved row is removed even with an empty value: update Angular or keep `animate.leave` off rows that can move. Details: How it works → Known limitations in the docs.
+
 For haptics on every step, use `(placeholderMove)` on `vdndDroppable` / `vdnd-sortable-list` (`PlaceholderMoveEvent`: `previousIndex` → `currentIndex`, same index convention as `DropEvent.destination.index`; `previousIndex` is `null` when the placeholder entered the list). Not emitted for the initial pick-up or when the placeholder leaves.
 
 ## Drag state
@@ -497,6 +499,7 @@ On release, `(dragEnd)` fires first, then `(drop)` on the destination, both befo
 | A gap stays where the item was                             | `vdndDraggable` is nested inside a wrapper element (rule 7)                                    |
 | A custom control inside an item starts a drag instead of working | Add class `no-drag` to the control (it covers everything inside it), or use `dragHandle` |
 | Preview loses styling                                     | Styles relied on ancestor selectors; the preview lives under `<body>` — target its own classes |
+| A row fades out after a drop (and disappears, before Angular 21.2.1) | It has `animate.leave`: Angular plays it for rows that move (a framework limitation) — turn it off for the drag (see Shift and drop animations) |
 
 ## API reference
 
