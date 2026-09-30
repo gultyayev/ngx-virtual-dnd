@@ -275,15 +275,13 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     return { start, end };
   });
 
-  /** Map of trackBy keys to item indices for quick lookup */
-  readonly #itemIndexMap = computed(() => {
-    const items = this.vdndVirtualForOf();
+  /**
+   * Every item's track key, in order. Computed once per items change, and only when something
+   * reads it: a dynamic-height strategy or a drag. A fixed-height strategy needs only the count.
+   */
+  readonly #itemKeys = computed(() => {
     const trackByFn = this.vdndVirtualForTrackBy();
-    const map = new Map<unknown, number>();
-    for (let i = 0; i < items.length; i++) {
-      map.set(trackByFn(i, items[i]), i);
-    }
-    return map;
+    return this.vdndVirtualForOf().map((item, i) => trackByFn(i, item));
   });
 
   /** Index of the dragged item in this list (-1 if not present or not dragging) */
@@ -291,8 +289,9 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     const draggedItem = this.#dragState.draggedItem();
     if (!draggedItem) return -1;
 
-    const byId = this.#itemIndexMap().get(draggedItem.draggableId);
-    if (byId !== undefined) {
+    // The last item with the key, as an index map filled in order would give
+    const byId = this.#itemKeys().lastIndexOf(draggedItem.draggableId);
+    if (byId >= 0) {
       return byId;
     }
 
@@ -305,12 +304,15 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   });
 
   constructor() {
-    // Keep strategy item keys in sync
+    // Keep the strategy's items in sync. A fixed-height strategy needs only their count, which
+    // spares computing every item's track key on each items change (each drop).
     effect(() => {
-      const items = this.vdndVirtualForOf();
-      const trackByFn = this.vdndVirtualForTrackBy();
-      const keys = items.map((item, i) => trackByFn(i, item));
-      this.#strategy().setItemKeys(keys);
+      const strategy = this.#strategy();
+      if (strategy instanceof FixedHeightStrategy) {
+        strategy.setItemCount(this.vdndVirtualForOf().length);
+      } else {
+        strategy.setItemKeys(this.#itemKeys());
+      }
     });
 
     // Register strategy with drag index calculator for accurate position lookups

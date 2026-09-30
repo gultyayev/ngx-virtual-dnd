@@ -118,7 +118,7 @@ describe('KeyboardDragHandler', () => {
       positionCalculator: mockPositionCalculator,
       dragIndexCalculator: mockDragIndexCalculator,
       elementClone: mockElementClone,
-      overlayContainer: { hasTemplatePreview: jest.fn().mockReturnValue(false) },
+      overlayContainer: { hasClonePreview: jest.fn().mockReturnValue(true) },
       ngZone: mockNgZone,
       envInjector: mockEnvInjector,
       callbacks: mockCallbacks,
@@ -186,7 +186,7 @@ describe('KeyboardDragHandler', () => {
       );
     });
 
-    it('should skip cloning when a template-based preview is active', () => {
+    it('should skip cloning when no mounted preview shows a clone', () => {
       const cloneSpy = jest.fn().mockReturnValue(createElement());
       const templateHandler = new KeyboardDragHandler({
         dragState: mockDragState,
@@ -194,7 +194,7 @@ describe('KeyboardDragHandler', () => {
         positionCalculator: mockPositionCalculator,
         dragIndexCalculator: mockDragIndexCalculator,
         elementClone: { cloneElement: cloneSpy },
-        overlayContainer: { hasTemplatePreview: jest.fn().mockReturnValue(true) },
+        overlayContainer: { hasClonePreview: jest.fn().mockReturnValue(false) },
         ngZone: mockNgZone,
         envInjector: mockEnvInjector,
         callbacks: mockCallbacks,
@@ -769,7 +769,7 @@ describe('KeyboardDragHandler', () => {
         positionCalculator: realPositionCalc,
         dragIndexCalculator: realIndexCalc,
         elementClone: mockElementClone,
-        overlayContainer: { hasTemplatePreview: jest.fn().mockReturnValue(false) },
+        overlayContainer: { hasClonePreview: jest.fn().mockReturnValue(true) },
         ngZone: mockNgZone,
         envInjector: mockEnvInjector,
         callbacks: mockCallbacks,

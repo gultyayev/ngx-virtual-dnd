@@ -121,10 +121,10 @@ export class KeyboardDragHandler {
     });
 
     // Clone element BEFORE updating drag state.
-    // Template-first: skip the clone when a template-based preview is mounted.
-    const clonedElement = this.#deps.overlayContainer.hasTemplatePreview()
-      ? undefined
-      : this.#deps.elementClone.cloneElement(element);
+    // Only for a mounted preview that shows the clone (one without a template).
+    const clonedElement = this.#deps.overlayContainer.hasClonePreview()
+      ? this.#deps.elementClone.cloneElement(element)
+      : undefined;
 
     // Start keyboard drag
     this.#deps.keyboardDrag.startKeyboardDrag(

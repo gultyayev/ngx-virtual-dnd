@@ -288,10 +288,11 @@ export class PointerDragHandler {
     } else {
       position = { x: event.clientX, y: event.clientY };
     }
-    const ctx = this.#deps.getContext();
 
     // Check if we've moved past the threshold
     if (!this.#deps.callbacks.isDragging() && this.#startPosition) {
+      // Read only before the drag starts, not on every move of a drag: nothing in it matters then
+      const ctx = this.#deps.getContext();
       if (this.#isStalePress(ctx)) {
         this.cleanup();
         return;
@@ -433,10 +434,20 @@ export class PointerDragHandler {
 
   /**
    * The tracked finger in `touches`, or null. Synthetic touch events (e.g. from test tools) can
-   * leave a list undefined, so a missing list counts as empty.
+   * leave a list undefined, so a missing list counts as empty. Read by index, without copying the
+   * list or creating an iterator: this runs for every touch move.
    */
   #trackedTouch(touches: TouchList | undefined): Touch | null {
-    return Array.from(touches ?? []).find((touch) => touch.identifier === this.#touchId) ?? null;
+    if (!touches) {
+      return null;
+    }
+    // eslint-disable-next-line @typescript-eslint/prefer-for-of -- for...of creates an iterator
+    for (let i = 0; i < touches.length; i++) {
+      if (touches[i].identifier === this.#touchId) {
+        return touches[i];
+      }
+    }
+    return null;
   }
 
   /**

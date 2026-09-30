@@ -80,11 +80,7 @@ export class DragIndexCalculatorService {
     const virtualScrollElement = droppableElement.querySelector(
       'vdnd-virtual-scroll',
     ) as HTMLElement | null;
-    const virtualContentElement = (
-      droppableElement.matches('vdnd-virtual-content')
-        ? droppableElement
-        : droppableElement.closest('vdnd-virtual-content')
-    ) as HTMLElement | null;
+    const virtualContentElement = this.#findVirtualContent(droppableElement);
 
     let containerType: DroppableCache['containerType'];
     let scrollContainer: HTMLElement;
@@ -141,7 +137,7 @@ export class DragIndexCalculatorService {
     isSameList: boolean;
     draggedItemHeight: number;
   }): number {
-    return this.#getTotalItemCount(args.droppableElement, args.isSameList, args.draggedItemHeight);
+    return this.#getTotalItemCount(args.droppableElement, args.draggedItemHeight);
   }
 
   /**
@@ -251,7 +247,7 @@ export class DragIndexCalculatorService {
     if (cachedItemCount !== undefined && Number.isFinite(cachedItemCount)) {
       totalItems = Math.max(0, cachedItemCount);
     } else {
-      totalItems = this.#getTotalItemCount(droppableElement, isSameList, draggedItemHeight);
+      totalItems = this.#getTotalItemCount(droppableElement, draggedItemHeight, cache);
     }
 
     // Edge detection: allow dropping at the END of the list when cursor is near bottom edge.
@@ -319,10 +315,15 @@ export class DragIndexCalculatorService {
     return Number.isFinite(offset) ? offset : 0;
   }
 
+  /**
+   * The number of items in a droppable. With `cache`, the drag's resolved metadata, the virtual
+   * containers it knows are not looked up in the DOM again: this runs on every frame of a drag
+   * over a list without a registered strategy.
+   */
   #getTotalItemCount(
     droppableElement: HTMLElement,
-    isSameList: boolean,
     draggedItemHeight: number,
+    cache?: DroppableCache,
   ): number {
     // Check if a registered strategy exists
     const droppableId = this.#positionCalculator.getDroppableId(droppableElement);
@@ -333,7 +334,9 @@ export class DragIndexCalculatorService {
     }
 
     // Check for embedded virtual scroll component
-    const virtualScroll = droppableElement.querySelector('vdnd-virtual-scroll');
+    const virtualScroll = cache
+      ? cache.virtualScrollElement
+      : droppableElement.querySelector('vdnd-virtual-scroll');
     if (virtualScroll) {
       // Use data-total-items attribute if available (always the true N)
       const totalItemsAttr = virtualScroll.getAttribute('data-total-items');
@@ -376,9 +379,9 @@ export class DragIndexCalculatorService {
     }
 
     // Check for page-level scroll (vdnd-virtual-content)
-    const virtualContent = droppableElement.matches('vdnd-virtual-content')
-      ? droppableElement
-      : droppableElement.closest('vdnd-virtual-content');
+    const virtualContent = cache
+      ? cache.virtualContentElement
+      : this.#findVirtualContent(droppableElement);
     if (virtualContent) {
       // Prefer explicit total items attribute (works for both fixed and dynamic heights)
       const totalItemsAttr = (virtualContent as HTMLElement).getAttribute('data-total-items');
@@ -406,6 +409,13 @@ export class DragIndexCalculatorService {
     // (including the hidden dragged item), so no adjustment needed
     const items = droppableElement.querySelectorAll('[data-draggable-id]');
     return items.length;
+  }
+
+  /** The `vdnd-virtual-content` the droppable is or is inside (page-level scroll), if any. */
+  #findVirtualContent(droppableElement: HTMLElement): HTMLElement | null {
+    return droppableElement.matches('vdnd-virtual-content')
+      ? droppableElement
+      : droppableElement.closest<HTMLElement>('vdnd-virtual-content');
   }
 
   #getDraggedItemHeightFallback(height: number, fallback: number): number {

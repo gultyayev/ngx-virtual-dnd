@@ -42,4 +42,40 @@ describe('OverlayContainerService', () => {
       expect(service.hasTemplatePreview()).toBe(true);
     });
   });
+
+  describe('hasClonePreview', () => {
+    it('is false with no mounted preview', () => {
+      expect(service.hasClonePreview()).toBe(false);
+    });
+
+    it('is true while a mounted preview has no template', () => {
+      service.setPreviewMounted(true);
+      expect(service.hasClonePreview()).toBe(true);
+
+      service.setPreviewMounted(false);
+      expect(service.hasClonePreview()).toBe(false);
+    });
+
+    it('is false while every mounted preview renders a template', () => {
+      service.setPreviewMounted(true);
+      service.setTemplatePreviewActive(true);
+
+      expect(service.hasClonePreview()).toBe(false);
+    });
+
+    it('is true while one of several mounted previews has no template', () => {
+      service.setPreviewMounted(true);
+      service.setPreviewMounted(true);
+      service.setTemplatePreviewActive(true);
+
+      expect(service.hasClonePreview()).toBe(true);
+    });
+
+    it('never drops below zero on an unbalanced unmount', () => {
+      service.setPreviewMounted(false);
+      service.setPreviewMounted(true);
+
+      expect(service.hasClonePreview()).toBe(true);
+    });
+  });
 });

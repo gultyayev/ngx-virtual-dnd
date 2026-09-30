@@ -143,6 +143,24 @@ describe('DropAnimator', () => {
       window.matchMedia = originalMatchMedia;
     }
   });
+
+  it('queries the reduced-motion preference once, and follows its changes', () => {
+    const originalMatchMedia = window.matchMedia;
+    // A MediaQueryList is live: its `matches` follows the preference
+    const query = { matches: false };
+    window.matchMedia = jest.fn().mockReturnValue(query);
+    try {
+      const animator = new DropAnimator({});
+      expect(animator.isEnabled()).toBe(true);
+
+      query.matches = true;
+
+      expect(animator.isEnabled()).toBe(false);
+      expect(window.matchMedia).toHaveBeenCalledTimes(1);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
 });
 
 describe('findDropTarget', () => {

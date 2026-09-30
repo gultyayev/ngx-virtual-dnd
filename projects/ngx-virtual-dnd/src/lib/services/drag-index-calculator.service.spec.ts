@@ -519,6 +519,45 @@ describe('DragIndexCalculatorService', () => {
     ).toBe(2);
   });
 
+  describe('a plain list on later frames of a drag', () => {
+    /** The preview near the list's bottom edge, which snaps the placeholder to the end */
+    const atBottomEdge = (droppable: HTMLElement) => ({
+      droppableElement: droppable,
+      position: { x: 10, y: 440 },
+      previousPosition: null,
+      grabOffset: null,
+      draggedItemHeight: 50,
+      sourceDroppableId: null,
+      sourceIndex: null,
+    });
+
+    it('does not look for virtual containers in the DOM again', () => {
+      const droppable = createDroppable('plain-list', 5);
+      // The first frame resolves the droppable
+      expect(service.calculatePlaceholderIndex(atBottomEdge(droppable)).index).toBe(5);
+      const querySelector = jest.spyOn(droppable, 'querySelector');
+      const closest = jest.spyOn(droppable, 'closest');
+      const matches = jest.spyOn(droppable, 'matches');
+
+      expect(service.calculatePlaceholderIndex(atBottomEdge(droppable)).index).toBe(5);
+
+      expect(querySelector).not.toHaveBeenCalled();
+      expect(closest).not.toHaveBeenCalled();
+      expect(matches).not.toHaveBeenCalled();
+    });
+
+    it('counts the items it renders now', () => {
+      const droppable = createDroppable('plain-list', 5);
+      expect(service.calculatePlaceholderIndex(atBottomEdge(droppable)).index).toBe(5);
+
+      const added = document.createElement('div');
+      added.setAttribute('data-draggable-id', 'item-5');
+      droppable.appendChild(added);
+
+      expect(service.calculatePlaceholderIndex(atBottomEdge(droppable)).index).toBe(6);
+    });
+  });
+
   it('snaps to the end of the list when the preview reaches the bottom edge', () => {
     // 12 rows (600px) in a 500px box scrolled to its max (100px).
     const droppable = createDroppable('plain-list', 12);

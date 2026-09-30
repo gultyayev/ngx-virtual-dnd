@@ -669,6 +669,73 @@ describe('PositionCalculatorService', () => {
       expect(service.findDroppableAtPoint(200, 400, dragged, 'g')).toBeNull();
     });
 
+    /** A `.vdnd-scrollable` viewport (100..300 on both axes) holding droppables taller than it */
+    function scrollableWithLists(ids: string[]): { scrollable: HTMLElement; lists: HTMLElement[] } {
+      const scrollable = document.createElement('div');
+      scrollable.className = 'vdnd-scrollable';
+      stubRect(scrollable, { top: 100, left: 100, right: 300, bottom: 300 });
+      document.body.appendChild(scrollable);
+      created.push(scrollable);
+      const lists = ids.map((id, i) => {
+        const list = document.createElement('div');
+        list.setAttribute('data-droppable-id', id);
+        list.setAttribute('data-droppable-group', 'g');
+        stubRect(list, { top: 0, left: 100 + i * 100, right: 200 + i * 100, bottom: 600 });
+        scrollable.appendChild(list);
+        registerDroppable(list);
+        created.push(list);
+        return list;
+      });
+      return { scrollable, lists };
+    }
+
+    it('looks up each candidate’s clipping ancestor once per drag, not on every re-read', () => {
+      const dragged = document.createElement('div');
+      const { lists } = scrollableWithLists(['a', 'b']);
+      const closest = lists.map((list) => jest.spyOn(list, 'closest'));
+
+      service.beginDragSession('g');
+      for (let i = 0; i < 3; i++) {
+        service.invalidateDroppableRects();
+        expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBe(lists[0]);
+      }
+
+      expect(closest.map((spy) => spy.mock.calls.length)).toEqual([1, 1]);
+      // Still clipped on every re-read
+      expect(service.findDroppableAtPoint(150, 50, dragged, 'g')).toBeNull();
+    });
+
+    it('reads the rect of a scroller once for the lists it clips', () => {
+      const dragged = document.createElement('div');
+      const { scrollable, lists } = scrollableWithLists(['a', 'b']);
+      const readScrollable = jest.spyOn(scrollable, 'getBoundingClientRect');
+
+      service.beginDragSession('g');
+      expect(readScrollable).toHaveBeenCalledTimes(1);
+      service.invalidateDroppableRects();
+      expect(service.findDroppableAtPoint(250, 200, dragged, 'g')).toBe(lists[1]);
+
+      expect(readScrollable).toHaveBeenCalledTimes(2);
+      expect(service.findDroppableAtPoint(250, 350, dragged, 'g')).toBeNull();
+    });
+
+    it('keeps clipping a droppable that leaves the page and comes back mid-drag', () => {
+      // e.g. a list in a row of a virtual list, pooled and then rendered again
+      const dragged = document.createElement('div');
+      const { scrollable, lists } = scrollableWithLists(['list']);
+      const [drop] = lists;
+      service.beginDragSession('g');
+
+      drop.remove();
+      service.invalidateDroppableRects();
+      service.findDroppableAtPoint(150, 200, dragged, 'g');
+      scrollable.appendChild(drop);
+      service.invalidateDroppableRects();
+
+      expect(service.findDroppableAtPoint(150, 50, dragged, 'g')).toBeNull();
+      expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBe(drop);
+    });
+
     it('does not clip when the droppable has no scrollable ancestor', () => {
       const dragged = document.createElement('div');
       const drop = document.createElement('div');

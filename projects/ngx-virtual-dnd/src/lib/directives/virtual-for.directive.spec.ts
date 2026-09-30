@@ -73,6 +73,27 @@ class DynamicHeightTestHostComponent {
   readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
 }
 
+/** Counts the calls of its trackBy function, which returns the item ID (the draggable ID) */
+@Component({
+  template: `
+    <vdnd-virtual-viewport [itemHeight]="50" [dynamicItemHeight]="dynamic()" style="height: 200px;">
+      <ng-container *vdndVirtualFor="let item of items(); trackBy: trackByFn; droppableId: 'list'">
+        <div class="item" [attr.data-id]="item.id">{{ item.label }}</div>
+      </ng-container>
+    </vdnd-virtual-viewport>
+  `,
+  imports: [VirtualViewportComponent, VirtualForDirective],
+})
+class TrackCountingHostComponent {
+  readonly items = signal<TestItem[]>([]);
+  readonly dynamic = signal(false);
+  trackCalls = 0;
+  readonly trackByFn = (_index: number, item: TestItem): string => {
+    this.trackCalls++;
+    return item.id;
+  };
+}
+
 /** Rows 0..29 of 50px, for lists whose rows start 400px down: deeper than the 3-row overscan */
 const offsetListItems = (): TestItem[] =>
   Array.from({ length: 30 }, (_, i) => ({
@@ -336,6 +357,118 @@ describe('VirtualForDirective', () => {
       fixture.detectChanges();
       expect(renderedIds()).toEqual(['item-1']);
     });
+  });
+});
+
+describe('VirtualForDirective (track keys)', () => {
+  let fixture: ComponentFixture<TrackCountingHostComponent>;
+  let host: TrackCountingHostComponent;
+  let dragState: DragStateService;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  const makeItems = (count: number): TestItem[] =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `item-${i}`,
+      key: `key-${i}`,
+      label: `Item ${i}`,
+      parts: [],
+    }));
+
+  const renderedIds = (): string[] =>
+    fixture.debugElement
+      .queryAll(By.css('.item'))
+      .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id') ?? '');
+
+  /** The viewport's strategy, which the directive keeps in sync with its items */
+  const strategy = () =>
+    fixture.debugElement.query(By.directive(VirtualViewportComponent)).componentInstance
+      .strategy as VirtualViewportComponent['strategy'];
+
+  const startDragOf = (id: string): void => {
+    dragState.startDrag({
+      draggableId: id,
+      droppableId: 'list',
+      element: document.createElement('div'),
+      height: 50,
+      width: 100,
+    });
+    fixture.detectChanges();
+  };
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    // jsdom has no layout: give the viewport its 200px height (4 rows of 50px)
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(200);
+    TestBed.configureTestingModule({ imports: [TrackCountingHostComponent] });
+    fixture = TestBed.createComponent(TrackCountingHostComponent);
+    host = fixture.componentInstance;
+    dragState = TestBed.inject(DragStateService);
+    host.items.set(makeItems(1000));
+    fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    dragState.endDrag();
+    fixture.destroy();
+    jest.restoreAllMocks();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  it('computes only the track keys of the rendered rows when fixed-height items change', () => {
+    host.trackCalls = 0;
+
+    const [first, ...rest] = host.items();
+    host.items.set([...rest, first]);
+    fixture.detectChanges();
+
+    expect(renderedIds()).toEqual(Array.from({ length: 8 }, (_, i) => `item-${i + 1}`));
+    // Not one per item: a fixed-height strategy needs only the count
+    expect(host.trackCalls).toBeLessThan(100);
+    expect(strategy()?.getItemCount()).toBe(1000);
+  });
+
+  it('finds the dragged item without computing the track keys again (dynamic heights)', () => {
+    host.dynamic.set(true);
+    fixture.detectChanges();
+    host.trackCalls = 0;
+
+    startDragOf('item-5');
+
+    // The height cache already has every key: the drag looks the item up there
+    expect(host.trackCalls).toBeLessThan(100);
+    expect(strategy()?.getOffsetForIndex(6)).toBe(250);
+  });
+
+  it.each([
+    ['fixed', false],
+    ['dynamic', true],
+  ])('collapses the slot of the item dragged in the list (%s heights)', (_heights, dynamic) => {
+    host.dynamic.set(dynamic);
+    fixture.detectChanges();
+
+    startDragOf('item-5');
+
+    expect(strategy()?.getOffsetForIndex(5)).toBe(250);
+    expect(strategy()?.getOffsetForIndex(6)).toBe(250);
+    expect(strategy()?.getItemCount()).toBe(1000);
+  });
+
+  it('finds the dragged item by its data when its ID is not a track key', () => {
+    const items = makeItems(20);
+    host.items.set(items);
+    fixture.detectChanges();
+
+    dragState.startDrag({
+      draggableId: 'not-a-track-key',
+      droppableId: 'list',
+      element: document.createElement('div'),
+      height: 50,
+      width: 100,
+      data: items[5],
+    });
+    fixture.detectChanges();
+
+    expect(strategy()?.getOffsetForIndex(6)).toBe(250);
   });
 });
 

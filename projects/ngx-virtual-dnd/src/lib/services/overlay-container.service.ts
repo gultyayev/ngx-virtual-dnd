@@ -16,17 +16,32 @@ import { computed, Injectable, OnDestroy, signal } from '@angular/core';
 export class OverlayContainerService implements OnDestroy {
   #containerElement: HTMLElement | null = null;
 
+  /** Number of mounted drag previews. */
+  readonly #previewCount = signal(0);
+
   /** Number of mounted drag previews currently rendering via a custom template. */
   readonly #templatePreviewCount = signal(0);
 
-  /**
-   * Whether at least one mounted drag preview renders via a custom template.
-   *
-   * When true, DraggableDirective/KeyboardDragHandler skip the expensive
-   * drag-start element clone: the clone would never be shown because the
-   * template takes precedence (see DragPreviewComponent).
-   */
+  /** Whether at least one mounted drag preview renders via a custom template. */
   readonly hasTemplatePreview = computed(() => this.#templatePreviewCount() > 0);
+
+  /**
+   * Whether a mounted drag preview shows a clone of the dragged element: one without a custom
+   * template (see DragPreviewComponent).
+   *
+   * When false, DraggableDirective/KeyboardDragHandler skip the expensive drag-start element
+   * clone, which nothing would show: every mounted preview renders its template, or none is
+   * mounted.
+   */
+  readonly hasClonePreview = computed(() => this.#previewCount() > this.#templatePreviewCount());
+
+  /**
+   * Register (`mounted = true`) or unregister (`mounted = false`) a drag preview. Calls must be
+   * balanced per preview instance.
+   */
+  setPreviewMounted(mounted: boolean): void {
+    this.#previewCount.update((count) => Math.max(0, count + (mounted ? 1 : -1)));
+  }
 
   /**
    * Register (`active = true`) or unregister (`active = false`) a preview that

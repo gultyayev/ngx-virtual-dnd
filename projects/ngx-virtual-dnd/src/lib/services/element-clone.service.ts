@@ -1,5 +1,8 @@
 import { Injectable } from '@angular/core';
 
+/** A CSS property to copy, or a shorthand with the longhands to copy in its place */
+type StyleToCopy = string | readonly [shorthand: string, longhands: readonly string[]];
+
 /**
  * Service for cloning DOM elements with their computed styles.
  * Used to create visual copies of dragged elements for the drag preview.
@@ -11,20 +14,19 @@ export class ElementCloneService {
    * These are the visual properties that affect appearance. Keeping them
    * kebab-case avoids a camelCase→kebab conversion on every property of every
    * node during the recursive clone walk (a drag-start hot path).
+   *
+   * A shorthand carries more than the longhands listed with it (`background-size`,
+   * `font-style`, …), so it is copied first, and the longhands only when the engine can't
+   * serialize the shorthand (it gives '' for `font` with `font-variant-ligatures: none`, for
+   * example). Copying both would read and write the same values twice.
    */
-  readonly #stylePropsToCopy: readonly string[] = [
-    'background',
-    'background-color',
-    'background-image',
+  readonly #stylesToCopy: readonly StyleToCopy[] = [
+    ['background', ['background-color', 'background-image']],
     'border',
     'border-radius',
     'box-shadow',
     'color',
-    'font',
-    'font-family',
-    'font-size',
-    'font-weight',
-    'line-height',
+    ['font', ['font-family', 'font-size', 'font-weight', 'line-height']],
     'padding',
     'margin',
     'display',
@@ -73,10 +75,22 @@ export class ElementCloneService {
     const computed = window.getComputedStyle(source);
 
     // Copy essential visual properties (keys are already kebab-case)
-    for (const prop of this.#stylePropsToCopy) {
-      const value = computed.getPropertyValue(prop);
-      if (value) {
-        target.style.setProperty(prop, value);
+    for (const style of this.#stylesToCopy) {
+      if (typeof style === 'string') {
+        this.#copyStyle(computed, target, style);
+        continue;
+      }
+      // The longhands only when the shorthand was not copied: the engine gave no value, or the
+      // clone rejected it. A shorthand sets all its longhands, so reading one back tells (the
+      // shorthand itself would be serialized again to be read).
+      const [shorthand, longhands] = style;
+      if (
+        !this.#copyStyle(computed, target, shorthand) ||
+        !target.style.getPropertyValue(longhands[0])
+      ) {
+        for (const longhand of longhands) {
+          this.#copyStyle(computed, target, longhand);
+        }
       }
     }
 
@@ -96,6 +110,19 @@ export class ElementCloneService {
         this.#applyComputedStyles(sourceChild, targetChild);
       }
     }
+  }
+
+  /**
+   * Copy one computed property to the target's inline style. Returns whether the engine gave a
+   * value for it.
+   */
+  #copyStyle(computed: CSSStyleDeclaration, target: HTMLElement, property: string): boolean {
+    const value = computed.getPropertyValue(property);
+    if (!value) {
+      return false;
+    }
+    target.style.setProperty(property, value);
+    return true;
   }
 
   /**

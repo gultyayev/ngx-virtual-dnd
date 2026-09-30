@@ -42,7 +42,7 @@ import { createAutoScrollRegistration } from '../utils/auto-scroll-registration'
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
-import { queryByAttribute } from '../utils/attribute-selectors';
+import { mapByAttribute } from '../utils/attribute-selectors';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
 import { revealDropTargetIn } from '../utils/drop-animator';
@@ -483,22 +483,37 @@ export class VirtualScrollContainerComponent<T>
     return this.#dragState.draggedItem()?.draggableId ?? null;
   });
 
-  /** Map of item IDs to their indices - rebuilt only when items() changes (O(n) once, then O(1) lookups) */
-  readonly #itemIndexMap = computed(() => {
-    const items = this.items();
+  /**
+   * Every item's ID, in order. Computed once per items change, and only when something reads it:
+   * a dynamic-height strategy, a drag, or a sticky item outside the rendered rows. A fixed-height
+   * strategy needs only the item count.
+   */
+  readonly #itemIds = computed(() => {
     const idFn = this.itemIdFn();
+    return this.items().map((item) => idFn(item));
+  });
+
+  /**
+   * Index of each item ID (the last, when several share one), for the sticky items outside the
+   * rendered rows. Built on first use, so an items change (a drop) builds none.
+   */
+  readonly #itemIndexMap = computed(() => {
+    const ids = this.#itemIds();
     const map = new Map<string, number>();
-    for (let i = 0; i < items.length; i++) {
-      map.set(idFn(items[i]), i);
+    for (let i = 0; i < ids.length; i++) {
+      map.set(ids[i], i);
     }
     return map;
   });
 
-  /** The index of the currently dragged item in the items array (-1 if not found or not dragging) */
+  /**
+   * The index of the currently dragged item in the items array (-1 if not found or not dragging).
+   * A scan: one lookup per drag costs less than building the index map.
+   */
   readonly #draggedItemIndex = computed(() => {
     const draggedId = this.draggedItemId();
     if (!draggedId) return -1;
-    return this.#itemIndexMap().get(draggedId) ?? -1;
+    return this.#itemIds().lastIndexOf(draggedId);
   });
 
   /** Memoized Set of sticky IDs - rebuilt only when effectiveStickyIds() changes */
@@ -534,7 +549,6 @@ export class VirtualScrollContainerComponent<T>
     const { start, end } = this.#renderRange();
     const stickyIds = this.#stickyIdsSet();
     const idFn = this.itemIdFn();
-    const itemIndexMap = this.#itemIndexMap();
     const draggedId = this.draggedItemId();
 
     const result: RenderedEntry<T>[] = [];
@@ -558,8 +572,10 @@ export class VirtualScrollContainerComponent<T>
     const missingStickyIndices: { id: string; index: number }[] = [];
     for (const id of stickyIds) {
       if (renderedIds.has(id)) continue;
-      const index = itemIndexMap.get(id);
-      if (index === undefined) continue;
+      // The drag knows its item's index; the index map serves the other sticky items
+      const index =
+        id === draggedId ? this.#draggedItemIndex() : (this.#itemIndexMap().get(id) ?? -1);
+      if (index < 0) continue;
       missingStickyIndices.push({ id, index });
     }
     if (missingStickyIndices.length > 1) {
@@ -651,12 +667,15 @@ export class VirtualScrollContainerComponent<T>
       config: () => this.autoScrollConfig(),
     });
 
-    // Keep strategy item keys in sync
+    // Keep the strategy's items in sync. A fixed-height strategy needs only their count, which
+    // spares computing every item's ID on each items change (each drop).
     effect(() => {
-      const items = this.items();
-      const idFn = this.itemIdFn();
-      const keys = items.map((item) => idFn(item));
-      this.#strategy().setItemKeys(keys);
+      const strategy = this.#strategy();
+      if (strategy instanceof FixedHeightStrategy) {
+        strategy.setItemCount(this.items().length);
+      } else {
+        strategy.setItemKeys(this.#itemIds());
+      }
     });
 
     // Register strategy with drag index calculator for accurate drag calculations
@@ -1275,14 +1294,15 @@ export class VirtualScrollContainerComponent<T>
         );
         if (!wrapper) return;
 
+        // The DOM element of each item, by its data-draggable-id: one query for all rows, where a
+        // query per row scanned the wrapper once for each (quadratic in the rendered rows)
+        const elementsById = mapByAttribute<HTMLElement>(wrapper, 'data-draggable-id');
         const nextObservedByKey = new Map<unknown, HTMLElement>();
 
         for (const entry of rendered) {
           if (entry.type !== 'item' || !entry.data) continue;
           const key = idFn(entry.data);
-
-          // Find the DOM element for this item by its data-draggable-id.
-          const el = queryByAttribute<HTMLElement>(wrapper, 'data-draggable-id', key);
+          const el = elementsById.get(key);
           if (el) {
             nextObservedByKey.set(key, el);
           }

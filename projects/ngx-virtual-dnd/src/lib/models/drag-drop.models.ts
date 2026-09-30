@@ -8,7 +8,10 @@ export interface DraggedItem {
   droppableId: string;
   /** Reference to the dragged element */
   element: HTMLElement;
-  /** Cloned element for use in drag preview (auto-generated) */
+  /**
+   * Clone of the dragged element, with its computed styles inlined, for the default drag preview.
+   * Made only while a mounted `<vdnd-drag-preview>` shows it (one without a `previewTemplate`).
+   */
   clonedElement?: HTMLElement;
   /** Height of the dragged element in pixels */
   height: number;
