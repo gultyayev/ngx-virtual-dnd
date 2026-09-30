@@ -53,10 +53,14 @@ requestAnimationFrame(() => {
 - No `ngZone.run()` wrapper needed - the callback already enters the zone when updating drag state
 
 ```typescript
-// In AutoScrollService.#performScroll():
+// In AutoScrollService: #performScroll() scrolls, then #participantTick() calls back in the same tick
 element.scrollTop += scrollY;
 this.#onScrollCallback?.(); // Immediate, no RAF
 ```
+
+**Update (Sep 2026):** The callback moved from `#performScroll()` to `#participantTick()`, after the tick records
+the scroll state: the callback may end the drag (a drag whose group disappears is cancelled), and the tick
+must not write "scrolling" over the reset of `stopMonitoring()`. Same frame, same order relative to the scroll.
 
 **Update (Jan 2026):** The forced layout flush was removed after the placeholder/index math was stabilized and E2E
 passed across browsers. If a Safari/WebKit regression reappears (e.g. stale hit-testing or drift), consider

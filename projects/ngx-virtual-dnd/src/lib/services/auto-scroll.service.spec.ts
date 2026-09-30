@@ -233,6 +233,19 @@ describe('AutoScrollService', () => {
       expect(dir.x).toBe(0);
       expect(dir.y).toBe(0);
     });
+
+    it('should not report scrolling after the scroll callback stopped monitoring', () => {
+      setupDrag({ x: 150, y: 480 }); // near bottom edge
+      service.registerContainer('test-container', mockElement);
+      // The callback ends the drag, as DraggableDirective does when the drag's group disappears
+      startMonitoringWithScheduler(() => service.stopMonitoring());
+
+      flushRAF();
+
+      expect(mockElement.scrollTop).toBeGreaterThan(200);
+      expect(service.isScrolling()).toBe(false);
+      expect(service.getScrollDirection()).toEqual({ x: 0, y: 0 });
+    });
   });
 
   // ---------------------------------------------------------------------------

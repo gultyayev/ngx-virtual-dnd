@@ -342,6 +342,15 @@ export class AutoScrollService {
           this.#scrollState.direction.y = direction.y;
           this.#scrollState.speed = speed;
           scrollPerformed = true;
+
+          // Notify callback IMMEDIATELY in the same frame (no RAF delay)
+          // Delaying via RAF causes cumulative drift during continuous autoscroll
+          // because multiple scrolls happen before each delayed callback runs.
+          // Note: No ngZone.run() needed here - the callback (DraggableDirective.#recalculatePlaceholder)
+          // already enters the zone when updating drag state.
+          // It runs after the scroll state is recorded: it may end the drag, and the reset of
+          // stopMonitoring() must not be overwritten.
+          this.#onScrollCallback?.();
           break;
         }
         // No room in any requested direction: a resting cursor retries it once it changes
@@ -417,18 +426,7 @@ export class AutoScrollService {
       }
     }
 
-    if (!scrolled) {
-      return false;
-    }
-
-    // Notify callback IMMEDIATELY in the same frame (no RAF delay)
-    // Delaying via RAF causes cumulative drift during continuous autoscroll
-    // because multiple scrolls happen before each delayed callback runs.
-    // Note: No ngZone.run() needed here - the callback (DraggableDirective.#recalculatePlaceholder)
-    // already enters the zone when updating drag state.
-    this.#onScrollCallback?.();
-
-    return true;
+    return scrolled;
   }
 
   /** Record a container that had no room in `direction` (see #exhausted). */
