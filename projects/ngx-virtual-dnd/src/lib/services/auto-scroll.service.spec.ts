@@ -520,7 +520,7 @@ describe('AutoScrollService', () => {
       expect(mockElement.getBoundingClientRect).toHaveBeenCalledTimes(2);
     });
 
-    it('should not read the containers again when a container with no room scrolls on the other axis', () => {
+    it('should not read the containers again when a container with no room to the left scrolls vertically', () => {
       mockElement.scrollLeft = 0;
       setupDrag({ x: 70, y: 300 }); // near left edge, no room to the left
       service.registerContainer('test-container', mockElement);
@@ -535,6 +535,23 @@ describe('AutoScrollService', () => {
 
       expect(mockElement.getBoundingClientRect).toHaveBeenCalledTimes(1);
       expect(mockElement.scrollLeft).toBe(0);
+    });
+
+    it('should not read the containers again when a container with no room below scrolls sideways', () => {
+      mockElement.scrollTop = 600; // max = scrollHeight(1000) - clientHeight(400)
+      setupDrag({ x: 150, y: 480 }); // near bottom edge, no room below
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+      flushRAF();
+
+      // A shift-wheel scroll moves the list sideways, which the cursor does not ask for
+      mockElement.scrollLeft = 50;
+      flushRAF();
+      mockElement.scrollLeft = 100;
+      flushRAF();
+
+      expect(mockElement.getBoundingClientRect).toHaveBeenCalledTimes(1);
+      expect(mockElement.scrollTop).toBe(600);
     });
 
     it('should resume scrolling sideways when the container grows while the cursor rests at its edge', () => {
@@ -582,6 +599,21 @@ describe('AutoScrollService', () => {
       flushRAF();
 
       expect(mockElement.scrollTop).toBeGreaterThan(500);
+      expect(service.isScrolling()).toBe(true);
+    });
+
+    it('should resume scrolling sideways when the container is scrolled back while the cursor rests at its edge', () => {
+      mockElement.scrollLeft = 200; // max = scrollWidth(400) - clientWidth(200)
+      setupDrag({ x: 230, y: 300 }); // near right edge
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+      flushRAF();
+
+      // A shift-wheel scroll moves the board back to the left
+      mockElement.scrollLeft = 100;
+      flushRAF();
+
+      expect(mockElement.scrollLeft).toBeGreaterThan(100);
       expect(service.isScrolling()).toBe(true);
     });
   });
