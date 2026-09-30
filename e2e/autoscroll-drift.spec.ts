@@ -1,6 +1,6 @@
 import { expect, Page, test, TestInfo } from '@playwright/test';
 import { Box, DemoPage, ListName } from './fixtures/demo.page';
-import { waitForFrames } from './fixtures/drag-sync';
+import { waitForFrames, waitForScrollDown } from './fixtures/drag-sync';
 import { poll } from './fixtures/polling';
 
 interface DriftSnapshot {
@@ -140,6 +140,9 @@ test.describe('Autoscroll Placeholder Drift', () => {
   test('placeholder should stay aligned in List 2 during extended autoscroll', async ({
     page,
   }, testInfo) => {
+    // Scrolls far: at a few frames per second (WebKit under load) that takes longer than the
+    // default test timeout allows
+    test.slow();
     // User's scenario: drag the first item of List 2 and autoscroll down
     const containerBox = await demoPage.list2VirtualScroll.boundingBox();
     if (!containerBox) throw new Error('Could not get the container bounding box');
@@ -150,18 +153,13 @@ test.describe('Autoscroll Placeholder Drift', () => {
     const nearBottomY = containerBox.y + containerBox.height - 15;
     await page.mouse.move(containerBox.x + 100, nearBottomY, { steps: 10 });
     await page.mouse.move(containerBox.x + 100, nearBottomY);
+    await waitForScrollDown(demoPage.list2VirtualScroll, 1200);
 
     const snapshot = await waitForDriftSnapshot(
       page,
       'list2',
-      (driftSnapshot) => {
-        expect(
-          driftSnapshot.scrollTop,
-          `ScrollTop should exceed 1200, current: ${driftSnapshot.scrollTop}`,
-        ).toBeGreaterThan(1200);
-        expect(driftSnapshot.indexDrift).toBe(0);
-      },
-      10000,
+      (driftSnapshot) => expect(driftSnapshot.indexDrift).toBe(0),
+      5000,
     );
     await attachJson(testInfo, 'list2-extended-drift', snapshot);
 
@@ -179,18 +177,13 @@ test.describe('Autoscroll Placeholder Drift', () => {
     const nearBottomY = containerBox.y + containerBox.height - 25;
     await page.mouse.move(containerBox.x + 100, nearBottomY, { steps: 10 });
     await page.mouse.move(containerBox.x + 100, nearBottomY);
+    await waitForScrollDown(demoPage.list1VirtualScroll, 500);
 
     const snapshot = await waitForDriftSnapshot(
       page,
       'list1',
-      (driftSnapshot) => {
-        expect(
-          driftSnapshot.scrollTop,
-          `ScrollTop should exceed 500, current: ${driftSnapshot.scrollTop}`,
-        ).toBeGreaterThan(500);
-        expect(driftSnapshot.indexDrift).toBe(0);
-      },
-      10000,
+      (driftSnapshot) => expect(driftSnapshot.indexDrift).toBe(0),
+      5000,
     );
     await attachJson(testInfo, 'list1-down-drift', snapshot);
 
@@ -200,7 +193,9 @@ test.describe('Autoscroll Placeholder Drift', () => {
   test('placeholder drift should not accumulate during extended autoscroll', async ({
     page,
   }, testInfo) => {
-    // Extended autoscroll to catch cumulative drift bugs
+    // Extended autoscroll to catch cumulative drift bugs. At a few frames per second (WebKit
+    // under load) it takes longer than the default test timeout allows.
+    test.slow();
     const containerBox = await demoPage.list1VirtualScroll.boundingBox();
     if (!containerBox) throw new Error('Could not get the container bounding box');
 
@@ -209,18 +204,13 @@ test.describe('Autoscroll Placeholder Drift', () => {
     const nearBottomY = containerBox.y + containerBox.height - 25;
     await page.mouse.move(containerBox.x + 100, nearBottomY, { steps: 10 });
     await page.mouse.move(containerBox.x + 100, nearBottomY);
+    await waitForScrollDown(demoPage.list1VirtualScroll, 1500);
 
     const snapshot = await waitForDriftSnapshot(
       page,
       'list1',
-      (driftSnapshot) => {
-        expect(
-          driftSnapshot.scrollTop,
-          `ScrollTop should exceed 1500, current: ${driftSnapshot.scrollTop}`,
-        ).toBeGreaterThan(1500);
-        expect(driftSnapshot.indexDrift).toBe(0);
-      },
-      15000,
+      (driftSnapshot) => expect(driftSnapshot.indexDrift).toBe(0),
+      5000,
     );
     await attachJson(testInfo, 'extended-drift', snapshot);
 
@@ -267,6 +257,9 @@ test.describe('Autoscroll Placeholder Drift', () => {
   });
 
   test('placeholder should be accurate at absolute maximum scroll', async ({ page }, testInfo) => {
+    // Scrolls the whole list: at a few frames per second (WebKit under load) that takes longer
+    // than the default test timeout allows
+    test.slow();
     // Boundary condition: autoscroll to the very end of the list
     const containerBox = await demoPage.list1VirtualScroll.boundingBox();
     if (!containerBox) throw new Error('Could not get the container bounding box');
@@ -276,13 +269,7 @@ test.describe('Autoscroll Placeholder Drift', () => {
     const nearBottomY = containerBox.y + containerBox.height - 20;
     await page.mouse.move(containerBox.x + 100, nearBottomY, { steps: 10 });
     await page.mouse.move(containerBox.x + 100, nearBottomY);
-    await poll(
-      () =>
-        demoPage.list1VirtualScroll.evaluate(
-          (el) => el.scrollHeight - el.clientHeight - el.scrollTop,
-        ),
-      { timeout: 15000 },
-    ).toBeLessThanOrEqual(2);
+    await waitForScrollDown(demoPage.list1VirtualScroll, 'end');
 
     // At the end, the placeholder index matches the pointer exactly and stays in bounds
     const snapshot = await waitForDriftSnapshot(

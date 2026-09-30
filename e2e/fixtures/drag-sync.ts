@@ -1,4 +1,4 @@
-import { expect, Page } from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
 
 /**
  * Ensure the drag scheduler has processed the pointer at exactly (x, y) before releasing.
@@ -69,6 +69,59 @@ export async function waitForFrames(page: Page, count: number): Promise<void> {
       }),
     count,
   );
+}
+
+/**
+ * Wait until autoscroll has scrolled `scroller` down past `target` px, or to the end of its range
+ * (within `tolerance` px) for `'end'`. Fails once the scroll position has not moved on for
+ * `stallTimeout` ms, not after a fixed total time.
+ *
+ * Autoscroll moves a bounded distance per frame, so the time a long scroll takes depends on the
+ * frame rate: WebKit renders only a few frames per second on a loaded 4-core machine. A fixed
+ * timeout then fails a healthy scroll, while a stall still fails here within `stallTimeout`.
+ * The test timeout bounds the whole wait: tests that scroll far call `test.slow()`.
+ */
+export async function waitForScrollDown(
+  scroller: Locator,
+  target: number | 'end',
+  { tolerance = 2, stallTimeout = 5000 }: { tolerance?: number; stallTimeout?: number } = {},
+): Promise<void> {
+  const result = await scroller.evaluate(
+    (element, options) =>
+      new Promise<{ reached: boolean; scrollTop: number; maxScrollTop: number }>((resolve) => {
+        let furthest = element.scrollTop;
+        let movedAt = performance.now();
+        const check = () => {
+          const { scrollTop } = element;
+          const maxScrollTop = element.scrollHeight - element.clientHeight;
+          const reached =
+            options.target === 'end'
+              ? maxScrollTop - scrollTop <= options.tolerance
+              : scrollTop > options.target;
+          if (reached) {
+            resolve({ reached, scrollTop, maxScrollTop });
+            return;
+          }
+          // Progress is a new furthest position: a list that grows under the scroll (rows
+          // measured taller) raises the distance left without the scroll stalling
+          if (scrollTop > furthest) {
+            furthest = scrollTop;
+            movedAt = performance.now();
+          } else if (performance.now() - movedAt > options.stallTimeout) {
+            resolve({ reached, scrollTop, maxScrollTop });
+            return;
+          }
+          requestAnimationFrame(check);
+        };
+        check();
+      }),
+    { target, tolerance, stallTimeout },
+  );
+  expect(
+    result.reached,
+    `Autoscroll stopped at scrollTop ${result.scrollTop} (max ${result.maxScrollTop}) before ` +
+      `${target === 'end' ? 'the end' : `passing ${target}`} and did not move for ${stallTimeout}ms`,
+  ).toBe(true);
 }
 
 interface InputHandledWindow {

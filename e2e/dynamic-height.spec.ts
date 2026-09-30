@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { waitForFrames } from './fixtures/drag-sync';
+import { waitForFrames, waitForScrollDown } from './fixtures/drag-sync';
 import { collectPageErrors } from './fixtures/page-errors';
 import { poll } from './fixtures/polling';
 import { TaskDemoPage, taskDemoSelectors } from './fixtures/task-demo.page';
@@ -558,12 +558,7 @@ test.describe('Dynamic Height Demo, short list', () => {
     await page.mouse.move(targetX, bottomEdgeY, { steps: 15 });
     await page.mouse.move(targetX, bottomEdgeY);
 
-    const remainingScroll = () =>
-      taskDemo.scrollContainer.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
-    await poll(remainingScroll, {
-      timeout: 10000,
-      message: 'Autoscroll should reach the end of the list',
-    }).toBeLessThanOrEqual(1);
+    await waitForScrollDown(taskDemo.scrollContainer, 'end', { tolerance: 1 });
     // Autoscroll has found no room left. The pointer does not move from here on.
     await waitForFrames(page, 3);
     const endScrollTop = await taskDemo.getScrollTop();
@@ -576,10 +571,8 @@ test.describe('Dynamic Height Demo, short list', () => {
       message: 'The added task should make the list taller',
     }).toBeGreaterThan(endScrollHeight + 30);
 
-    await poll(remainingScroll, {
-      timeout: 10000,
-      message: 'Autoscroll should resume and reach the new end of the list',
-    }).toBeLessThanOrEqual(1);
+    // Fails within its stall timeout if autoscroll does not resume
+    await waitForScrollDown(taskDemo.scrollContainer, 'end', { tolerance: 1 });
     expect(await taskDemo.getScrollTop(), 'The list should have scrolled on').toBeGreaterThan(
       endScrollTop + 30,
     );
