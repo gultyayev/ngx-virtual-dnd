@@ -21,7 +21,10 @@ export class HeightCache {
   /** Map from trackBy key to measured height */
   readonly #heightsByKey = new Map<unknown, number>();
 
-  /** Current ordered list of trackBy keys (index-aligned with item array) */
+  /**
+   * Current ordered list of trackBy keys (index-aligned with item array). A copy of the array
+   * given to `setKeys`, so a caller that changes its array in place and passes it again is seen.
+   */
   #keys: unknown[] = [];
 
   /** Index of each key's first occurrence in `#keys` */
@@ -61,9 +64,14 @@ export class HeightCache {
    * This must be called whenever items change order or the array changes.
    */
   setKeys(keys: unknown[]): boolean {
-    const sameOrder =
+    // The same keys in the same order (an items change that moved no item) leave the offsets and
+    // the key index valid: only heights recorded for keys not in the list are forgotten
+    if (
       keys.length === this.#keys.length &&
-      keys.every((key, index) => Object.is(key, this.#keys[index]));
+      keys.every((key, index) => Object.is(key, this.#keys[index]))
+    ) {
+      return this.#forgetHeightsNotIn(this.#firstIndexByKey);
+    }
 
     // Filled from the end, so each key keeps its first index. It also serves as the set of keys
     // for pruning, so building it costs no extra pass.
@@ -71,27 +79,16 @@ export class HeightCache {
     for (let i = keys.length - 1; i >= 0; i--) {
       firstIndexByKey.set(keys[i], i);
     }
-    let pruned = false;
-    for (const key of this.#heightsByKey.keys()) {
-      if (!firstIndexByKey.has(key)) {
-        this.#heightsByKey.delete(key);
-        pruned = true;
-      }
-    }
+    this.#forgetHeightsNotIn(firstIndexByKey);
 
-    if (sameOrder && !pruned) {
-      return false;
-    }
-
-    // Offsets before the first key that changed position are still valid. An array changed in
-    // place can't be compared with its old contents, so nothing counts as kept then.
+    // Offsets before the first key that changed position are still valid
     let firstChanged = 0;
-    const commonLength = keys === this.#keys ? 0 : Math.min(keys.length, this.#keys.length);
+    const commonLength = Math.min(keys.length, this.#keys.length);
     while (firstChanged < commonLength && Object.is(keys[firstChanged], this.#keys[firstChanged])) {
       firstChanged++;
     }
 
-    this.#keys = keys;
+    this.#keys = keys.slice();
     this.#firstIndexByKey = firstIndexByKey;
     this.#hasDuplicateKeys = firstIndexByKey.size < keys.length;
     this.#offsets.length = keys.length;
@@ -294,6 +291,18 @@ export class HeightCache {
 
     this.#excludedIndex = nextIndex;
     return true;
+  }
+
+  /** Forget the heights of keys not in `keys`. Returns whether it forgot any. */
+  #forgetHeightsNotIn(keys: ReadonlyMap<unknown, number>): boolean {
+    let forgot = false;
+    for (const key of this.#heightsByKey.keys()) {
+      if (!keys.has(key)) {
+        this.#heightsByKey.delete(key);
+        forgot = true;
+      }
+    }
+    return forgot;
   }
 
   /**

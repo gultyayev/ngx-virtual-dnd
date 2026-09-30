@@ -239,6 +239,33 @@ describe('HeightCache', () => {
       expect(offsetsOf(cache)).toEqual([0, 20, 50, 90]);
       expect(cache.getTotalHeight(3)).toBe(90);
     });
+
+    it('recomputes every offset when the same keys array is reordered in place', () => {
+      const cache = new HeightCache(ESTIMATED);
+      const keys = ['a', 'b', 'c', 'd'];
+      cache.setKeys(keys);
+      keys.forEach((key, i) => cache.setHeight(key, 10 * (i + 1)));
+      expect(cache.getOffset(4)).toBe(100);
+
+      // No key leaves, so nothing is forgotten that would give the change away
+      keys.reverse();
+
+      expect(cache.setKeys(keys)).toBe(true);
+      expect(offsetsOf(cache)).toEqual([0, 40, 70, 90, 100]);
+      expect(cache.getHeight(0)).toBe(40);
+    });
+
+    it('reports no change for the same keys in a new array', () => {
+      const cache = new HeightCache(ESTIMATED);
+      cache.setKeys(['a', 'b', 'c']);
+      cache.setHeight('b', 20);
+
+      expect(cache.setKeys(['a', 'b', 'c'])).toBe(false);
+      expect(offsetsOf(cache)).toEqual([0, 50, 70, 120]);
+      // A later height change still moves the offsets after its key
+      cache.setHeight('a', 10);
+      expect(offsetsOf(cache)).toEqual([0, 10, 30, 80]);
+    });
   });
 
   describe('against a reference that recomputes every offset', () => {

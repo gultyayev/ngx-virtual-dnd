@@ -96,7 +96,7 @@ export class PositionCalculatorService {
     this.#session = {
       groupName,
       candidates,
-      rects: candidates.map((el) => this.#measureRect(el)),
+      rects: this.#measureRects(candidates, []),
       dirty: false,
       candidatesStale: false,
       onViewportChange,
@@ -161,7 +161,7 @@ export class PositionCalculatorService {
       return;
     }
     session.candidates = this.#queryDroppables(session.groupName);
-    session.rects = session.candidates.map((el) => this.#measureRect(el));
+    session.rects = this.#measureRects(session.candidates, []);
     session.dirty = false;
     session.candidatesStale = false;
     this.#observeCandidates(session);
@@ -208,9 +208,7 @@ export class PositionCalculatorService {
         // A droppable was added/removed mid-drag: re-query the list (also refreshes rects).
         this.refreshCandidates();
       } else if (session.dirty) {
-        for (let i = 0; i < session.candidates.length; i++) {
-          session.rects[i] = this.#measureRect(session.candidates[i]);
-        }
+        this.#measureRects(session.candidates, session.rects);
         session.dirty = false;
       }
       return this.#hitTest(x, y, session.candidates, session.rects);
@@ -218,8 +216,7 @@ export class PositionCalculatorService {
 
     // No active session: one-shot geometric query (still avoids elementFromPoint).
     const candidates = this.#queryDroppables(groupName);
-    const rects = candidates.map((el) => this.#measureRect(el));
-    return this.#hitTest(x, y, candidates, rects);
+    return this.#hitTest(x, y, candidates, this.#measureRects(candidates, []));
   }
 
   /**
@@ -257,25 +254,44 @@ export class PositionCalculatorService {
   }
 
   /**
-   * Measure a candidate's hit-test rect, clipped to its nearest `.vdnd-scrollable`
-   * ancestor. Without clipping a droppable scrolled mostly out of a clipping container
-   * still hit-tests over its full unclipped rect (issue #23 case 3). The intersection is
-   * built as a plain DOMRect; an empty intersection yields a negative width/height so the
-   * `#hitTest` bounds check can never match it.
+   * The ancestor that clips a candidate's hit-test rect: its nearest `.vdnd-scrollable`
+   * ancestor, or null when it has none or is one itself. Without clipping a droppable scrolled
+   * mostly out of a clipping container still hit-tests over its full unclipped rect (issue #23
+   * case 3).
    */
-  #measureRect(el: HTMLElement): DOMRect {
-    const rect = el.getBoundingClientRect();
+  #clipOf(el: HTMLElement): Element | null {
     const scrollable = el.closest('.vdnd-scrollable');
-    if (!scrollable || scrollable === el) {
-      return rect;
-    }
+    return scrollable === el ? null : scrollable;
+  }
 
-    const clip = scrollable.getBoundingClientRect();
-    const top = Math.max(rect.top, clip.top);
-    const left = Math.max(rect.left, clip.left);
-    const right = Math.min(rect.right, clip.right);
-    const bottom = Math.min(rect.bottom, clip.bottom);
-    return new DOMRect(left, top, right - left, bottom - top);
+  /**
+   * Measure the candidates' hit-test rects into `rects`, each clipped to its clip ancestor (see
+   * `#clipOf`). Consecutive candidates in one scroller (lists side by side in it) read its rect
+   * once. The ancestor is looked up on each pass: a list moved to another scroller mid-drag keeps
+   * its registration. The intersection is built as a plain DOMRect; an empty intersection yields
+   * a negative width/height so the `#hitTest` bounds check can never match it.
+   */
+  #measureRects(candidates: readonly HTMLElement[], rects: DOMRect[]): DOMRect[] {
+    let lastClip: Element | null = null;
+    let lastClipRect: DOMRect | null = null;
+    for (let i = 0; i < candidates.length; i++) {
+      const rect = candidates[i].getBoundingClientRect();
+      const clip = this.#clipOf(candidates[i]);
+      if (!clip) {
+        rects[i] = rect;
+        continue;
+      }
+      if (clip !== lastClip || !lastClipRect) {
+        lastClip = clip;
+        lastClipRect = clip.getBoundingClientRect();
+      }
+      const top = Math.max(rect.top, lastClipRect.top);
+      const left = Math.max(rect.left, lastClipRect.left);
+      const right = Math.min(rect.right, lastClipRect.right);
+      const bottom = Math.min(rect.bottom, lastClipRect.bottom);
+      rects[i] = new DOMRect(left, top, right - left, bottom - top);
+    }
+    return rects;
   }
 
   /**

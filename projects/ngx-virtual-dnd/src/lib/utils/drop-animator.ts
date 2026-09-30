@@ -45,6 +45,9 @@ export class DropAnimator {
   #ghostAnimation: Animation | null = null;
   #hidden: { element: Element; animation: Animation } | null = null;
 
+  /** The reduced-motion media query, created on first use (null without `matchMedia`) */
+  #reducedMotionQuery: MediaQueryList | null | undefined;
+
   constructor(config: VdndAnimationConfig) {
     this.#config = config;
   }
@@ -55,8 +58,7 @@ export class DropAnimator {
     if (typeof Element === 'undefined' || typeof Element.prototype.animate !== 'function') {
       return false;
     }
-    if (typeof matchMedia !== 'function') return true;
-    return !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return !this.#prefersReducedMotion();
   }
 
   /**
@@ -130,6 +132,15 @@ export class DropAnimator {
 
   #duration(): number {
     return this.#config.dropDuration ?? DEFAULT_DROP_DURATION;
+  }
+
+  /** One media query for every drop: it is live, so it follows a change of the preference. */
+  #prefersReducedMotion(): boolean {
+    if (this.#reducedMotionQuery === undefined) {
+      this.#reducedMotionQuery =
+        typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+    }
+    return this.#reducedMotionQuery?.matches ?? false;
   }
 }
 

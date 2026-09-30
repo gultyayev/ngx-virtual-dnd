@@ -50,10 +50,10 @@ requestAnimationFrame(() => {
 
 - Use direct property assignment (`element.scrollTop += delta`) instead of `scrollBy()` for guaranteed synchronous behavior
 - Call the placeholder recalculation callback immediately in the same frame (no RAF delay)
-- No `ngZone.run()` wrapper needed - the callback already enters the zone when updating drag state
+- No `ngZone.run()` wrapper needed - the callback updates signals and plain fields, and enters the zone itself only to emit `dragEnd` when it ends the drag
 
 ```typescript
-// In AutoScrollService.#performScroll():
+// In AutoScrollService: #performScroll() scrolls, then #participantTick() calls back in the same tick
 element.scrollTop += scrollY;
 this.#onScrollCallback?.(); // Immediate, no RAF
 ```
@@ -61,6 +61,10 @@ this.#onScrollCallback?.(); // Immediate, no RAF
 **Update (Jan 2026):** The forced layout flush was removed after the placeholder/index math was stabilized and E2E
 passed across browsers. If a Safari/WebKit regression reappears (e.g. stale hit-testing or drift), consider
 re-introducing the flush behind a targeted condition rather than unconditionally on every scroll frame.
+
+**Update (Sep 2026):** The callback moved from `#performScroll()` to `#participantTick()`, after the tick records
+the scroll state: the callback may end the drag (a drag whose group disappears is cancelled), and the tick
+must not write "scrolling" over the reset of `stopMonitoring()`. Same frame, same order relative to the scroll.
 
 ## Key Insights
 

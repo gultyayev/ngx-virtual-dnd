@@ -55,8 +55,13 @@ export class TaskDemoPage {
     this.visiblePlaceholder = page.locator(taskDemoSelectors.visiblePlaceholder);
   }
 
-  async goto(path: '/page-scroll' | '/dynamic-height'): Promise<void> {
-    await this.page.goto(path, { waitUntil: 'domcontentloaded' });
+  /** Open a task demo. `count` sets the number of tasks (`/dynamic-height` only). */
+  async goto(
+    path: '/page-scroll' | '/dynamic-height',
+    options: { count?: number } = {},
+  ): Promise<void> {
+    const query = options.count === undefined ? '' : `?count=${options.count}`;
+    await this.page.goto(`${path}${query}`, { waitUntil: 'domcontentloaded' });
     await this.waitUntilReady();
   }
 

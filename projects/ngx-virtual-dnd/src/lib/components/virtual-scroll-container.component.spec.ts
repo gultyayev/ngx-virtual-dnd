@@ -141,6 +141,66 @@ class TestHostComponent {
   readonly trackByFn = (_: number, item: TestItem): string => item.id;
 }
 
+/** Dynamic heights, with rows that render their item ID twice: on the row and inside it */
+@Component({
+  template: `
+    <ng-template #itemTpl let-item>
+      <div class="row" [attr.data-draggable-id]="item.id">
+        <span class="badge" [attr.data-draggable-id]="item.id">{{ item.name }}</span>
+      </div>
+    </ng-template>
+
+    <vdnd-virtual-scroll
+      [items]="items()"
+      [itemHeight]="50"
+      [containerHeight]="300"
+      [dynamicItemHeight]="true"
+      [itemIdFn]="itemIdFn"
+      [itemTemplate]="itemTpl"
+    >
+    </vdnd-virtual-scroll>
+  `,
+  imports: [VirtualScrollContainerComponent],
+})
+class NestedIdHostComponent {
+  items = signal<TestItem[]>([]);
+  readonly itemIdFn = (item: TestItem): string => item.id;
+}
+
+/** Counts the calls of its itemIdFn */
+@Component({
+  template: `
+    <ng-template #itemTpl let-item let-index="index">
+      <div class="item" [attr.data-draggable-id]="item.id" [attr.data-index]="index">
+        {{ item.name }}
+      </div>
+    </ng-template>
+
+    <vdnd-virtual-scroll
+      [items]="items()"
+      [itemHeight]="50"
+      [containerHeight]="300"
+      [dynamicItemHeight]="dynamicItemHeight()"
+      [stickyItemIds]="stickyItemIds()"
+      [droppableId]="'list'"
+      [itemIdFn]="itemIdFn"
+      [itemTemplate]="itemTpl"
+    >
+    </vdnd-virtual-scroll>
+  `,
+  imports: [VirtualScrollContainerComponent],
+})
+class IdCountingHostComponent {
+  items = signal<TestItem[]>([]);
+  dynamicItemHeight = signal(false);
+  stickyItemIds = signal<string[]>([]);
+  idCalls = 0;
+  readonly itemIdFn = (item: TestItem): string => {
+    this.idCalls++;
+    return item.id;
+  };
+}
+
 describe('VirtualScrollContainerComponent', () => {
   let fixture: ComponentFixture<TestHostComponent>;
   let component: TestHostComponent;
@@ -635,6 +695,37 @@ describe('VirtualScrollContainerComponent', () => {
       expect(renderedItems().length).toBe(4);
     });
 
+    it('should find the rows to measure with one query per render, not one per row', async () => {
+      setDynamic(true);
+      const querySelectorAll = jest.spyOn(Element.prototype, 'querySelectorAll');
+
+      await scrollContainerTo(2000);
+
+      const rowQueries = querySelectorAll.mock.calls.filter(
+        ([selector]) => selector === '[data-draggable-id]',
+      );
+      querySelectorAll.mockRestore();
+      const [observer] = MockResizeObserver.measuringRows();
+      expect(renderedItems().length).toBeGreaterThan(1);
+      expect(observer.observedElements()).toEqual(renderedItems());
+      expect(rowQueries.length).toBe(1);
+    });
+
+    it('should measure the first element rendered with an item ID', () => {
+      // The row template renders the ID twice: on the row and on a nested element
+      const nestedFixture = TestBed.createComponent(NestedIdHostComponent);
+      nestedFixture.componentInstance.items.set(generateItems(3));
+      nestedFixture.detectChanges();
+      nestedFixture.detectChanges();
+
+      const [observer] = MockResizeObserver.measuringRows();
+      const rows: Element[] = Array.from(nestedFixture.nativeElement.querySelectorAll('.row'));
+      expect(rows.length).toBe(3);
+      expect(observer.observedElements()).toEqual(rows);
+
+      nestedFixture.destroy();
+    });
+
     it('should measure every rendered row into the new strategy when itemHeight changes', () => {
       setDynamic(true);
       const [first] = MockResizeObserver.measuringRows();
@@ -1019,6 +1110,191 @@ class RenderCountingHostComponent {
     this.#changeDetector.markForCheck();
   }
 }
+
+describe('VirtualScrollContainerComponent (item IDs)', () => {
+  let fixture: ComponentFixture<IdCountingHostComponent>;
+  let host: IdCountingHostComponent;
+  let dragState: DragStateService;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  const makeItems = (count: number): TestItem[] =>
+    Array.from({ length: count }, (_, i) => ({ id: `item-${i}`, name: `Item ${i}` }));
+
+  const render = (): void => {
+    fixture.detectChanges();
+    fixture.detectChanges();
+  };
+
+  const renderedIndices = (): number[] =>
+    Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.item')).map((row) =>
+      Number(row.getAttribute('data-index')),
+    );
+
+  const renderedIds = (): string[] =>
+    Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.item')).map(
+      (row) => row.getAttribute('data-draggable-id') ?? '',
+    );
+
+  /** The list's strategy, as drag and drop sees it */
+  const strategy = () =>
+    TestBed.inject(DragIndexCalculatorService).getStrategyForDroppable('list')!;
+
+  /** Move the first item to the end, as a drop does */
+  const moveFirstToEnd = (): void => {
+    const [first, ...rest] = host.items();
+    host.items.set([...rest, first]);
+  };
+
+  /** A drag of `id` from `droppableId`, which found the item at `sourceIndex` */
+  const startDragOf = (id: string, sourceIndex?: number, droppableId = 'list'): void => {
+    dragState.startDrag(
+      {
+        draggableId: id,
+        droppableId,
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      },
+      undefined,
+      undefined,
+      null,
+      droppableId,
+      null,
+      null,
+      sourceIndex ?? null,
+    );
+    render();
+  };
+
+  const scrollTo = async (scrollTop: number): Promise<void> => {
+    const list = fixture.debugElement.query(By.directive(VirtualScrollContainerComponent))
+      .nativeElement as HTMLElement;
+    list.scrollTop = scrollTop;
+    list.dispatchEvent(new Event('scroll'));
+    await nextAnimationFrame();
+    render();
+  };
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    TestBed.configureTestingModule({ imports: [IdCountingHostComponent] });
+    fixture = TestBed.createComponent(IdCountingHostComponent);
+    host = fixture.componentInstance;
+    dragState = TestBed.inject(DragStateService);
+    host.items.set(makeItems(1000));
+    render();
+  });
+
+  afterEach(() => {
+    dragState.endDrag();
+    fixture.destroy();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  it('computes only the IDs of the rendered rows when fixed-height items change', () => {
+    host.idCalls = 0;
+
+    moveFirstToEnd();
+    render();
+
+    expect(renderedIds()).toEqual(Array.from({ length: 10 }, (_, i) => `item-${i + 1}`));
+    // Not one per item: a fixed-height strategy needs only the count
+    expect(host.idCalls).toBeLessThan(100);
+    expect(strategy().getItemCount()).toBe(1000);
+  });
+
+  it('computes each item ID once when dynamic-height items change', () => {
+    host.dynamicItemHeight.set(true);
+    render();
+    host.idCalls = 0;
+
+    moveFirstToEnd();
+    render();
+
+    // The height cache needs every ID, and gets them once
+    expect(host.idCalls).toBeGreaterThanOrEqual(1000);
+    expect(host.idCalls).toBeLessThan(1100);
+    expect(strategy().getItemCount()).toBe(1000);
+  });
+
+  it('gives a dynamic-height strategy the item IDs in their new order', () => {
+    host.dynamicItemHeight.set(true);
+    render();
+
+    moveFirstToEnd();
+    render();
+    strategy().setMeasuredHeight('item-0', 200);
+
+    expect(strategy().getItemHeight(999)).toBe(200);
+    expect(strategy().getItemHeight(0)).toBe(50);
+  });
+
+  it.each([
+    ['fixed', false],
+    ['dynamic', true],
+  ])('collapses the slot of the item dragged in the list (%s heights)', (_heights, dynamic) => {
+    host.dynamicItemHeight.set(dynamic);
+    render();
+
+    startDragOf('item-5');
+
+    expect(strategy().getOffsetForIndex(5)).toBe(250);
+    expect(strategy().getOffsetForIndex(6)).toBe(250);
+    // The spacer keeps every item
+    expect(strategy().getTotalHeight(1000)).toBe(50_000);
+  });
+
+  it('finds the dragged item at the source index of the drag without computing every item ID', () => {
+    host.idCalls = 0;
+
+    startDragOf('item-5', 5);
+
+    expect(host.idCalls).toBeLessThan(100);
+    expect(strategy().getOffsetForIndex(6)).toBe(250);
+  });
+
+  it('finds the dragged item when the source index of the drag is not its index', () => {
+    startDragOf('item-5', 7);
+
+    expect(strategy().getOffsetForIndex(6)).toBe(250);
+    expect(strategy().getOffsetForIndex(8)).toBe(350);
+  });
+
+  it('does not look for the item of a drag from another list', () => {
+    host.idCalls = 0;
+
+    startDragOf('elsewhere-5', 5, 'other-list');
+
+    expect(host.idCalls).toBeLessThan(100);
+    expect(strategy().getOffsetForIndex(6)).toBe(300);
+  });
+
+  it('keeps rendering the dragged item once it scrolls out of the rendered rows', async () => {
+    startDragOf('item-5');
+
+    await scrollTo(2000);
+
+    expect(renderedIndices()).toContain(5);
+    expect(renderedIndices()).toContain(40);
+  });
+
+  it('keeps rendering a sticky item outside the rendered rows', () => {
+    host.stickyItemIds.set(['item-500']);
+    render();
+
+    expect(renderedIndices()).toEqual([...Array.from({ length: 10 }, (_, i) => i), 500]);
+  });
+
+  it('follows a sticky item to its new index when the items change', () => {
+    host.stickyItemIds.set(['item-500']);
+    render();
+
+    moveFirstToEnd();
+    render();
+
+    expect(renderedIndices()).toEqual([...Array.from({ length: 10 }, (_, i) => i), 499]);
+  });
+});
 
 describe('VirtualScrollContainerComponent (change detection scope)', () => {
   let fixture: ComponentFixture<RenderCountingHostComponent>;

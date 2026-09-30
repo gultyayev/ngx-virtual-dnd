@@ -13,6 +13,9 @@ import { VirtualContentComponent } from '../components/virtual-content.component
 import { DragStateService } from '../services/drag-state.service';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-container.token';
+import { VDND_VIRTUAL_VIEWPORT, VdndVirtualViewport } from '../tokens/virtual-viewport.token';
+import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
+import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { END_OF_LIST } from '../models/drag-drop.models';
 import { DropAnimator } from '../utils/drop-animator';
 
@@ -71,6 +74,115 @@ class TestHostComponent {
 class DynamicHeightTestHostComponent {
   readonly items = signal<{ id: string; key: string; label: string; height: number }[]>([]);
   readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+}
+
+/** Counts the calls of its trackBy function, which returns the item ID (the draggable ID) */
+@Component({
+  template: `
+    <vdnd-virtual-viewport [itemHeight]="50" [dynamicItemHeight]="dynamic()" style="height: 200px;">
+      <ng-container *vdndVirtualFor="let item of items(); trackBy: trackByFn; droppableId: 'list'">
+        <div class="item" [attr.data-id]="item.id">{{ item.label }}</div>
+      </ng-container>
+    </vdnd-virtual-viewport>
+  `,
+  imports: [VirtualViewportComponent, VirtualForDirective],
+})
+class TrackCountingHostComponent {
+  readonly items = signal<TestItem[]>([]);
+  readonly dynamic = signal(false);
+  trackCalls = 0;
+  readonly trackByFn = (_index: number, item: TestItem): string => {
+    this.trackCalls++;
+    return item.id;
+  };
+}
+
+/** A FixedHeightStrategy subclass that uses the keys: it overrides setItemKeys */
+class KeyRecordingFixedStrategy extends FixedHeightStrategy {
+  keys: unknown[] | null = null;
+
+  override setItemKeys(keys: unknown[]): void {
+    this.keys = [...keys];
+    super.setItemKeys(keys);
+  }
+}
+
+/** A consumer's own strategy that reorders the keys array it is given */
+class ReorderingStrategy implements VirtualScrollStrategy {
+  readonly #fixed = new FixedHeightStrategy(50);
+  readonly version = this.#fixed.version;
+  excludedIndex: number | null = null;
+
+  getTotalHeight(itemCount: number): number {
+    return this.#fixed.getTotalHeight(itemCount);
+  }
+  getFirstVisibleIndex(scrollTop: number): number {
+    return this.#fixed.getFirstVisibleIndex(scrollTop);
+  }
+  getVisibleCount(startIndex: number, containerHeight: number): number {
+    return this.#fixed.getVisibleCount(startIndex, containerHeight);
+  }
+  getOffsetForIndex(index: number): number {
+    return this.#fixed.getOffsetForIndex(index);
+  }
+  getItemHeight(index: number): number {
+    return this.#fixed.getItemHeight(index);
+  }
+  setMeasuredHeight(key: unknown, height: number): void {
+    this.#fixed.setMeasuredHeight(key, height);
+  }
+  setItemKeys(keys: unknown[]): void {
+    keys.reverse();
+    this.#fixed.setItemKeys(keys);
+  }
+  setExcludedIndex(index: number | null): void {
+    this.excludedIndex = index;
+    this.#fixed.setExcludedIndex(index);
+  }
+  findIndexAtOffset(offset: number): number {
+    return this.#fixed.findIndexAtOffset(offset);
+  }
+  getItemCount(): number {
+    return this.#fixed.getItemCount();
+  }
+}
+
+/** A viewport of the consumer's own, which provides the strategy the directive uses */
+@Component({
+  template: `
+    <ng-container *vdndVirtualFor="let item of items; trackBy: trackByFn; droppableId: 'list'">
+      <div class="item" [attr.data-id]="item.id">{{ item.label }}</div>
+    </ng-container>
+  `,
+  imports: [VirtualForDirective],
+  providers: [
+    { provide: VDND_SCROLL_CONTAINER, useExisting: CustomViewportHostComponent },
+    { provide: VDND_VIRTUAL_VIEWPORT, useExisting: CustomViewportHostComponent },
+  ],
+})
+class CustomViewportHostComponent implements VdndScrollContainer, VdndVirtualViewport {
+  readonly items: TestItem[] = Array.from({ length: 20 }, (_, i) => ({
+    id: `item-${i}`,
+    key: `key-${i}`,
+    label: `Item ${i}`,
+    parts: [],
+  }));
+  readonly trackByFn = (_index: number, item: TestItem): string => item.id;
+
+  /** Set before the first change detection */
+  strategy: VirtualScrollStrategy = new FixedHeightStrategy(50);
+
+  readonly scrollTop = signal(0);
+  readonly containerHeight = signal(200);
+  readonly itemHeight = (): number => 50;
+  readonly contentOffset = (): number => 0;
+  readonly nativeElement = document.createElement('div');
+  readonly scrollTo = jest.fn();
+  readonly setRenderStartIndex = jest.fn();
+
+  getOffsetForIndex(index: number): number {
+    return this.strategy.getOffsetForIndex(index);
+  }
 }
 
 /** Rows 0..29 of 50px, for lists whose rows start 400px down: deeper than the 3-row overscan */
@@ -336,6 +448,208 @@ describe('VirtualForDirective', () => {
       fixture.detectChanges();
       expect(renderedIds()).toEqual(['item-1']);
     });
+  });
+});
+
+describe('VirtualForDirective (track keys)', () => {
+  let fixture: ComponentFixture<TrackCountingHostComponent>;
+  let host: TrackCountingHostComponent;
+  let dragState: DragStateService;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  const makeItems = (count: number): TestItem[] =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `item-${i}`,
+      key: `key-${i}`,
+      label: `Item ${i}`,
+      parts: [],
+    }));
+
+  const renderedIds = (): string[] =>
+    fixture.debugElement
+      .queryAll(By.css('.item'))
+      .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-id') ?? '');
+
+  /** The viewport's strategy, which the directive keeps in sync with its items */
+  const strategy = () =>
+    fixture.debugElement.query(By.directive(VirtualViewportComponent)).componentInstance
+      .strategy as VirtualViewportComponent['strategy'];
+
+  const startDragOf = (id: string): void => {
+    dragState.startDrag({
+      draggableId: id,
+      droppableId: 'list',
+      element: document.createElement('div'),
+      height: 50,
+      width: 100,
+    });
+    fixture.detectChanges();
+  };
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    // jsdom has no layout: give the viewport its 200px height (4 rows of 50px)
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(200);
+    TestBed.configureTestingModule({ imports: [TrackCountingHostComponent] });
+    fixture = TestBed.createComponent(TrackCountingHostComponent);
+    host = fixture.componentInstance;
+    dragState = TestBed.inject(DragStateService);
+    host.items.set(makeItems(1000));
+    fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    dragState.endDrag();
+    fixture.destroy();
+    jest.restoreAllMocks();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  it('computes only the track keys of the rendered rows when fixed-height items change', () => {
+    host.trackCalls = 0;
+
+    const [first, ...rest] = host.items();
+    host.items.set([...rest, first]);
+    fixture.detectChanges();
+
+    expect(renderedIds()).toEqual(Array.from({ length: 8 }, (_, i) => `item-${i + 1}`));
+    // Not one per item: a fixed-height strategy needs only the count
+    expect(host.trackCalls).toBeLessThan(100);
+    expect(strategy()?.getItemCount()).toBe(1000);
+  });
+
+  it('finds the dragged item without computing the track keys again (dynamic heights)', () => {
+    host.dynamic.set(true);
+    fixture.detectChanges();
+    host.trackCalls = 0;
+
+    startDragOf('item-5');
+
+    // The keys computed for the height cache serve the drag's lookup too
+    expect(host.trackCalls).toBeLessThan(100);
+    expect(strategy()?.getOffsetForIndex(6)).toBe(250);
+  });
+
+  it.each([
+    ['fixed', false],
+    ['dynamic', true],
+  ])('collapses the slot of the item dragged in the list (%s heights)', (_heights, dynamic) => {
+    host.dynamic.set(dynamic);
+    fixture.detectChanges();
+
+    startDragOf('item-5');
+
+    expect(strategy()?.getOffsetForIndex(5)).toBe(250);
+    expect(strategy()?.getOffsetForIndex(6)).toBe(250);
+    expect(strategy()?.getItemCount()).toBe(1000);
+  });
+
+  it('finds the dragged item at the source index of the drag without computing every key', () => {
+    host.trackCalls = 0;
+
+    dragState.startDrag(
+      {
+        draggableId: 'item-5',
+        droppableId: 'list',
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      },
+      undefined,
+      undefined,
+      null,
+      'list',
+      null,
+      null,
+      5,
+    );
+    fixture.detectChanges();
+
+    expect(host.trackCalls).toBeLessThan(100);
+    expect(strategy()?.getOffsetForIndex(6)).toBe(250);
+  });
+
+  it('does not look for the item of a drag from another list', () => {
+    host.trackCalls = 0;
+
+    dragState.startDrag({
+      draggableId: 'elsewhere-5',
+      droppableId: 'other-list',
+      element: document.createElement('div'),
+      height: 50,
+      width: 100,
+    });
+    fixture.detectChanges();
+
+    // A fixed-height list computes no track key for it
+    expect(host.trackCalls).toBeLessThan(100);
+    expect(strategy()?.getOffsetForIndex(6)).toBe(300);
+  });
+
+  it('finds the dragged item by its data when its ID is not a track key', () => {
+    const items = makeItems(20);
+    host.items.set(items);
+    fixture.detectChanges();
+
+    dragState.startDrag({
+      draggableId: 'not-a-track-key',
+      droppableId: 'list',
+      element: document.createElement('div'),
+      height: 50,
+      width: 100,
+      data: items[5],
+    });
+    fixture.detectChanges();
+
+    expect(strategy()?.getOffsetForIndex(6)).toBe(250);
+  });
+});
+
+describe('VirtualForDirective (strategy of a custom viewport)', () => {
+  let fixture: ComponentFixture<CustomViewportHostComponent>;
+  let host: CustomViewportHostComponent;
+  let dragState: DragStateService;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    TestBed.configureTestingModule({ imports: [CustomViewportHostComponent] });
+    fixture = TestBed.createComponent(CustomViewportHostComponent);
+    host = fixture.componentInstance;
+    dragState = TestBed.inject(DragStateService);
+  });
+
+  afterEach(() => {
+    dragState.endDrag();
+    fixture.destroy();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  it('gives the keys to a FixedHeightStrategy subclass that overrides setItemKeys', () => {
+    const strategy = new KeyRecordingFixedStrategy(50);
+    host.strategy = strategy;
+
+    fixture.detectChanges();
+
+    expect(strategy.keys).toEqual(host.items.map((item) => item.id));
+    expect(strategy.getItemCount()).toBe(20);
+  });
+
+  it('keeps finding the dragged item when the strategy reorders the keys it is given', () => {
+    const strategy = new ReorderingStrategy();
+    host.strategy = strategy;
+    fixture.detectChanges();
+
+    dragState.startDrag({
+      draggableId: 'item-5',
+      droppableId: 'list',
+      element: document.createElement('div'),
+      height: 50,
+      width: 100,
+    });
+    fixture.detectChanges();
+
+    expect(strategy.excludedIndex).toBe(5);
   });
 });
 

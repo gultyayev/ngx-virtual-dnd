@@ -484,6 +484,28 @@ describe('PointerDragHandler', () => {
       expect(mockCallbacks.onDragMove).toHaveBeenCalledWith({ x: 170, y: 230 });
     });
 
+    it('should not read the draggable context on moves once the drag has started', () => {
+      // Only the threshold (and whether the press still applies) matter, and only before the drag
+      const getContext = jest.fn(() => mockContext);
+      handler = new PointerDragHandler({
+        ngZone: mockNgZone,
+        callbacks: mockCallbacks,
+        getContext,
+      } as PointerDragDeps);
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+      expect(mockCallbacks.onDragStart).toHaveBeenCalled();
+      getContext.mockClear();
+
+      for (let x = 170; x < 220; x += 10) {
+        document.dispatchEvent(createMouseEvent('mousemove', x, 230));
+      }
+
+      expect(mockCallbacks.onDragMove).toHaveBeenCalledTimes(6);
+      expect(mockCallbacks.onDragMove).toHaveBeenLastCalledWith({ x: 210, y: 230 });
+      expect(getContext).not.toHaveBeenCalled();
+    });
+
     it('should call onDragMove on every move event (RAF coalescing is done by DragSchedulerService)', () => {
       handler.onPointerDown(createMouseDown(150, 220), false);
       // Move 1 triggers drag start AND the first onDragMove (position is now dragging)

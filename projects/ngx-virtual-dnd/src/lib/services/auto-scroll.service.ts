@@ -30,6 +30,20 @@ const MIN_SCROLL_FRAME_SCALE = 1;
 const MAX_SCROLL_FRAME_SCALE = 6;
 
 /**
+ * A container the tick asked to scroll that had no room: the axes it was asked to scroll, and its
+ * scroll position and maximum then, to tell when it may have gained room.
+ */
+interface ExhaustedContainer {
+  element: HTMLElement;
+  vertical: boolean;
+  horizontal: boolean;
+  scrollTop: number;
+  scrollLeft: number;
+  maxScrollTop: number;
+  maxScrollLeft: number;
+}
+
+/**
  * Service that handles auto-scrolling when dragging near container edges.
  */
 @Injectable({
@@ -71,6 +85,15 @@ export class AutoScrollService {
   /** Last tick cursor position for stationary detection */
   #lastTickCursorX = NaN;
   #lastTickCursorY = NaN;
+
+  /**
+   * The containers the last tick that ran asked to scroll but had no room left: the first
+   * #exhaustedCount entries (the objects are reused from tick to tick). A resting cursor skips the
+   * tick only while they stay as they were on the axes it asked for: content that grows (rows
+   * measured taller, items added), a resize or a scroll can give one room, and the scroll resumes.
+   */
+  readonly #exhausted: ExhaustedContainer[] = [];
+  #exhaustedCount = 0;
 
   /**
    * Last timestamp used to scale per-frame autoscroll distance by elapsed frame time.
@@ -205,6 +228,8 @@ export class AutoScrollService {
     this.#cursorOverride = null;
     this.#lastTickCursorX = NaN;
     this.#lastTickCursorY = NaN;
+    this.#exhausted.length = 0;
+    this.#exhaustedCount = 0;
     this.#lastScrollTimestamp = 0;
     this.#scrollState.containerId = null;
     this.#scrollState.direction.x = 0;
@@ -237,16 +262,19 @@ export class AutoScrollService {
       return;
     }
 
-    // Skip the container iteration when cursor hasn't moved and scroll is idle.
+    // Skip the container iteration when the cursor hasn't moved and scroll is idle, unless a
+    // container it asked to scroll without room has changed since (see #exhausted).
     if (
       cursor.x === this.#lastTickCursorX &&
       cursor.y === this.#lastTickCursorY &&
-      !this.isScrolling()
+      !this.isScrolling() &&
+      !this.#exhaustedChanged()
     ) {
       return;
     }
     this.#lastTickCursorX = cursor.x;
     this.#lastTickCursorY = cursor.y;
+    this.#exhaustedCount = 0;
 
     let scrollPerformed = false;
     // Frame scale is shared across candidates within a tick; computed lazily on
@@ -314,8 +342,20 @@ export class AutoScrollService {
           this.#scrollState.direction.y = direction.y;
           this.#scrollState.speed = speed;
           scrollPerformed = true;
+
+          // Notify callback IMMEDIATELY in the same frame (no RAF delay)
+          // Delaying via RAF causes cumulative drift during continuous autoscroll
+          // because multiple scrolls happen before each delayed callback runs.
+          // Note: No ngZone.run() needed here - the callback (DraggableDirective.#recalculatePlaceholder)
+          // updates signals and plain fields, and enters the zone itself to emit dragEnd if it ends
+          // the drag.
+          // It runs after the scroll state is recorded: it may end the drag, and the reset of
+          // stopMonitoring() must not be overwritten.
+          this.#onScrollCallback?.();
           break;
         }
+        // No room in any requested direction: a resting cursor retries it once it changes
+        this.#recordExhausted(element, direction);
       }
     }
 
@@ -387,18 +427,50 @@ export class AutoScrollService {
       }
     }
 
-    if (!scrolled) {
-      return false;
+    return scrolled;
+  }
+
+  /** Record a container that had no room in `direction` (see #exhausted). */
+  #recordExhausted(element: HTMLElement, direction: { x: number; y: number }): void {
+    const exhausted = (this.#exhausted[this.#exhaustedCount] ??= {
+      element,
+      vertical: false,
+      horizontal: false,
+      scrollTop: 0,
+      scrollLeft: 0,
+      maxScrollTop: 0,
+      maxScrollLeft: 0,
+    });
+    exhausted.element = element;
+    exhausted.vertical = direction.y !== 0;
+    exhausted.horizontal = direction.x !== 0;
+    exhausted.scrollTop = element.scrollTop;
+    exhausted.scrollLeft = element.scrollLeft;
+    exhausted.maxScrollTop = element.scrollHeight - element.clientHeight;
+    exhausted.maxScrollLeft = element.scrollWidth - element.clientWidth;
+    this.#exhaustedCount++;
+  }
+
+  /**
+   * Whether a container in #exhausted has scrolled or changed size on an axis it was asked to
+   * scroll, so it may have room now.
+   */
+  #exhaustedChanged(): boolean {
+    for (let i = 0; i < this.#exhaustedCount; i++) {
+      const exhausted = this.#exhausted[i];
+      const { element } = exhausted;
+      if (
+        (exhausted.vertical &&
+          (element.scrollTop !== exhausted.scrollTop ||
+            element.scrollHeight - element.clientHeight !== exhausted.maxScrollTop)) ||
+        (exhausted.horizontal &&
+          (element.scrollLeft !== exhausted.scrollLeft ||
+            element.scrollWidth - element.clientWidth !== exhausted.maxScrollLeft))
+      ) {
+        return true;
+      }
     }
-
-    // Notify callback IMMEDIATELY in the same frame (no RAF delay)
-    // Delaying via RAF causes cumulative drift during continuous autoscroll
-    // because multiple scrolls happen before each delayed callback runs.
-    // Note: No ngZone.run() needed here - the callback (DraggableDirective.#recalculatePlaceholder)
-    // already enters the zone when updating drag state.
-    this.#onScrollCallback?.();
-
-    return true;
+    return false;
   }
 
   #getFrameScale(): number {

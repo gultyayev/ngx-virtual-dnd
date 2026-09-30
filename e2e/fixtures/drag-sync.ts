@@ -1,4 +1,4 @@
-import { expect, Page } from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
 
 /**
  * Ensure the drag scheduler has processed the pointer at exactly (x, y) before releasing.
@@ -69,6 +69,72 @@ export async function waitForFrames(page: Page, count: number): Promise<void> {
       }),
     count,
   );
+}
+
+/**
+ * Wait until autoscroll has scrolled `scroller` in `direction` past `target` px (below it when
+ * scrolling up), or to the end of its range in that direction for `'end'` (within `tolerance`
+ * px). Fails once the scroll has reached no new furthest position in `direction` for
+ * `stallTimeout` ms, not after a fixed total time.
+ *
+ * Autoscroll moves a bounded distance per frame, so the time a long scroll takes depends on the
+ * frame rate: WebKit renders only a few frames per second on a loaded 4-core machine. A fixed
+ * timeout then fails a healthy scroll, while a stall still fails here within `stallTimeout`.
+ * The test timeout bounds the whole wait: tests that scroll far call `test.slow()`.
+ *
+ * Progress means a new furthest position, so a scroll that moves back mid-way (a dynamic-height
+ * list anchoring its scroll position while rows above it are measured) counts as stalled until
+ * it passes its furthest position again.
+ */
+export async function waitForAutoscroll(
+  scroller: Locator,
+  direction: 'down' | 'up',
+  target: number | 'end',
+  { tolerance = 2, stallTimeout = 5000 }: { tolerance?: number; stallTimeout?: number } = {},
+): Promise<void> {
+  const result = await scroller.evaluate(
+    (element, options) =>
+      new Promise<{ reached: boolean; scrollTop: number; furthest: number; max: number }>(
+        (resolve) => {
+          const sign = options.direction === 'down' ? 1 : -1;
+          let furthest = element.scrollTop;
+          let movedAt = performance.now();
+          // A timer, not requestAnimationFrame: it keeps checking (and can report the stall)
+          // when the page renders no frames
+          const check = () => {
+            const { scrollTop } = element;
+            const max = element.scrollHeight - element.clientHeight;
+            let reached: boolean;
+            if (options.target === 'end') {
+              const left = options.direction === 'down' ? max - scrollTop : scrollTop;
+              reached = left <= options.tolerance;
+            } else {
+              reached = sign * scrollTop > sign * options.target;
+            }
+            if (sign * scrollTop > sign * furthest) {
+              furthest = scrollTop;
+              movedAt = performance.now();
+            }
+            if (reached || performance.now() - movedAt > options.stallTimeout) {
+              resolve({ reached, scrollTop, furthest, max });
+              return;
+            }
+            setTimeout(check, 16);
+          };
+          check();
+        },
+      ),
+    { direction, target, tolerance, stallTimeout },
+  );
+  const goal =
+    target === 'end'
+      ? `reaching the ${direction === 'down' ? 'bottom' : 'top'}`
+      : `${direction === 'down' ? 'passing' : 'going below'} ${target}`;
+  expect(
+    result.reached,
+    `Autoscroll ${direction} stopped before ${goal}: no new furthest position (` +
+      `${result.furthest}) for ${stallTimeout}ms; scrollTop ${result.scrollTop}, max ${result.max}`,
+  ).toBe(true);
 }
 
 interface InputHandledWindow {

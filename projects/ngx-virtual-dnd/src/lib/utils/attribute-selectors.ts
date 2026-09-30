@@ -21,6 +21,25 @@ export function queryByAttribute<T extends Element>(
   return null;
 }
 
+/**
+ * The elements carrying an attribute, by its value (the first in document order when several
+ * share one, as `queryByAttribute` finds). One query for many lookups, where `queryByAttribute`
+ * scans every candidate on each call.
+ */
+export function mapByAttribute<T extends Element>(
+  root: ParentNode,
+  attributeName: string,
+): Map<string, T> {
+  const elements = new Map<string, T>();
+  for (const candidate of root.querySelectorAll<T>(`[${attributeName}]`)) {
+    const value = candidate.getAttribute(attributeName)!;
+    if (!elements.has(value)) {
+      elements.set(value, candidate);
+    }
+  }
+  return elements;
+}
+
 export function queryAllByAttribute<T extends Element>(
   root: ParentNode,
   attributeName: string,

@@ -104,7 +104,7 @@ Autoscroll is time-based; assertions must tolerate variability:
 
 - **Use a consistent edge offset**: A 25px offset from the container edge is the sweet spot for all browsers (deep enough to trigger autoscroll reliably, but safe from the edge). Avoid browser-specific offsets (like 10px vs 20px).
 - **Ensure stable mouse position**: Firefox sometimes fails to register the final position after a stepped `page.mouse.move()`. Always follow up a stepped move with a direct move to the same coordinates: `await page.mouse.move(x, y, { steps: 15 }); await page.mouse.move(x, y);`.
-- **Prefer `toPass()` with descriptive errors**: Wrap autoscroll assertions in `toPass()` with a generous timeout (e.g., 10-15s for long scrolls) and include a custom error message for better CI debugging.
+- **Wait on progress, not a time budget, for long autoscrolls**: `waitForAutoscroll(scroller, 'down', 1500)`, `waitForAutoscroll(scroller, 'up', 1000)` (below 1000) or `waitForAutoscroll(scroller, 'down', 'end')` (`e2e/fixtures/drag-sync.ts`) waits while the scroll keeps reaching new positions and fails once it has reached none for 5 s. Autoscroll moves a bounded distance per frame, and WebKit renders only a few frames per second on a loaded 4-core machine, so a fixed timeout ("1500 px within 15 s") fails healthy scrolls there. Tests that scroll far call `test.slow()`. Short waits (a few hundred px) can keep `poll()` with a descriptive message.
 - Prefer “scroll changed” and “preview + placeholder stayed aligned” over pixel-perfect checks.
 
 ### 7) Long autoscroll tests stay in the PR suite
@@ -467,7 +467,9 @@ await expect(async () => {
 ## Debugging & Diagnostics
 
 - Task-demo specs fail on any console or uncaught page error: `collectPageErrors(page)`
-  (`e2e/fixtures/page-errors.ts`), registered before navigation so load errors count.
+  (`e2e/fixtures/page-errors.ts`), registered before navigation so load errors count. It also
+  fails a test that loads its page more than once: load it once, with its settings in the URL. A
+  second load aborts the first page's font downloads, which Firefox reports as console errors.
 - Prefer `testInfo.attach()` for structured debug output over `console.log`.
 - When drift/hit-testing fails, capture:
   - viewport size (`window.innerHeight`)

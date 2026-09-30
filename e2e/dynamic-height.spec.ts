@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { waitForFrames } from './fixtures/drag-sync';
+import { waitForAutoscroll, waitForFrames } from './fixtures/drag-sync';
 import { collectPageErrors } from './fixtures/page-errors';
 import { poll } from './fixtures/polling';
 import { TaskDemoPage, taskDemoSelectors } from './fixtures/task-demo.page';
@@ -522,5 +522,61 @@ test.describe('Dynamic Height Demo', () => {
     }
 
     expect(pageErrors.unexpected().filter((text) => text.includes('ResizeObserver'))).toEqual([]);
+  });
+});
+
+test.describe('Dynamic Height Demo, short list', () => {
+  let taskDemo: TaskDemoPage;
+  let pageErrors: ReturnType<typeof collectPageErrors>;
+
+  test.beforeEach(async ({ page }) => {
+    taskDemo = new TaskDemoPage(page);
+    pageErrors = collectPageErrors(page);
+    // Short enough for autoscroll to reach the end quickly
+    await taskDemo.goto('/dynamic-height', { count: 12 });
+  });
+
+  test.afterEach(() => {
+    expect(pageErrors.unexpected(), 'Unexpected console or page errors').toEqual([]);
+  });
+
+  test('should resume autoscroll when a task is added while the pointer rests at the edge', async ({
+    page,
+  }) => {
+    const scrollBox = await taskDemo.scrollContainer.boundingBox();
+    if (!scrollBox) throw new Error('Could not get scroll container bounding box');
+    const sourceBox = await taskDemo.items.first().boundingBox();
+    if (!sourceBox) throw new Error('Could not get source bounding box');
+
+    const targetX = sourceBox.x + sourceBox.width / 2;
+    await page.mouse.move(targetX, sourceBox.y + sourceBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(sourceBox.x + 5, sourceBox.y + 5, { steps: 2 });
+    await expect(taskDemo.dragPreview).toBeVisible();
+
+    const bottomEdgeY = scrollBox.y + scrollBox.height - 25;
+    await page.mouse.move(targetX, bottomEdgeY, { steps: 15 });
+    await page.mouse.move(targetX, bottomEdgeY);
+
+    await waitForAutoscroll(taskDemo.scrollContainer, 'down', 'end', { tolerance: 1 });
+    // Autoscroll has found no room left. The pointer does not move from here on.
+    await waitForFrames(page, 3);
+    const endScrollTop = await taskDemo.getScrollTop();
+    const scrollHeight = () => taskDemo.scrollContainer.evaluate((el) => el.scrollHeight);
+    const endScrollHeight = await scrollHeight();
+
+    // A task added at the end (by a click that does not move the pointer) gives the list room
+    await taskDemo.footer.dispatchEvent('click');
+    await poll(scrollHeight, {
+      message: 'The added task should make the list taller',
+    }).toBeGreaterThan(endScrollHeight + 30);
+
+    // Fails within its stall timeout if autoscroll does not resume
+    await waitForAutoscroll(taskDemo.scrollContainer, 'down', 'end', { tolerance: 1 });
+    expect(await taskDemo.getScrollTop(), 'The list should have scrolled on').toBeGreaterThan(
+      endScrollTop + 30,
+    );
+
+    await page.mouse.up();
   });
 });

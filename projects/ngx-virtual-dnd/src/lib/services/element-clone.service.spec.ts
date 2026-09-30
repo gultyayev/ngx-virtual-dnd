@@ -31,7 +31,26 @@ describe('ElementCloneService', () => {
   afterEach(() => {
     styleSheet.remove();
     attached.forEach((el) => el.remove());
+    jest.restoreAllMocks();
   });
+
+  /**
+   * Stand in for the engine's computed styles (jsdom computes no shorthand), recording the
+   * properties read. Properties missing from `values` read as ''.
+   */
+  const fakeComputedStyles = (values: Record<string, string>): string[] => {
+    const reads: string[] = [];
+    jest.spyOn(window, 'getComputedStyle').mockImplementation(
+      () =>
+        ({
+          getPropertyValue: (property: string) => {
+            reads.push(property);
+            return values[property] ?? '';
+          },
+        }) as unknown as CSSStyleDeclaration,
+    );
+    return reads;
+  };
 
   describe('cloneElement', () => {
     it('should clone element structure', () => {
@@ -63,6 +82,73 @@ describe('ElementCloneService', () => {
 
       expect(clone.style.fontSize).toBe('16px');
       expect(clone.style.fontWeight).toBe('bold');
+    });
+
+    it('should copy a shorthand the engine serializes without reading its longhands', () => {
+      const reads = fakeComputedStyles({
+        background: 'rgb(10, 20, 30)',
+        'background-color': 'rgb(10, 20, 30)',
+        font: 'italic 600 15px / 21px Georgia, serif',
+        'font-family': 'Georgia, serif',
+      });
+      const source = attach(document.createElement('div'));
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.style.getPropertyValue('background')).toBe('rgb(10, 20, 30)');
+      // The shorthand carries more than the longhands a fallback copies, such as font-style
+      expect(clone.style.fontStyle).toBe('italic');
+      expect(clone.style.lineHeight).toBe('21px');
+      for (const longhand of ['background-color', 'background-image', 'font-family', 'font-size']) {
+        expect(reads).not.toContain(longhand);
+      }
+    });
+
+    it("should copy a shorthand's longhands when the engine does not serialize it", () => {
+      // e.g. `font` with `font-variant-ligatures: none`, which the shorthand can't express
+      fakeComputedStyles({
+        'font-family': 'Arial',
+        'font-size': '13px',
+        'font-weight': '700',
+        'line-height': '20px',
+      });
+      const source = attach(document.createElement('div'));
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.style.fontFamily).toBe('Arial');
+      expect(clone.style.fontSize).toBe('13px');
+      expect(clone.style.fontWeight).toBe('700');
+      expect(clone.style.lineHeight).toBe('20px');
+    });
+
+    it("should copy a shorthand's longhands when the clone rejects the shorthand's value", () => {
+      // jsdom can't parse this serialization of `background`, as an engine might fail its own
+      fakeComputedStyles({
+        background: 'rgb(10, 20, 30) none repeat scroll 0% 0%',
+        'background-color': 'rgb(10, 20, 30)',
+      });
+      const source = attach(document.createElement('div'));
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.style.backgroundColor).toBe('rgb(10, 20, 30)');
+    });
+
+    it("should copy a rejected shorthand's longhands when the source sets one inline", () => {
+      fakeComputedStyles({
+        background: 'rgb(10, 20, 30) none repeat scroll 0% 0%',
+        'background-color': 'rgb(10, 20, 30)',
+        'background-image': 'url("card.png")',
+      });
+      // cloneNode() copies the inline background-color: it must not pass for the shorthand's
+      const source = attach(document.createElement('div'));
+      source.style.backgroundColor = 'rgb(10, 20, 30)';
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.style.backgroundImage).toBe('url("card.png")');
+      expect(clone.style.backgroundColor).toBe('rgb(10, 20, 30)');
     });
 
     it('should disable animations and transitions on clone', () => {
