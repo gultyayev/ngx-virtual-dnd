@@ -347,7 +347,8 @@ export class AutoScrollService {
           // Delaying via RAF causes cumulative drift during continuous autoscroll
           // because multiple scrolls happen before each delayed callback runs.
           // Note: No ngZone.run() needed here - the callback (DraggableDirective.#recalculatePlaceholder)
-          // only writes signals, and enters the zone itself to emit dragEnd if it ends the drag.
+          // updates signals and plain fields, and enters the zone itself to emit dragEnd if it ends
+          // the drag.
           // It runs after the scroll state is recorded: it may end the drag, and the reset of
           // stopMonitoring() must not be overwritten.
           this.#onScrollCallback?.();

@@ -50,7 +50,7 @@ requestAnimationFrame(() => {
 
 - Use direct property assignment (`element.scrollTop += delta`) instead of `scrollBy()` for guaranteed synchronous behavior
 - Call the placeholder recalculation callback immediately in the same frame (no RAF delay)
-- No `ngZone.run()` wrapper needed - the callback only writes signals (it enters the zone itself only to emit `dragEnd` when it ends the drag)
+- No `ngZone.run()` wrapper needed - the callback updates signals and plain fields, and enters the zone itself only to emit `dragEnd` when it ends the drag
 
 ```typescript
 // In AutoScrollService: #performScroll() scrolls, then #participantTick() calls back in the same tick
