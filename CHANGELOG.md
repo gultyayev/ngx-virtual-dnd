@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.3.0](https://github.com/gultyayev/angular-vdnd/compare/v3.2.1...v3.3.0) (2026-09-30)
+
+### Features
+
+- **lib:** recycle vdnd-virtual-scroll rows with recycleRows ([#106](https://github.com/gultyayev/angular-vdnd/issues/106)) ([8fd5f33](https://github.com/gultyayev/angular-vdnd/commit/8fd5f33b6b56c3d2e8b68e703656ca6fce351148))
+
+### Bug Fixes
+
+- **lib:** emit drop at release instead of from a droppable effect ([#89](https://github.com/gultyayev/angular-vdnd/issues/89)) ([dd05b62](https://github.com/gultyayev/angular-vdnd/commit/dd05b6272879a8b010905bd5e434ce94a8baf9d3))
+
+### Performance
+
+- **lib:** cut drag-start, per-drop and per-frame work in lists and hit-testing ([#108](https://github.com/gultyayev/angular-vdnd/issues/108)) ([afe8bc4](https://github.com/gultyayev/angular-vdnd/commit/afe8bc4ea6391daf1461b976fd10d1baa896f242))
+- **lib:** find droppables through a registry instead of document queries ([#88](https://github.com/gultyayev/angular-vdnd/issues/88)) ([1e613e7](https://github.com/gultyayev/angular-vdnd/commit/1e613e710e4243ba1357526bcbddce112be99a38))
+- **lib:** forward sortable list outputs without template listeners ([#100](https://github.com/gultyayev/angular-vdnd/issues/100)) ([f85a49e](https://github.com/gultyayev/angular-vdnd/commit/f85a49e42f390b7973c424118925490aae0ff2f4))
+- **lib:** make the draggable touchstart listener passive when a drag delay is set ([#107](https://github.com/gultyayev/angular-vdnd/issues/107)) ([858bf29](https://github.com/gultyayev/angular-vdnd/commit/858bf29014f1b357ae32c2277ee0418ce5f2c940))
+- **lib:** move the drag preview in the pointer's animation frame ([#101](https://github.com/gultyayev/angular-vdnd/issues/101)) ([4e501d9](https://github.com/gultyayev/angular-vdnd/commit/4e501d93f8855d74e5fce44150044a62bd426227))
+- **lib:** render only the virtual rows whose context changed ([#99](https://github.com/gultyayev/angular-vdnd/issues/99)) ([3325a36](https://github.com/gultyayev/angular-vdnd/commit/3325a3684d8bc3ac4185b39dac4ab3b642dcda25))
+- **lib:** stop re-rendering every vdnd-virtual-scroll row on placeholder moves ([#105](https://github.com/gultyayev/angular-vdnd/issues/105)) ([273081a](https://github.com/gultyayev/angular-vdnd/commit/273081aeb89331f54ed749b986389c75e00fc392))
+- **lib:** update HeightCache offsets only as far as a lookup needs ([#86](https://github.com/gultyayev/angular-vdnd/issues/86)) ([dbb7632](https://github.com/gultyayev/angular-vdnd/commit/dbb763282ad46fe14a6eaac9c825392a7a1897b9))
+
 ## [3.2.1](https://github.com/gultyayev/angular-vdnd/compare/v3.2.0...v3.2.1) (2026-09-27)
 
 ### Bug Fixes
