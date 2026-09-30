@@ -29,9 +29,14 @@ const BASE_FRAME_DURATION_MS = 1000 / 60;
 const MIN_SCROLL_FRAME_SCALE = 1;
 const MAX_SCROLL_FRAME_SCALE = 6;
 
-/** A container's scroll position and maximum, to tell when it may have gained room to scroll. */
-interface ScrollGeometry {
+/**
+ * A container the tick asked to scroll that had no room: the axes it was asked to scroll, and its
+ * scroll position and maximum then, to tell when it may have gained room.
+ */
+interface ExhaustedContainer {
   element: HTMLElement;
+  vertical: boolean;
+  horizontal: boolean;
   scrollTop: number;
   scrollLeft: number;
   maxScrollTop: number;
@@ -82,12 +87,12 @@ export class AutoScrollService {
   #lastTickCursorY = NaN;
 
   /**
-   * The containers the last tick asked to scroll that had no room left, as they were then: the
-   * first #exhaustedCount entries (the objects are reused from tick to tick). A resting cursor
-   * skips the tick only while they stay so: content that grows (rows measured taller, items
-   * added), a resize or a scroll can give one room, and the scroll resumes.
+   * The containers the last tick that ran asked to scroll but had no room left: the first
+   * #exhaustedCount entries (the objects are reused from tick to tick). A resting cursor skips the
+   * tick only while they stay as they were on the axes it asked for: content that grows (rows
+   * measured taller, items added), a resize or a scroll can give one room, and the scroll resumes.
    */
-  readonly #exhausted: ScrollGeometry[] = [];
+  readonly #exhausted: ExhaustedContainer[] = [];
   #exhaustedCount = 0;
 
   /**
@@ -340,7 +345,7 @@ export class AutoScrollService {
           break;
         }
         // No room in any requested direction: a resting cursor retries it once it changes
-        this.#recordExhausted(element);
+        this.#recordExhausted(element, direction);
       }
     }
 
@@ -426,33 +431,42 @@ export class AutoScrollService {
     return true;
   }
 
-  /** Record the scroll geometry of a container that had no room left (see #exhausted). */
-  #recordExhausted(element: HTMLElement): void {
-    const geometry = (this.#exhausted[this.#exhaustedCount] ??= {
+  /** Record a container that had no room in `direction` (see #exhausted). */
+  #recordExhausted(element: HTMLElement, direction: { x: number; y: number }): void {
+    const exhausted = (this.#exhausted[this.#exhaustedCount] ??= {
       element,
+      vertical: false,
+      horizontal: false,
       scrollTop: 0,
       scrollLeft: 0,
       maxScrollTop: 0,
       maxScrollLeft: 0,
     });
-    geometry.element = element;
-    geometry.scrollTop = element.scrollTop;
-    geometry.scrollLeft = element.scrollLeft;
-    geometry.maxScrollTop = element.scrollHeight - element.clientHeight;
-    geometry.maxScrollLeft = element.scrollWidth - element.clientWidth;
+    exhausted.element = element;
+    exhausted.vertical = direction.y !== 0;
+    exhausted.horizontal = direction.x !== 0;
+    exhausted.scrollTop = element.scrollTop;
+    exhausted.scrollLeft = element.scrollLeft;
+    exhausted.maxScrollTop = element.scrollHeight - element.clientHeight;
+    exhausted.maxScrollLeft = element.scrollWidth - element.clientWidth;
     this.#exhaustedCount++;
   }
 
-  /** Whether a container in #exhausted has scrolled or changed size since, so it may have room. */
+  /**
+   * Whether a container in #exhausted has scrolled or changed size on an axis it was asked to
+   * scroll, so it may have room now.
+   */
   #exhaustedChanged(): boolean {
     for (let i = 0; i < this.#exhaustedCount; i++) {
-      const geometry = this.#exhausted[i];
-      const { element } = geometry;
+      const exhausted = this.#exhausted[i];
+      const { element } = exhausted;
       if (
-        element.scrollTop !== geometry.scrollTop ||
-        element.scrollLeft !== geometry.scrollLeft ||
-        element.scrollHeight - element.clientHeight !== geometry.maxScrollTop ||
-        element.scrollWidth - element.clientWidth !== geometry.maxScrollLeft
+        (exhausted.vertical &&
+          (element.scrollTop !== exhausted.scrollTop ||
+            element.scrollHeight - element.clientHeight !== exhausted.maxScrollTop)) ||
+        (exhausted.horizontal &&
+          (element.scrollLeft !== exhausted.scrollLeft ||
+            element.scrollWidth - element.clientWidth !== exhausted.maxScrollLeft))
       ) {
         return true;
       }

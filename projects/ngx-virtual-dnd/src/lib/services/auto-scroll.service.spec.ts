@@ -507,6 +507,39 @@ describe('AutoScrollService', () => {
       expect(mockElement.getBoundingClientRect).toHaveBeenCalledTimes(2);
     });
 
+    it('should not read the containers again when a container with no room scrolls on the other axis', () => {
+      mockElement.scrollLeft = 0;
+      setupDrag({ x: 70, y: 300 }); // near left edge, no room to the left
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+      flushRAF();
+
+      // A wheel scroll moves the list vertically, which the cursor does not ask for
+      mockElement.scrollTop = 250;
+      flushRAF();
+      mockElement.scrollTop = 300;
+      flushRAF();
+
+      expect(mockElement.getBoundingClientRect).toHaveBeenCalledTimes(1);
+      expect(mockElement.scrollLeft).toBe(0);
+    });
+
+    it('should resume scrolling sideways when the container grows while the cursor rests at its edge', () => {
+      mockElement.scrollLeft = 200; // max = scrollWidth(400) - clientWidth(200)
+      setupDrag({ x: 230, y: 300 }); // near right edge
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(service.isScrolling()).toBe(false);
+
+      // A column added to a horizontal board: the max scrollLeft grows to 300
+      Object.defineProperty(mockElement, 'scrollWidth', { value: 500, configurable: true });
+      flushRAF();
+
+      expect(mockElement.scrollLeft).toBeGreaterThan(200);
+      expect(service.isScrolling()).toBe(true);
+    });
+
     it('should resume scrolling when the container grows while the cursor rests at its edge', () => {
       const callback = jest.fn();
       mockElement.scrollTop = 600;
@@ -537,51 +570,6 @@ describe('AutoScrollService', () => {
 
       expect(mockElement.scrollTop).toBeGreaterThan(500);
       expect(service.isScrolling()).toBe(true);
-    });
-
-    it('should resume scrolling an outer container that grows while the inner one stays at its end', () => {
-      const makeElement = (rect: { top: number; bottom: number }): HTMLElement => {
-        const el = document.createElement('div');
-        Object.defineProperty(el, 'scrollHeight', { value: 1000, configurable: true });
-        Object.defineProperty(el, 'clientHeight', { value: 400, configurable: true });
-        Object.defineProperty(el, 'scrollWidth', { value: 200, configurable: true });
-        Object.defineProperty(el, 'clientWidth', { value: 200, configurable: true });
-        let topVal = 600; // at the max
-        Object.defineProperty(el, 'scrollTop', {
-          get: () => topVal,
-          set: (v: number) => {
-            topVal = v;
-          },
-          configurable: true,
-        });
-        el.getBoundingClientRect = jest.fn().mockReturnValue({
-          ...rect,
-          left: 50,
-          right: 250,
-          height: rect.bottom - rect.top,
-          width: 200,
-        });
-        return el;
-      };
-      const outer = makeElement({ top: 100, bottom: 500 });
-      const inner = makeElement({ top: 100, bottom: 480 });
-      outer.appendChild(inner);
-
-      setupDrag({ x: 150, y: 470 }); // near the bottom edge of both
-      service.registerContainer('inner', inner);
-      service.registerContainer('outer', outer);
-      startMonitoringWithScheduler();
-      flushRAF();
-      expect(service.isScrolling()).toBe(false);
-
-      Object.defineProperty(outer, 'scrollHeight', { value: 1100, configurable: true });
-      flushRAF();
-
-      expect(inner.scrollTop).toBe(600);
-      expect(outer.scrollTop).toBeGreaterThan(600);
-
-      service.unregisterContainer('inner');
-      service.unregisterContainer('outer');
     });
   });
 
@@ -752,6 +740,39 @@ describe('AutoScrollService', () => {
       // Inner is exhausted → stays put; outer picks up the scroll the same tick.
       expect(inner.scrollTop).toBe(600);
       expect(outer.scrollTop).toBeGreaterThan(beforeOuter);
+
+      service.unregisterContainer('inner');
+      service.unregisterContainer('outer');
+    });
+
+    it('should resume scrolling the outer container when it grows while the cursor rests and the inner one stays at its end', () => {
+      // Both at their max (600), the cursor near the bottom edge of both
+      const outer = makeScrollable({
+        rect: { top: 100, bottom: 500, left: 50, right: 250 },
+        scrollHeight: 1000,
+        clientHeight: 400,
+        scrollTop: 600,
+      });
+      const inner = makeScrollable({
+        rect: { top: 100, bottom: 480, left: 50, right: 250 },
+        scrollHeight: 1000,
+        clientHeight: 400,
+        scrollTop: 600,
+      });
+      outer.appendChild(inner);
+
+      setupDrag({ x: 150, y: 470 });
+      service.registerContainer('inner', inner);
+      service.registerContainer('outer', outer);
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(service.isScrolling()).toBe(false);
+
+      Object.defineProperty(outer, 'scrollHeight', { value: 1100, configurable: true });
+      flushRAF();
+
+      expect(inner.scrollTop).toBe(600);
+      expect(outer.scrollTop).toBeGreaterThan(600);
 
       service.unregisterContainer('inner');
       service.unregisterContainer('outer');
