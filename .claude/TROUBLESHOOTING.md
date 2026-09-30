@@ -15,3 +15,4 @@ Load this doc when debugging unexpected behavior.
 | Drag preview offset in Ionic/transformed container | Ancestor CSS `transform` breaks `position: fixed` | Already fixed — `OverlayContainerService` teleports preview to body      |
 | Unit test can't find drag preview element          | Preview teleported to overlay container           | Use `document.querySelector()` instead of `fixture.debugElement.query()` |
 | Short item displaces tall item too early           | Probe enters tall item's range at ~20% overlap    | Already fixed — midpoint refinement in `DragIndexCalculatorService`      |
+| Autoscroll stops short of the end, pointer at rest | List grew after autoscroll found no room left     | Already fixed — `AutoScrollService` retries it when its geometry changes |

@@ -29,6 +29,15 @@ const BASE_FRAME_DURATION_MS = 1000 / 60;
 const MIN_SCROLL_FRAME_SCALE = 1;
 const MAX_SCROLL_FRAME_SCALE = 6;
 
+/** A container's scroll position and maximum, to tell when it may have gained room to scroll. */
+interface ScrollGeometry {
+  element: HTMLElement;
+  scrollTop: number;
+  scrollLeft: number;
+  maxScrollTop: number;
+  maxScrollLeft: number;
+}
+
 /**
  * Service that handles auto-scrolling when dragging near container edges.
  */
@@ -71,6 +80,15 @@ export class AutoScrollService {
   /** Last tick cursor position for stationary detection */
   #lastTickCursorX = NaN;
   #lastTickCursorY = NaN;
+
+  /**
+   * The containers the last tick asked to scroll that had no room left, as they were then: the
+   * first #exhaustedCount entries (the objects are reused from tick to tick). A resting cursor
+   * skips the tick only while they stay so: content that grows (rows measured taller, items
+   * added), a resize or a scroll can give one room, and the scroll resumes.
+   */
+  readonly #exhausted: ScrollGeometry[] = [];
+  #exhaustedCount = 0;
 
   /**
    * Last timestamp used to scale per-frame autoscroll distance by elapsed frame time.
@@ -205,6 +223,8 @@ export class AutoScrollService {
     this.#cursorOverride = null;
     this.#lastTickCursorX = NaN;
     this.#lastTickCursorY = NaN;
+    this.#exhausted.length = 0;
+    this.#exhaustedCount = 0;
     this.#lastScrollTimestamp = 0;
     this.#scrollState.containerId = null;
     this.#scrollState.direction.x = 0;
@@ -237,16 +257,19 @@ export class AutoScrollService {
       return;
     }
 
-    // Skip the container iteration when cursor hasn't moved and scroll is idle.
+    // Skip the container iteration when the cursor hasn't moved and scroll is idle, unless a
+    // container it asked to scroll without room has changed since (see #exhausted).
     if (
       cursor.x === this.#lastTickCursorX &&
       cursor.y === this.#lastTickCursorY &&
-      !this.isScrolling()
+      !this.isScrolling() &&
+      !this.#exhaustedChanged()
     ) {
       return;
     }
     this.#lastTickCursorX = cursor.x;
     this.#lastTickCursorY = cursor.y;
+    this.#exhaustedCount = 0;
 
     let scrollPerformed = false;
     // Frame scale is shared across candidates within a tick; computed lazily on
@@ -316,6 +339,8 @@ export class AutoScrollService {
           scrollPerformed = true;
           break;
         }
+        // No room in any requested direction: a resting cursor retries it once it changes
+        this.#recordExhausted(element);
       }
     }
 
@@ -399,6 +424,40 @@ export class AutoScrollService {
     this.#onScrollCallback?.();
 
     return true;
+  }
+
+  /** Record the scroll geometry of a container that had no room left (see #exhausted). */
+  #recordExhausted(element: HTMLElement): void {
+    const geometry = (this.#exhausted[this.#exhaustedCount] ??= {
+      element,
+      scrollTop: 0,
+      scrollLeft: 0,
+      maxScrollTop: 0,
+      maxScrollLeft: 0,
+    });
+    geometry.element = element;
+    geometry.scrollTop = element.scrollTop;
+    geometry.scrollLeft = element.scrollLeft;
+    geometry.maxScrollTop = element.scrollHeight - element.clientHeight;
+    geometry.maxScrollLeft = element.scrollWidth - element.clientWidth;
+    this.#exhaustedCount++;
+  }
+
+  /** Whether a container in #exhausted has scrolled or changed size since, so it may have room. */
+  #exhaustedChanged(): boolean {
+    for (let i = 0; i < this.#exhaustedCount; i++) {
+      const geometry = this.#exhausted[i];
+      const { element } = geometry;
+      if (
+        element.scrollTop !== geometry.scrollTop ||
+        element.scrollLeft !== geometry.scrollLeft ||
+        element.scrollHeight - element.clientHeight !== geometry.maxScrollTop ||
+        element.scrollWidth - element.clientWidth !== geometry.maxScrollLeft
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   #getFrameScale(): number {

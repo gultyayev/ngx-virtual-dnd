@@ -329,6 +329,45 @@ test.describe('Dynamic Height Demo', () => {
     expect(itemCount).toBeGreaterThan(0);
   });
 
+  test('should resume autoscroll when a task is added while the pointer rests at the edge', async ({
+    page,
+  }) => {
+    // A short list, so autoscroll reaches its end quickly
+    await taskDemo.goto('/dynamic-height', { count: 12 });
+    const scrollBox = await taskDemo.scrollContainer.boundingBox();
+    if (!scrollBox) throw new Error('Could not get scroll container bounding box');
+    const sourceBox = await taskDemo.items.first().boundingBox();
+    if (!sourceBox) throw new Error('Could not get source bounding box');
+
+    const targetX = sourceBox.x + sourceBox.width / 2;
+    await page.mouse.move(targetX, sourceBox.y + sourceBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(sourceBox.x + 5, sourceBox.y + 5, { steps: 2 });
+    await expect(taskDemo.dragPreview).toBeVisible();
+
+    const bottomEdgeY = scrollBox.y + scrollBox.height - 25;
+    await page.mouse.move(targetX, bottomEdgeY, { steps: 15 });
+    await page.mouse.move(targetX, bottomEdgeY);
+
+    const remainingScroll = () =>
+      taskDemo.scrollContainer.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
+    await poll(remainingScroll, { timeout: 10000 }).toBeLessThanOrEqual(1);
+    // Autoscroll has found no room left. The pointer does not move from here on.
+    await waitForFrames(page, 3);
+    const endScrollTop = await taskDemo.getScrollTop();
+    const scrollHeight = () => taskDemo.scrollContainer.evaluate((el) => el.scrollHeight);
+    const endScrollHeight = await scrollHeight();
+
+    // A task added at the end (by a click that does not move the pointer) gives the list room
+    await taskDemo.footer.dispatchEvent('click');
+    await poll(scrollHeight).toBeGreaterThan(endScrollHeight + 30);
+
+    await poll(remainingScroll, { timeout: 10000 }).toBeLessThanOrEqual(1);
+    expect(await taskDemo.getScrollTop()).toBeGreaterThan(endScrollTop + 30);
+
+    await page.mouse.up();
+  });
+
   test('should not shrink container height during same-list drag', async ({ page }) => {
     const scrollContainer = taskDemo.scrollContainer;
 

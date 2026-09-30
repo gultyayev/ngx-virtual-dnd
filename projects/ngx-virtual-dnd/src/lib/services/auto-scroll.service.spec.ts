@@ -456,6 +456,136 @@ describe('AutoScrollService', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Resting cursor: frames where the cursor has not moved
+  // ---------------------------------------------------------------------------
+  describe('resting cursor', () => {
+    it('should not read the containers again while the cursor rests away from their edges', () => {
+      setupDrag({ x: 150, y: 300 }); // center
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+
+      flushRAF();
+      flushRAF();
+      flushRAF();
+
+      expect(mockElement.getBoundingClientRect).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not read the containers again while the cursor rests at an edge with no room left', () => {
+      mockElement.scrollTop = 600; // max = scrollHeight(1000) - clientHeight(400)
+      setupDrag({ x: 150, y: 480 }); // near bottom edge
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+
+      flushRAF();
+      flushRAF();
+      flushRAF();
+
+      expect(mockElement.getBoundingClientRect).toHaveBeenCalledTimes(1);
+      expect(mockElement.scrollTop).toBe(600);
+    });
+
+    it('should not retry a container with no room once the cursor has left its edge', () => {
+      mockElement.scrollTop = 600;
+      setupDrag({ x: 150, y: 480 }); // near bottom edge, no room
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+      flushRAF();
+
+      dragStateService.updateDragPosition({
+        cursorPosition: { x: 150, y: 300 }, // center
+        activeDroppableId: null,
+        placeholderId: null,
+        placeholderIndex: null,
+      });
+      flushRAF();
+      Object.defineProperty(mockElement, 'scrollHeight', { value: 1100, configurable: true });
+      flushRAF();
+      flushRAF();
+
+      // One read for each cursor position, none for the change of the container
+      expect(mockElement.getBoundingClientRect).toHaveBeenCalledTimes(2);
+    });
+
+    it('should resume scrolling when the container grows while the cursor rests at its edge', () => {
+      const callback = jest.fn();
+      mockElement.scrollTop = 600;
+      setupDrag({ x: 150, y: 480 });
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler(callback);
+      flushRAF();
+      expect(service.isScrolling()).toBe(false);
+
+      // Rows measured taller or items added: the max scrollTop grows to 700
+      Object.defineProperty(mockElement, 'scrollHeight', { value: 1100, configurable: true });
+      flushRAF();
+
+      expect(mockElement.scrollTop).toBeGreaterThan(600);
+      expect(service.isScrolling()).toBe(true);
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    it('should resume scrolling when the container is scrolled back while the cursor rests at its edge', () => {
+      mockElement.scrollTop = 600;
+      setupDrag({ x: 150, y: 480 });
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+      flushRAF();
+
+      mockElement.scrollTop = 500;
+      flushRAF();
+
+      expect(mockElement.scrollTop).toBeGreaterThan(500);
+      expect(service.isScrolling()).toBe(true);
+    });
+
+    it('should resume scrolling an outer container that grows while the inner one stays at its end', () => {
+      const makeElement = (rect: { top: number; bottom: number }): HTMLElement => {
+        const el = document.createElement('div');
+        Object.defineProperty(el, 'scrollHeight', { value: 1000, configurable: true });
+        Object.defineProperty(el, 'clientHeight', { value: 400, configurable: true });
+        Object.defineProperty(el, 'scrollWidth', { value: 200, configurable: true });
+        Object.defineProperty(el, 'clientWidth', { value: 200, configurable: true });
+        let topVal = 600; // at the max
+        Object.defineProperty(el, 'scrollTop', {
+          get: () => topVal,
+          set: (v: number) => {
+            topVal = v;
+          },
+          configurable: true,
+        });
+        el.getBoundingClientRect = jest.fn().mockReturnValue({
+          ...rect,
+          left: 50,
+          right: 250,
+          height: rect.bottom - rect.top,
+          width: 200,
+        });
+        return el;
+      };
+      const outer = makeElement({ top: 100, bottom: 500 });
+      const inner = makeElement({ top: 100, bottom: 480 });
+      outer.appendChild(inner);
+
+      setupDrag({ x: 150, y: 470 }); // near the bottom edge of both
+      service.registerContainer('inner', inner);
+      service.registerContainer('outer', outer);
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(service.isScrolling()).toBe(false);
+
+      Object.defineProperty(outer, 'scrollHeight', { value: 1100, configurable: true });
+      flushRAF();
+
+      expect(inner.scrollTop).toBe(600);
+      expect(outer.scrollTop).toBeGreaterThan(600);
+
+      service.unregisterContainer('inner');
+      service.unregisterContainer('outer');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Multiple containers
   // ---------------------------------------------------------------------------
   describe('multiple containers', () => {
