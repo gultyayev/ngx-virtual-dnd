@@ -4,7 +4,9 @@ import 'zone.js';
 import {
   afterEveryRender,
   Component,
+  Directive,
   EnvironmentInjector,
+  NgZone,
   provideZoneChangeDetection,
 } from '@angular/core';
 import { ComponentFixtureAutoDetect, TestBed } from '@angular/core/testing';
@@ -28,6 +30,33 @@ class ZoneHostComponent {
   dragEnds = 0;
   drops = 0;
 }
+
+@Component({
+  template: `<div vdndDraggable="item-a" vdndDraggableGroup="g" [dragDelay]="50">A</div>`,
+  imports: [DraggableDirective],
+})
+class DelayedZoneHostComponent {}
+
+// A consumer directive that overrides the pointer press handler and records where it ran
+@Directive({ selector: '[vdndTestPressRecordingDraggable]' })
+class PressRecordingDraggableDirective extends DraggableDirective {
+  pressesInZone: boolean[] = [];
+
+  protected override onPointerDown(event: MouseEvent | TouchEvent, isTouch: boolean): void {
+    this.pressesInZone.push(NgZone.isInAngularZone());
+    super.onPointerDown(event, isTouch);
+  }
+}
+
+@Component({
+  template: `<div
+    vdndTestPressRecordingDraggable
+    vdndDraggable="item-a"
+    vdndDraggableGroup="g"
+  ></div>`,
+  imports: [PressRecordingDraggableDirective],
+})
+class PressRecordingHostComponent {}
 
 describe('drag outputs in a zone.js app', () => {
   beforeEach(() => {
@@ -100,6 +129,56 @@ describe('drag outputs in a zone.js app', () => {
     // jsdom has no layout, so the release hits no droppable: dragEnd without a drop
     expect(host.querySelector('[data-testid="counts"]')?.textContent).toBe('1/0');
     expect(renders).toBe(1);
+    fixture.destroy();
+  });
+
+  it('shows a touch press as ready to drag once its delay has passed', async () => {
+    const fixture = TestBed.createComponent(DelayedZoneHostComponent);
+    await fixture.whenStable();
+    const host: HTMLElement = fixture.nativeElement;
+    const item = host.querySelector<HTMLElement>('[data-draggable-id="item-a"]');
+    if (!item) {
+      throw new Error('item-a not rendered');
+    }
+
+    const touch = { clientX: 10, clientY: 10 } as Touch;
+    // The touch listener runs outside Angular's zone, and so does the delay it starts
+    Zone.root.run(() =>
+      item.dispatchEvent(
+        new TouchEvent('touchstart', { touches: [touch], changedTouches: [touch], bubbles: true }),
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await fixture.whenStable();
+
+    expect(item.classList.contains('vdnd-drag-pending')).toBe(true);
+    Zone.root.run(() =>
+      document.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [touch] })),
+    );
+    fixture.destroy();
+  });
+
+  it('runs the press handler of a touch in the zone, as it does for a mouse press', async () => {
+    const fixture = TestBed.createComponent(PressRecordingHostComponent);
+    await fixture.whenStable();
+    const item = fixture.nativeElement.querySelector('[data-draggable-id="item-a"]') as HTMLElement;
+    const touch = { clientX: 10, clientY: 10 } as Touch;
+
+    Zone.root.run(() => {
+      item.dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 10, clientY: 10, button: 0, bubbles: true }),
+      );
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 10, clientY: 10 }));
+      item.dispatchEvent(
+        new TouchEvent('touchstart', { touches: [touch], changedTouches: [touch], bubbles: true }),
+      );
+      document.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [touch] }));
+    });
+
+    const directive = fixture.debugElement.children[0].injector.get(
+      PressRecordingDraggableDirective,
+    );
+    expect(directive.pressesInZone).toEqual([true, true]);
     fixture.destroy();
   });
 });
