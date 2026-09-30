@@ -72,55 +72,68 @@ export async function waitForFrames(page: Page, count: number): Promise<void> {
 }
 
 /**
- * Wait until autoscroll has scrolled `scroller` down past `target` px, or to the end of its range
- * (within `tolerance` px) for `'end'`. Fails once the scroll position has not moved on for
+ * Wait until autoscroll has scrolled `scroller` in `direction` past `target` px (below it when
+ * scrolling up), or to the end of its range in that direction for `'end'` (within `tolerance`
+ * px). Fails once the scroll has reached no new furthest position in `direction` for
  * `stallTimeout` ms, not after a fixed total time.
  *
  * Autoscroll moves a bounded distance per frame, so the time a long scroll takes depends on the
  * frame rate: WebKit renders only a few frames per second on a loaded 4-core machine. A fixed
  * timeout then fails a healthy scroll, while a stall still fails here within `stallTimeout`.
  * The test timeout bounds the whole wait: tests that scroll far call `test.slow()`.
+ *
+ * Progress means a new furthest position, so a scroll that moves back mid-way (a dynamic-height
+ * list anchoring its scroll position while rows above it are measured) counts as stalled until
+ * it passes its furthest position again.
  */
-export async function waitForScrollDown(
+export async function waitForAutoscroll(
   scroller: Locator,
+  direction: 'down' | 'up',
   target: number | 'end',
   { tolerance = 2, stallTimeout = 5000 }: { tolerance?: number; stallTimeout?: number } = {},
 ): Promise<void> {
   const result = await scroller.evaluate(
     (element, options) =>
-      new Promise<{ reached: boolean; scrollTop: number; maxScrollTop: number }>((resolve) => {
-        let furthest = element.scrollTop;
-        let movedAt = performance.now();
-        const check = () => {
-          const { scrollTop } = element;
-          const maxScrollTop = element.scrollHeight - element.clientHeight;
-          const reached =
-            options.target === 'end'
-              ? maxScrollTop - scrollTop <= options.tolerance
-              : scrollTop > options.target;
-          if (reached) {
-            resolve({ reached, scrollTop, maxScrollTop });
-            return;
-          }
-          // Progress is a new furthest position: a list that grows under the scroll (rows
-          // measured taller) raises the distance left without the scroll stalling
-          if (scrollTop > furthest) {
-            furthest = scrollTop;
-            movedAt = performance.now();
-          } else if (performance.now() - movedAt > options.stallTimeout) {
-            resolve({ reached, scrollTop, maxScrollTop });
-            return;
-          }
-          requestAnimationFrame(check);
-        };
-        check();
-      }),
-    { target, tolerance, stallTimeout },
+      new Promise<{ reached: boolean; scrollTop: number; furthest: number; max: number }>(
+        (resolve) => {
+          const sign = options.direction === 'down' ? 1 : -1;
+          let furthest = element.scrollTop;
+          let movedAt = performance.now();
+          // A timer, not requestAnimationFrame: it keeps checking (and can report the stall)
+          // when the page renders no frames
+          const check = () => {
+            const { scrollTop } = element;
+            const max = element.scrollHeight - element.clientHeight;
+            let reached: boolean;
+            if (options.target === 'end') {
+              const left = options.direction === 'down' ? max - scrollTop : scrollTop;
+              reached = left <= options.tolerance;
+            } else {
+              reached = sign * scrollTop > sign * options.target;
+            }
+            if (sign * scrollTop > sign * furthest) {
+              furthest = scrollTop;
+              movedAt = performance.now();
+            }
+            if (reached || performance.now() - movedAt > options.stallTimeout) {
+              resolve({ reached, scrollTop, furthest, max });
+              return;
+            }
+            setTimeout(check, 16);
+          };
+          check();
+        },
+      ),
+    { direction, target, tolerance, stallTimeout },
   );
+  const goal =
+    target === 'end'
+      ? `reaching the ${direction === 'down' ? 'bottom' : 'top'}`
+      : `${direction === 'down' ? 'passing' : 'going below'} ${target}`;
   expect(
     result.reached,
-    `Autoscroll stopped at scrollTop ${result.scrollTop} (max ${result.maxScrollTop}) before ` +
-      `${target === 'end' ? 'the end' : `passing ${target}`} and did not move for ${stallTimeout}ms`,
+    `Autoscroll ${direction} stopped before ${goal}: no new furthest position (` +
+      `${result.furthest}) for ${stallTimeout}ms; scrollTop ${result.scrollTop}, max ${result.max}`,
   ).toBe(true);
 }
 

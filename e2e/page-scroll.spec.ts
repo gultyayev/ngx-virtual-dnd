@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { waitForFrames } from './fixtures/drag-sync';
+import { waitForAutoscroll, waitForFrames } from './fixtures/drag-sync';
 import { collectPageErrors } from './fixtures/page-errors';
 import { TaskDemoPage, taskDemoSelectors } from './fixtures/task-demo.page';
 
@@ -305,6 +305,9 @@ test.describe('Page Scroll Demo', () => {
   test('should keep drag preview and placeholder visible during long autoscroll', async ({
     page,
   }, testInfo) => {
+    // Scrolls far: at a few frames per second (WebKit under load) that takes longer than the
+    // default test timeout allows
+    test.slow();
     const scrollContainer = taskDemo.scrollContainer;
     const scrollBox = await scrollContainer.boundingBox();
     if (!scrollBox) throw new Error('Could not get scroll container bounding box');
@@ -330,10 +333,7 @@ test.describe('Page Scroll Demo', () => {
     // Extra move without steps to ensure Firefox registers the final position correctly
     await page.mouse.move(targetX, bottomEdgeY);
 
-    await expect(async () => {
-      const scrollTop = await taskDemo.getScrollTop();
-      expect(scrollTop, `Scroll should reach 2000px, current: ${scrollTop}`).toBeGreaterThan(2000);
-    }).toPass({ timeout: 25000 });
+    await waitForAutoscroll(scrollContainer, 'down', 2000);
 
     const placeholder = taskDemo.placeholder;
     await expect(dragPreview).toBeVisible();

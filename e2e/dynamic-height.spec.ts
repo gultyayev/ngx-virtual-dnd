@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { waitForFrames, waitForScrollDown } from './fixtures/drag-sync';
+import { waitForAutoscroll, waitForFrames } from './fixtures/drag-sync';
 import { collectPageErrors } from './fixtures/page-errors';
 import { poll } from './fixtures/polling';
 import { TaskDemoPage, taskDemoSelectors } from './fixtures/task-demo.page';
@@ -558,7 +558,7 @@ test.describe('Dynamic Height Demo, short list', () => {
     await page.mouse.move(targetX, bottomEdgeY, { steps: 15 });
     await page.mouse.move(targetX, bottomEdgeY);
 
-    await waitForScrollDown(taskDemo.scrollContainer, 'end', { tolerance: 1 });
+    await waitForAutoscroll(taskDemo.scrollContainer, 'down', 'end', { tolerance: 1 });
     // Autoscroll has found no room left. The pointer does not move from here on.
     await waitForFrames(page, 3);
     const endScrollTop = await taskDemo.getScrollTop();
@@ -572,7 +572,7 @@ test.describe('Dynamic Height Demo, short list', () => {
     }).toBeGreaterThan(endScrollHeight + 30);
 
     // Fails within its stall timeout if autoscroll does not resume
-    await waitForScrollDown(taskDemo.scrollContainer, 'end', { tolerance: 1 });
+    await waitForAutoscroll(taskDemo.scrollContainer, 'down', 'end', { tolerance: 1 });
     expect(await taskDemo.getScrollTop(), 'The list should have scrolled on').toBeGreaterThan(
       endScrollTop + 30,
     );

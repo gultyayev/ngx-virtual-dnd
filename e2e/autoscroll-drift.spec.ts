@@ -1,6 +1,6 @@
 import { expect, Page, test, TestInfo } from '@playwright/test';
 import { Box, DemoPage, ListName } from './fixtures/demo.page';
-import { waitForFrames, waitForScrollDown } from './fixtures/drag-sync';
+import { waitForAutoscroll, waitForFrames } from './fixtures/drag-sync';
 import { poll } from './fixtures/polling';
 
 interface DriftSnapshot {
@@ -153,7 +153,7 @@ test.describe('Autoscroll Placeholder Drift', () => {
     const nearBottomY = containerBox.y + containerBox.height - 15;
     await page.mouse.move(containerBox.x + 100, nearBottomY, { steps: 10 });
     await page.mouse.move(containerBox.x + 100, nearBottomY);
-    await waitForScrollDown(demoPage.list2VirtualScroll, 1200);
+    await waitForAutoscroll(demoPage.list2VirtualScroll, 'down', 1200);
 
     const snapshot = await waitForDriftSnapshot(
       page,
@@ -177,7 +177,7 @@ test.describe('Autoscroll Placeholder Drift', () => {
     const nearBottomY = containerBox.y + containerBox.height - 25;
     await page.mouse.move(containerBox.x + 100, nearBottomY, { steps: 10 });
     await page.mouse.move(containerBox.x + 100, nearBottomY);
-    await waitForScrollDown(demoPage.list1VirtualScroll, 500);
+    await waitForAutoscroll(demoPage.list1VirtualScroll, 'down', 500);
 
     const snapshot = await waitForDriftSnapshot(
       page,
@@ -204,7 +204,7 @@ test.describe('Autoscroll Placeholder Drift', () => {
     const nearBottomY = containerBox.y + containerBox.height - 25;
     await page.mouse.move(containerBox.x + 100, nearBottomY, { steps: 10 });
     await page.mouse.move(containerBox.x + 100, nearBottomY);
-    await waitForScrollDown(demoPage.list1VirtualScroll, 1500);
+    await waitForAutoscroll(demoPage.list1VirtualScroll, 'down', 1500);
 
     const snapshot = await waitForDriftSnapshot(
       page,
@@ -218,6 +218,9 @@ test.describe('Autoscroll Placeholder Drift', () => {
   });
 
   test('placeholder should stay aligned during autoscroll up', async ({ page }, testInfo) => {
+    // Scrolls far: at a few frames per second (WebKit under load) that takes longer than the
+    // default test timeout allows
+    test.slow();
     // List is 2500px (50 items * 50px): scroll near the bottom first
     await expect(async () => {
       await demoPage.scrollList('list1', 2000);
@@ -238,18 +241,13 @@ test.describe('Autoscroll Placeholder Drift', () => {
     const nearTopY = containerBox.y + 15;
     await page.mouse.move(containerBox.x + 100, nearTopY, { steps: 10 });
     await page.mouse.move(containerBox.x + 100, nearTopY);
+    await waitForAutoscroll(demoPage.list1VirtualScroll, 'up', 1000);
 
     const snapshot = await waitForDriftSnapshot(
       page,
       'list1',
-      (driftSnapshot) => {
-        expect(
-          driftSnapshot.scrollTop,
-          `ScrollTop should drop below 1000, current: ${driftSnapshot.scrollTop}`,
-        ).toBeLessThan(1000);
-        expect(driftSnapshot.indexDrift).toBe(0);
-      },
-      10000,
+      (driftSnapshot) => expect(driftSnapshot.indexDrift).toBe(0),
+      5000,
     );
     await attachJson(testInfo, 'up-drift', snapshot);
 
@@ -269,7 +267,7 @@ test.describe('Autoscroll Placeholder Drift', () => {
     const nearBottomY = containerBox.y + containerBox.height - 20;
     await page.mouse.move(containerBox.x + 100, nearBottomY, { steps: 10 });
     await page.mouse.move(containerBox.x + 100, nearBottomY);
-    await waitForScrollDown(demoPage.list1VirtualScroll, 'end');
+    await waitForAutoscroll(demoPage.list1VirtualScroll, 'down', 'end');
 
     // At the end, the placeholder index matches the pointer exactly and stays in bounds
     const snapshot = await waitForDriftSnapshot(
@@ -309,16 +307,16 @@ test.describe('Autoscroll Placeholder Drift', () => {
       // Move to bottom, wait for autoscroll to go down
       const bottomStartScrollTop = await demoPage.getScrollTop('list1');
       await page.mouse.move(centerX, nearBottomY, { steps: 5 });
-      await poll(() => demoPage.getScrollTop('list1'), { timeout: 10000 }).toBeGreaterThan(
+      await waitForAutoscroll(
+        demoPage.list1VirtualScroll,
+        'down',
         Math.max(bottomStartScrollTop + 300, 1000),
       );
       const bottomScroll = await demoPage.getScrollTop('list1');
 
       // Move to top, wait for autoscroll to go up
       await page.mouse.move(centerX, nearTopY, { steps: 5 });
-      await poll(() => demoPage.getScrollTop('list1'), { timeout: 10000 }).toBeLessThan(
-        bottomScroll - 300,
-      );
+      await waitForAutoscroll(demoPage.list1VirtualScroll, 'up', bottomScroll - 300);
 
       cycleData.push({
         cycle: cycle + 1,
@@ -374,9 +372,7 @@ test.describe('Autoscroll Placeholder Drift', () => {
       // Stay at bottom edge for autoscroll
       const bottomStartScroll = await demoPage.getScrollTop('list2');
       await page.mouse.move(start.x, bottomEdge - 15, { steps: 3 });
-      await poll(() => demoPage.getScrollTop('list2'), { timeout: 10000 }).toBeGreaterThan(
-        bottomStartScroll + 500,
-      );
+      await waitForAutoscroll(demoPage.list2VirtualScroll, 'down', bottomStartScroll + 500);
 
       // Slowly approach top edge
       for (let y = bottomEdge - 15; y > topEdge + 15; y -= 20) {
@@ -387,14 +383,12 @@ test.describe('Autoscroll Placeholder Drift', () => {
       // Stay at top edge for autoscroll
       const topStartScroll = await demoPage.getScrollTop('list2');
       await page.mouse.move(start.x, topEdge + 15, { steps: 3 });
+      await waitForAutoscroll(demoPage.list2VirtualScroll, 'up', topStartScroll - 300);
       const driftSnapshot = await waitForDriftSnapshot(
         page,
         'list2',
-        (snapshot) => {
-          expect(snapshot.scrollTop).toBeLessThan(topStartScroll - 300);
-          expect(snapshot.indexDrift).toBe(0);
-        },
-        10000,
+        (snapshot) => expect(snapshot.indexDrift).toBe(0),
+        5000,
       );
       await attachJson(testInfo, `cycle-${cycle + 1}-state`, driftSnapshot);
     }
