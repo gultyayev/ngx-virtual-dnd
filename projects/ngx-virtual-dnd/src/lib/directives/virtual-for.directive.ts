@@ -25,6 +25,7 @@ import { DroppableDirective } from './droppable.directive';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
+import { setStrategyItems } from '../strategies/strategy-items';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
 import { revealDropTargetIn } from '../utils/drop-animator';
@@ -284,10 +285,25 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     return this.vdndVirtualForOf().map((item, i) => trackByFn(i, item));
   });
 
-  /** Index of the dragged item in this list (-1 if not present or not dragging) */
+  /**
+   * Index of the dragged item in this list (-1 if not present or not dragging). The index where
+   * the drag found its item is checked first: it spares a search of every track key.
+   */
   readonly #draggedItemIndex = computed(() => {
     const draggedItem = this.#dragState.draggedItem();
     if (!draggedItem) return -1;
+
+    const items = this.vdndVirtualForOf();
+    const sourceIndex = this.#dragState.sourceIndex();
+    if (sourceIndex !== null && sourceIndex >= 0 && sourceIndex < items.length) {
+      const item = items[sourceIndex];
+      if (
+        this.vdndVirtualForTrackBy()(sourceIndex, item) === draggedItem.draggableId ||
+        (draggedItem.data !== null && draggedItem.data !== undefined && item === draggedItem.data)
+      ) {
+        return sourceIndex;
+      }
+    }
 
     // The last item with the key, as an index map filled in order would give
     const byId = this.#itemKeys().lastIndexOf(draggedItem.draggableId);
@@ -297,7 +313,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
     const data = draggedItem.data as T | null | undefined;
     if (data !== null && data !== undefined) {
-      return this.vdndVirtualForOf().indexOf(data);
+      return items.indexOf(data);
     }
 
     return -1;
@@ -307,12 +323,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     // Keep the strategy's items in sync. A fixed-height strategy needs only their count, which
     // spares computing every item's track key on each items change (each drop).
     effect(() => {
-      const strategy = this.#strategy();
-      if (strategy instanceof FixedHeightStrategy) {
-        strategy.setItemCount(this.vdndVirtualForOf().length);
-      } else {
-        strategy.setItemKeys(this.#itemKeys());
-      }
+      setStrategyItems(this.#strategy(), this.vdndVirtualForOf().length, () => this.#itemKeys());
     });
 
     // Register strategy with drag index calculator for accurate position lookups
@@ -330,15 +341,16 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     // correctly skip the hidden item — not just findIndexAtOffset.
     effect(() => {
       const strategy = this.#strategy();
-      const draggedIndex = this.#draggedItemIndex();
       const droppableId = this.#effectiveDroppableId();
       const sourceDroppableId = this.#dragState.sourceDroppableId();
       const isDragging = this.#dragState.isDragging();
 
       const isSourceList =
         isDragging && droppableId !== undefined && droppableId === sourceDroppableId;
+      // Only the source list looks for the dragged item (in all its keys)
+      const draggedIndex = isSourceList ? this.#draggedItemIndex() : -1;
 
-      if (isSourceList && draggedIndex >= 0) {
+      if (draggedIndex >= 0) {
         strategy.setExcludedIndex(draggedIndex);
       } else {
         strategy.setExcludedIndex(null);
@@ -564,15 +576,13 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     strategy.version();
     const placeholderIndex = this.#placeholderIndex();
     const showPlaceholder = this.#shouldShowPlaceholder();
-    const draggedIndex = this.#draggedItemIndex();
     const droppableId = this.#effectiveDroppableId();
     const sourceDroppableId = this.#dragState.sourceDroppableId();
     const isSourceList = droppableId ? droppableId === sourceDroppableId : true;
-    const shouldKeepDragged =
-      this.#dragState.isDragging() &&
-      draggedIndex >= 0 &&
-      isSourceList &&
-      draggedIndex < items.length;
+    // Only the source list keeps the dragged item rendered, so only it looks for the item
+    const draggedIndex =
+      this.#dragState.isDragging() && isSourceList ? this.#draggedItemIndex() : -1;
+    const shouldKeepDragged = draggedIndex >= 0 && draggedIndex < items.length;
 
     // Snapshot positions before the DOM changes so displaced items can slide
     this.#shiftAnimator?.beforeUpdate(this.#dragState.isDragging(), placeholderIndex);

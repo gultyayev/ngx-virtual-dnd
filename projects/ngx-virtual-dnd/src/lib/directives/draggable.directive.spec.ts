@@ -17,7 +17,6 @@ import { PositionCalculatorService } from '../services/position-calculator.servi
 import { AutoScrollService } from '../services/auto-scroll.service';
 import { ElementCloneService } from '../services/element-clone.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
-import { OverlayContainerService } from '../services/overlay-container.service';
 import { DragStartEvent, DragEndEvent, DropEvent } from '../models/drag-drop.models';
 
 // A web component whose input lives in its shadow DOM, like the form controls of many UI libraries
@@ -1622,64 +1621,6 @@ describe('DraggableDirective', () => {
       );
 
       expect(emittedInZone.at(-1)).toBe('dragEnd:true');
-    });
-  });
-
-  describe('drag start clone', () => {
-    const pressSpace = (): void => {
-      draggableNative.dispatchEvent(
-        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
-      );
-    };
-
-    it('should not clone the element when no drag preview is mounted', () => {
-      const cloneElement = jest.spyOn(TestBed.inject(ElementCloneService), 'cloneElement');
-
-      attemptPointerDrag(draggableNative);
-
-      expect(dragStateService.isDragging()).toBe(true);
-      expect(cloneElement).not.toHaveBeenCalled();
-      expect(dragStateService.draggedItem()?.clonedElement).toBeUndefined();
-    });
-
-    it('should not clone the element for a keyboard drag when no drag preview is mounted', () => {
-      const cloneElement = jest.spyOn(TestBed.inject(ElementCloneService), 'cloneElement');
-
-      pressSpace();
-
-      expect(TestBed.inject(KeyboardDragService).isActive()).toBe(true);
-      expect(cloneElement).not.toHaveBeenCalled();
-    });
-
-    it('should clone the element for a mounted drag preview that shows it', () => {
-      TestBed.inject(OverlayContainerService).setPreviewMounted(true);
-      const cloneElement = jest.spyOn(TestBed.inject(ElementCloneService), 'cloneElement');
-
-      attemptPointerDrag(draggableNative);
-
-      expect(cloneElement).toHaveBeenCalledWith(draggableNative);
-      expect(dragStateService.draggedItem()?.clonedElement).toBeInstanceOf(HTMLElement);
-    });
-
-    it('should clone the element for a keyboard drag with a drag preview that shows it', () => {
-      TestBed.inject(OverlayContainerService).setPreviewMounted(true);
-      const cloneElement = jest.spyOn(TestBed.inject(ElementCloneService), 'cloneElement');
-
-      pressSpace();
-
-      expect(cloneElement).toHaveBeenCalledWith(draggableNative);
-    });
-
-    it('should not clone the element when the mounted drag preview renders a template', () => {
-      const overlayContainer = TestBed.inject(OverlayContainerService);
-      overlayContainer.setPreviewMounted(true);
-      overlayContainer.setTemplatePreviewActive(true);
-      const cloneElement = jest.spyOn(TestBed.inject(ElementCloneService), 'cloneElement');
-
-      attemptPointerDrag(draggableNative);
-
-      expect(dragStateService.isDragging()).toBe(true);
-      expect(cloneElement).not.toHaveBeenCalled();
     });
   });
 

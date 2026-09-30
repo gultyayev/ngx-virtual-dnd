@@ -503,11 +503,11 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     };
 
     // Clone element BEFORE updating drag state (which triggers display:none via host binding).
-    // Only for a mounted preview that shows the clone: the costly getComputedStyle deep-walk
-    // is wasted when the previews render templates, or when none is mounted.
-    const clonedElement = this.#overlayContainer.hasClonePreview()
-      ? this.#elementClone.cloneElement(element)
-      : undefined;
+    // Template-first: skip the costly getComputedStyle deep-walk when a template-based
+    // preview is mounted, since that clone would never be rendered.
+    const clonedElement = this.#overlayContainer.hasTemplatePreview()
+      ? undefined
+      : this.#elementClone.cloneElement(element);
 
     // Find droppable and calculate initial placeholder position
     // This fixes the UI glitch by ensuring placeholder is set before the element is hidden

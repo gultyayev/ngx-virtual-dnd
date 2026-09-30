@@ -575,7 +575,7 @@ interface DraggedItem {
   draggableId: string;
   droppableId: string;
   element: HTMLElement;
-  clonedElement?: HTMLElement; // only while a <vdnd-drag-preview> without a template is mounted
+  clonedElement?: HTMLElement;
   height: number;
   width: number;
   data?: unknown;

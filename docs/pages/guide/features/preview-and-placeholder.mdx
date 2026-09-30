@@ -14,7 +14,7 @@ During a drag the original element is hidden. Two elements take its place:
 
 `<vdnd-drag-preview />` clones the dragged element, copies its computed styles and sizes the clone to match the original. The point where the user grabbed the item stays under the pointer.
 
-The clone is made in the frame the item lifts, and copying the styles takes longer the more elements the row has. For rows with many elements on low-end devices, a [custom preview](#custom-preview) is cheaper: drags skip the clone while every mounted preview renders a template.
+The clone is made in the frame the item lifts, and copying the styles takes longer the more elements the row has. For rows with many elements on low-end devices, a [custom preview](#custom-preview) is cheaper: with a template, drags skip the clone.
 
 ## Custom preview
 

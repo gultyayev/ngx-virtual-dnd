@@ -226,14 +226,6 @@ describe('DragPreviewComponent', () => {
       it('should not register as a template preview', () => {
         expect(overlayContainerService.hasTemplatePreview()).toBe(false);
       });
-
-      it('should ask for a clone of the dragged element while mounted', () => {
-        expect(overlayContainerService.hasClonePreview()).toBe(true);
-
-        fixture.destroy();
-
-        expect(overlayContainerService.hasClonePreview()).toBe(false);
-      });
     });
 
     describe('default preview', () => {
@@ -308,10 +300,6 @@ describe('DragPreviewComponent', () => {
       fixture.destroy();
 
       expect(overlayContainerService.hasTemplatePreview()).toBe(false);
-    });
-
-    it('should not ask for a clone of the dragged element', () => {
-      expect(overlayContainerService.hasClonePreview()).toBe(false);
     });
 
     it('should remove its host from the overlay container when destroyed', () => {

@@ -42,6 +42,7 @@ import { createAutoScrollRegistration } from '../utils/auto-scroll-registration'
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
+import { setStrategyItems } from '../strategies/strategy-items';
 import { mapByAttribute } from '../utils/attribute-selectors';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
@@ -508,11 +509,28 @@ export class VirtualScrollContainerComponent<T>
 
   /**
    * The index of the currently dragged item in the items array (-1 if not found or not dragging).
-   * A scan: one lookup per drag costs less than building the index map.
+   * Found without the index map, which only this lookup would need on a drag: a drag that started
+   * in another list has no item here (IDs are unique across lists), the index where the drag found
+   * its item is checked next, and only then every item ID is searched.
    */
   readonly #draggedItemIndex = computed(() => {
     const draggedId = this.draggedItemId();
     if (!draggedId) return -1;
+
+    const droppableId = this.droppableId();
+    const sourceDroppableId = this.#dragState.sourceDroppableId();
+    if (droppableId && sourceDroppableId && droppableId !== sourceDroppableId) return -1;
+
+    const sourceIndex = this.#dragState.sourceIndex();
+    const items = this.items();
+    if (
+      sourceIndex !== null &&
+      sourceIndex >= 0 &&
+      sourceIndex < items.length &&
+      this.itemIdFn()(items[sourceIndex]) === draggedId
+    ) {
+      return sourceIndex;
+    }
     return this.#itemIds().lastIndexOf(draggedId);
   });
 
@@ -670,12 +688,7 @@ export class VirtualScrollContainerComponent<T>
     // Keep the strategy's items in sync. A fixed-height strategy needs only their count, which
     // spares computing every item's ID on each items change (each drop).
     effect(() => {
-      const strategy = this.#strategy();
-      if (strategy instanceof FixedHeightStrategy) {
-        strategy.setItemCount(this.items().length);
-      } else {
-        strategy.setItemKeys(this.#itemIds());
-      }
+      setStrategyItems(this.#strategy(), this.items().length, () => this.#itemIds());
     });
 
     // Register strategy with drag index calculator for accurate drag calculations

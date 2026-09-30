@@ -82,8 +82,10 @@ export class ElementCloneService {
       }
       // The longhands only when the shorthand was not copied: the engine gave no value, or the
       // clone rejected it. A shorthand sets all its longhands, so reading one back tells (the
-      // shorthand itself would be serialized again to be read).
+      // shorthand itself would be serialized again to be read). The clone may carry that
+      // longhand inline from the source, so it goes first.
       const [shorthand, longhands] = style;
+      target.style.removeProperty(longhands[0]);
       if (
         !this.#copyStyle(computed, target, shorthand) ||
         !target.style.getPropertyValue(longhands[0])

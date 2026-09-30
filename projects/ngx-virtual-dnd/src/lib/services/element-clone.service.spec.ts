@@ -135,6 +135,22 @@ describe('ElementCloneService', () => {
       expect(clone.style.backgroundColor).toBe('rgb(10, 20, 30)');
     });
 
+    it("should copy a rejected shorthand's longhands when the source sets one inline", () => {
+      fakeComputedStyles({
+        background: 'rgb(10, 20, 30) none repeat scroll 0% 0%',
+        'background-color': 'rgb(10, 20, 30)',
+        'background-image': 'url("card.png")',
+      });
+      // cloneNode() copies the inline background-color: it must not pass for the shorthand's
+      const source = attach(document.createElement('div'));
+      source.style.backgroundColor = 'rgb(10, 20, 30)';
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.style.backgroundImage).toBe('url("card.png")');
+      expect(clone.style.backgroundColor).toBe('rgb(10, 20, 30)');
+    });
+
     it('should disable animations and transitions on clone', () => {
       const source = attach(document.createElement('div'));
       source.style.transition = 'all 0.3s ease';

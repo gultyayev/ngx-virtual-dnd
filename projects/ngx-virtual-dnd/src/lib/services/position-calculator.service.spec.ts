@@ -689,20 +689,23 @@ describe('PositionCalculatorService', () => {
       return { scrollable, lists };
     }
 
-    it('looks up each candidate’s clipping ancestor once per drag, not on every re-read', () => {
+    it('clips a droppable moved into another scroller mid-drag to that scroller', () => {
       const dragged = document.createElement('div');
-      const { lists } = scrollableWithLists(['a', 'b']);
-      const closest = lists.map((list) => jest.spyOn(list, 'closest'));
-
+      const [drop] = scrollableWithLists(['list']).lists;
+      const other = document.createElement('div');
+      other.className = 'vdnd-scrollable';
+      stubRect(other, { top: 100, left: 400, right: 600, bottom: 300 });
+      document.body.appendChild(other);
+      created.push(other);
       service.beginDragSession('g');
-      for (let i = 0; i < 3; i++) {
-        service.invalidateDroppableRects();
-        expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBe(lists[0]);
-      }
 
-      expect(closest.map((spy) => spy.mock.calls.length)).toEqual([1, 1]);
-      // Still clipped on every re-read
-      expect(service.findDroppableAtPoint(150, 50, dragged, 'g')).toBeNull();
+      // Moved (by a portal, say): it keeps its registration
+      other.appendChild(drop);
+      stubRect(drop, { top: 0, left: 400, right: 600, bottom: 600 });
+      service.invalidateDroppableRects();
+
+      expect(service.findDroppableAtPoint(500, 200, dragged, 'g')).toBe(drop);
+      expect(service.findDroppableAtPoint(500, 50, dragged, 'g')).toBeNull();
     });
 
     it('reads the rect of a scroller once for the lists it clips', () => {

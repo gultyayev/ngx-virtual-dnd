@@ -1130,6 +1130,11 @@ describe('VirtualScrollContainerComponent (item IDs)', () => {
       Number(row.getAttribute('data-index')),
     );
 
+  const renderedIds = (): string[] =>
+    Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.item')).map(
+      (row) => row.getAttribute('data-draggable-id') ?? '',
+    );
+
   /** The list's strategy, as drag and drop sees it */
   const strategy = () =>
     TestBed.inject(DragIndexCalculatorService).getStrategyForDroppable('list')!;
@@ -1140,14 +1145,24 @@ describe('VirtualScrollContainerComponent (item IDs)', () => {
     host.items.set([...rest, first]);
   };
 
-  const startDragOf = (id: string): void => {
-    dragState.startDrag({
-      draggableId: id,
-      droppableId: 'list',
-      element: document.createElement('div'),
-      height: 50,
-      width: 100,
-    });
+  /** A drag of `id` from `droppableId`, which found the item at `sourceIndex` */
+  const startDragOf = (id: string, sourceIndex?: number, droppableId = 'list'): void => {
+    dragState.startDrag(
+      {
+        draggableId: id,
+        droppableId,
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      },
+      undefined,
+      undefined,
+      null,
+      droppableId,
+      null,
+      null,
+      sourceIndex ?? null,
+    );
     render();
   };
 
@@ -1182,7 +1197,7 @@ describe('VirtualScrollContainerComponent (item IDs)', () => {
     moveFirstToEnd();
     render();
 
-    expect(renderedIndices()).toEqual(Array.from({ length: 10 }, (_, i) => i));
+    expect(renderedIds()).toEqual(Array.from({ length: 10 }, (_, i) => `item-${i + 1}`));
     // Not one per item: a fixed-height strategy needs only the count
     expect(host.idCalls).toBeLessThan(100);
     expect(strategy().getItemCount()).toBe(1000);
@@ -1227,6 +1242,31 @@ describe('VirtualScrollContainerComponent (item IDs)', () => {
     expect(strategy().getOffsetForIndex(6)).toBe(250);
     // The spacer keeps every item
     expect(strategy().getTotalHeight(1000)).toBe(50_000);
+  });
+
+  it('finds the dragged item at the source index of the drag without computing every item ID', () => {
+    host.idCalls = 0;
+
+    startDragOf('item-5', 5);
+
+    expect(host.idCalls).toBeLessThan(100);
+    expect(strategy().getOffsetForIndex(6)).toBe(250);
+  });
+
+  it('finds the dragged item when the source index of the drag is not its index', () => {
+    startDragOf('item-5', 7);
+
+    expect(strategy().getOffsetForIndex(6)).toBe(250);
+    expect(strategy().getOffsetForIndex(8)).toBe(350);
+  });
+
+  it('does not look for the item of a drag from another list', () => {
+    host.idCalls = 0;
+
+    startDragOf('elsewhere-5', 5, 'other-list');
+
+    expect(host.idCalls).toBeLessThan(100);
+    expect(strategy().getOffsetForIndex(6)).toBe(300);
   });
 
   it('keeps rendering the dragged item once it scrolls out of the rendered rows', async () => {

@@ -198,9 +198,6 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
   });
 
   constructor() {
-    // Counted from creation: drags clone the dragged element only while a mounted preview
-    // shows the clone (one without a template, which registers below)
-    this.#overlayContainer.setPreviewMounted(true);
     this.#scheduler.addFrameWriter(this.#writeFramePosition);
 
     // Teleport host element into the body-level overlay container after first render.
@@ -225,8 +222,8 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
       },
     });
 
-    // Publish whether this preview renders via a custom template, so the drag
-    // directives can skip the drag-start element clone when no preview shows it.
+    // Publish whether this preview renders via a custom template so the drag
+    // directives can skip the drag-start element clone when it won't be shown.
     effect(() => {
       const hasTemplate = !!this.previewTemplate();
       if (hasTemplate && !this.#templateRegistered) {
@@ -274,7 +271,6 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
   ngOnDestroy(): void {
     this.#scheduler.removeFrameWriter(this.#writeFramePosition);
     this.#dropAnimator?.cancel();
-    this.#overlayContainer.setPreviewMounted(false);
     if (this.#templateRegistered) {
       this.#overlayContainer.setTemplatePreviewActive(false);
       this.#templateRegistered = false;

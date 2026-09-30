@@ -11,11 +11,6 @@ interface DragSessionSnapshot {
   groupName: string;
   /** Candidate droppables in document order (document order === default paint order). */
   candidates: HTMLElement[];
-  /**
-   * Each candidate's scroll-clip ancestor (see `#clipOf`), parallel to `candidates`. Found with
-   * the candidate list rather than on every re-read of the rects.
-   */
-  clips: (Element | null)[];
   /** Cached bounding rects, parallel to `candidates`. */
   rects: DOMRect[];
   /** When true, rects are re-read on the next hit-test (set on scroll/resize). */
@@ -92,7 +87,6 @@ export class PositionCalculatorService {
     this.endDragSession();
 
     const candidates = this.#queryDroppables(groupName);
-    const clips = candidates.map((el) => this.#clipOf(el));
     const onViewportChange = () => {
       if (this.#session) {
         this.#session.dirty = true;
@@ -102,8 +96,7 @@ export class PositionCalculatorService {
     this.#session = {
       groupName,
       candidates,
-      clips,
-      rects: this.#measureRects(candidates, clips, []),
+      rects: this.#measureRects(candidates, []),
       dirty: false,
       candidatesStale: false,
       onViewportChange,
@@ -168,8 +161,7 @@ export class PositionCalculatorService {
       return;
     }
     session.candidates = this.#queryDroppables(session.groupName);
-    session.clips = session.candidates.map((el) => this.#clipOf(el));
-    session.rects = this.#measureRects(session.candidates, session.clips, []);
+    session.rects = this.#measureRects(session.candidates, []);
     session.dirty = false;
     session.candidatesStale = false;
     this.#observeCandidates(session);
@@ -216,7 +208,7 @@ export class PositionCalculatorService {
         // A droppable was added/removed mid-drag: re-query the list (also refreshes rects).
         this.refreshCandidates();
       } else if (session.dirty) {
-        this.#measureRects(session.candidates, session.clips, session.rects);
+        this.#measureRects(session.candidates, session.rects);
         session.dirty = false;
       }
       return this.#hitTest(x, y, session.candidates, session.rects);
@@ -224,8 +216,7 @@ export class PositionCalculatorService {
 
     // No active session: one-shot geometric query (still avoids elementFromPoint).
     const candidates = this.#queryDroppables(groupName);
-    const clips = candidates.map((el) => this.#clipOf(el));
-    return this.#hitTest(x, y, candidates, this.#measureRects(candidates, clips, []));
+    return this.#hitTest(x, y, candidates, this.#measureRects(candidates, []));
   }
 
   /**
@@ -274,21 +265,18 @@ export class PositionCalculatorService {
   }
 
   /**
-   * Measure the candidates' hit-test rects into `rects`, each clipped to its clip ancestor
-   * (`clips`, see `#clipOf`). Consecutive candidates in one scroller (lists side by side in it)
-   * read its rect once. The intersection is built as a plain DOMRect; an empty intersection
-   * yields a negative width/height so the `#hitTest` bounds check can never match it.
+   * Measure the candidates' hit-test rects into `rects`, each clipped to its clip ancestor (see
+   * `#clipOf`). Consecutive candidates in one scroller (lists side by side in it) read its rect
+   * once. The ancestor is looked up on each pass: a list moved to another scroller mid-drag keeps
+   * its registration. The intersection is built as a plain DOMRect; an empty intersection yields
+   * a negative width/height so the `#hitTest` bounds check can never match it.
    */
-  #measureRects(
-    candidates: readonly HTMLElement[],
-    clips: readonly (Element | null)[],
-    rects: DOMRect[],
-  ): DOMRect[] {
+  #measureRects(candidates: readonly HTMLElement[], rects: DOMRect[]): DOMRect[] {
     let lastClip: Element | null = null;
     let lastClipRect: DOMRect | null = null;
     for (let i = 0; i < candidates.length; i++) {
       const rect = candidates[i].getBoundingClientRect();
-      const clip = clips[i];
+      const clip = this.#clipOf(candidates[i]);
       if (!clip) {
         rects[i] = rect;
         continue;
