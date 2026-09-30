@@ -467,7 +467,9 @@ await expect(async () => {
 ## Debugging & Diagnostics
 
 - Task-demo specs fail on any console or uncaught page error: `collectPageErrors(page)`
-  (`e2e/fixtures/page-errors.ts`), registered before navigation so load errors count.
+  (`e2e/fixtures/page-errors.ts`), registered before navigation so load errors count. It also
+  fails a test that loads its page more than once: load it once, with its settings in the URL. A
+  second load aborts the first page's font downloads, which Firefox reports as console errors.
 - Prefer `testInfo.attach()` for structured debug output over `console.log`.
 - When drift/hit-testing fails, capture:
   - viewport size (`window.innerHeight`)
