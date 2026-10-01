@@ -82,9 +82,26 @@ export default function LiveDemo({ example, title, height = 380 }: LiveDemoProps
   return (
     <figure className="vdnd-live-demo">
       <figcaption className="vdnd-live-demo__bar">
-        <span className="vdnd-live-demo__label">Live example</span>
+        <span className="vdnd-live-demo__caption">
+          <span className="vdnd-live-demo__label">Live example</span>
+          <span className="vdnd-live-demo__dot" aria-hidden="true" />
+          <span className="vdnd-live-demo__title">{title}</span>
+        </span>
         <a className="vdnd-live-demo__open" href={exampleUrl} target="_blank" rel="noreferrer">
-          Open in new tab ↗
+          Open in new tab
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M7 17L17 7M8 7h9v9" />
+          </svg>
         </a>
       </figcaption>
       {src ? (

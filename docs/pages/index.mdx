@@ -3,30 +3,98 @@ pageType: home
 title: ngx-virtual-dnd
 description: Angular drag and drop for virtual scrolling. Sortable lists and boards that stay fast with thousands of items.
 hero:
+  announcement:
+    badge: '3.4'
+    text: Shift animations now run on the compositor
+    link: /changelog
   name: ngx-virtual-dnd
   text: Drag and drop for virtual scrolling
+  highlight: virtual scrolling
   tagline: Sortable lists and boards for Angular that stay fast with thousands of items. Only the visible rows are rendered, and drag and drop still works across all of them.
   actions:
     - theme: brand
       text: Get started
       link: /guide/start/introduction
     - theme: alt
-      text: Quick start
-      link: /guide/start/quick-start
-    - theme: alt
       text: Live demo
       link: https://gultyayev.github.io/ngx-virtual-dnd/demo/
+  install: npm i ngx-virtual-dnd
 features:
   - title: Built for virtual lists
+    glyph: virtual-list
     details: Hit-testing and drop positions are computed from geometry, not from sibling DOM nodes, so drops land correctly on rows that are not rendered.
   - title: Dynamic item heights
+    glyph: heights
     details: Rows are measured with ResizeObserver and cached by ID. Lookups use prefix sums and binary search.
   - title: Multiple lists
+    glyph: lists
     details: Move items between any lists in the same group, with edge auto-scroll while dragging.
   - title: Keyboard and touch
+    glyph: keyboard
     details: Space to pick up, arrow keys to move, Escape to cancel. Touch drags support a hold delay so lists still scroll.
   - title: Signals first
+    glyph: signals
     details: Standalone components and directives for Angular 21 and 22. Drop events plus small helpers update your signal-based state.
   - title: Guides for AI assistants
+    glyph: document
     details: An installable agent skill and llms.txt give coding assistants the same guidance as these docs.
 ---
+
+import CodeTabs from '../components/CodeTabs';
+
+<div className="vdnd-quick-look">
+<div className="vdnd-quick-look__text">
+
+<p className="vdnd-quick-look__eyebrow">Quick look</p>
+
+## A sortable list of 1,000 rows in one template
+
+Only the rows on screen are in the DOM. Drops arrive as events, and a helper applies them to your signal.
+
+1. **Install the package** No providers and no global stylesheet to register.
+2. **Put rows and lists in a group** Declare the row template inside a `vdndGroup` element so every draggable finds its group.
+3. **Apply the drop** The library never changes your data. `reorderItems()` applies the move to your signal.
+
+[Read the quick start →](/guide/start/quick-start)
+
+</div>
+
+<CodeTabs>
+
+```angular-html title="template.html" {13}
+<div vdndGroup="tasks">
+  <ng-template #taskTpl let-task>
+    <div class="row" [vdndDraggable]="task.id">{{ task.title }}</div>
+  </ng-template>
+
+  <vdnd-sortable-list
+    droppableId="backlog"
+    [items]="tasks()"
+    [itemHeight]="48"
+    [containerHeight]="336"
+    [itemIdFn]="taskId"
+    [itemTemplate]="taskTpl"
+    (drop)="onDrop($event)"
+  />
+</div>
+
+<vdnd-drag-preview />
+```
+
+```ts title="quick-start.ts" {9}
+export class QuickStartExampleComponent {
+  readonly tasks = signal<Task[]>(
+    Array.from({ length: 1000 }, (_, i) => ({ id: `task-${i + 1}`, title: `Task ${i + 1}` })),
+  );
+
+  readonly taskId = (task: Task): string => task.id;
+
+  onDrop(event: DropEvent): void {
+    reorderItems(event, this.tasks);
+  }
+}
+```
+
+</CodeTabs>
+
+</div>

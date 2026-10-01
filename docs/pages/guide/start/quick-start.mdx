@@ -52,7 +52,11 @@ The library does not style rows or the drop placeholder, so the code above rende
 }
 ```
 
-With fixed heights, every row must be exactly `itemHeight` pixels tall, borders and padding included. Otherwise the rows on screen drift away from the positions the list calculates, and items drop in the wrong place. For rows that differ in height, see [Dynamic item heights](/guide/features/dynamic-heights). [Styling](/guide/features/styling) lists every class the library adds.
+:::warning Rows must be exactly itemHeight tall
+With fixed heights, every row must be exactly `itemHeight` pixels tall, borders and padding included. Otherwise the rows on screen drift away from the positions the list calculates, and items drop in the wrong place.
+:::
+
+For rows that differ in height, see [Dynamic item heights](/guide/features/dynamic-heights). [Styling](/guide/features/styling) lists every class the library adds.
 
 ## Next steps
 

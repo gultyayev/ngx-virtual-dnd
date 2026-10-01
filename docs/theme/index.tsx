@@ -3,6 +3,10 @@ import { Layout as OriginalLayout } from '@rspress/core/theme-original';
 import './index.css';
 
 export * from '@rspress/core/theme-original';
+// Named exports replace the wildcard's components of the same name.
+export { Callout } from './components/Callout';
+export { CodeBlock } from './components/CodeBlock';
+export { HomeLayout } from './components/HomeLayout';
 
 declare const process: { env: { VDND_VERSION: string } };
 

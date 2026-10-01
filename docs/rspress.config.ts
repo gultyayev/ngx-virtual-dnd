@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from '@rspress/core';
+import { defineConfig, type UserConfig } from '@rspress/core';
+import { transformerCompatibleMetaHighlight } from '@rspress/core/shiki-transformers';
+import { rehypeApiDetails } from './plugins/rehype-api-details';
+
+type ShikiTransformer = NonNullable<
+  NonNullable<NonNullable<UserConfig['markdown']>['shiki']>['transformers']
+>[number];
 
 const docsDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(docsDir, '..');
@@ -15,6 +21,21 @@ const BASE = '/ngx-virtual-dnd/';
 const REPO_URL = 'https://github.com/gultyayev/ngx-virtual-dnd';
 const DESCRIPTION =
   'Angular drag and drop for virtual scrolling: sortable lists that stay fast with thousands of items.';
+
+/**
+ * A code block that shows a file (` ```ts file="<root>/src/app/…" `) gets that path as its title,
+ * unless it sets its own `title=`.
+ */
+const fileTitleTransformer: ShikiTransformer = {
+  name: 'vdnd:file-title',
+  pre(pre) {
+    const meta = this.options.meta?.__raw ?? '';
+    if (/(?:^|\s)title=/.test(meta)) return pre;
+    const file = /(?:^|\s)file=["'`]?<root>\/([^"'`\s]+)/.exec(meta)?.[1];
+    if (file) pre.properties = { ...pre.properties, title: file };
+    return pre;
+  },
+};
 
 /**
  * Where `<LiveDemo>` iframes load the Angular examples from.
@@ -41,7 +62,23 @@ export default defineConfig({
   markdown: {
     // Available in every MDX page without an import.
     globalComponents: [path.join(docsDir, 'components/LiveDemo.tsx')],
+    rehypePlugins: [rehypeApiDetails],
+    shiki: {
+      // Angular components keep their template in a `template:` string. The angular-ts grammar
+      // is TypeScript plus Angular template highlighting inside it (plain ts shows one string).
+      langs: ['tsx', 'ts', 'js', 'angular-ts', 'angular-html'],
+      langAlias: { ts: 'angular-ts', typescript: 'angular-ts' },
+      // `{3,5}` in a fence's meta highlights those lines.
+      transformers: [transformerCompatibleMetaHighlight(), fileTitleTransformer],
+    },
   },
+  // English UI text that differs from Rspress's defaults.
+  i18nSource: (source) => ({
+    ...source,
+    searchPlaceholderText: { ...source['searchPlaceholderText'], en: 'Search docs' },
+    prevPageText: { ...source['prevPageText'], en: 'Previous' },
+    nextPageText: { ...source['nextPageText'], en: 'Next' },
+  }),
   // The font stylesheet itself is imported by theme/index.css (works in dev too).
   head: [
     '<link rel="preconnect" href="https://fonts.googleapis.com">',
@@ -67,8 +104,15 @@ export default defineConfig({
     editLink: {
       docRepoBaseUrl: `${REPO_URL}/tree/master/docs/pages`,
     },
+    // Shown on the home page only.
     footer: {
-      message: 'Released under the MIT License.',
+      message: [
+        '<span>Released under the MIT License.</span>',
+        `<a href="${REPO_URL}">GitHub</a>`,
+        '<a href="https://www.npmjs.com/package/ngx-virtual-dnd">npm</a>',
+        `<a href="${BASE}llms.txt">llms.txt</a>`,
+        `<a href="${BASE}llms-full.txt">llms-full.txt</a>`,
+      ].join(''),
     },
     llmsUI: {
       placement: 'outline',

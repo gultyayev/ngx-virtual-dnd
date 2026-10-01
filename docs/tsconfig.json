@@ -12,5 +12,5 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["rspress.config.ts", "theme", "components"]
+  "include": ["rspress.config.ts", "env.d.ts", "plugins", "theme", "components"]
 }
