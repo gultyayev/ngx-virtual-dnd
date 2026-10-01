@@ -83,9 +83,9 @@ test.describe('Drag UX Features - Cursor Management', () => {
     await expect(demoPage.list1Container).not.toHaveCSS('cursor', 'grabbing');
   });
 
-  // Toggling a rule that matches every element restyles the whole document at drag start and
-  // drop; the cursor rule covers lists and items only
-  test('does not restyle the rest of the page during a drag', async ({ page }) => {
+  // A cursor rule matching every element (`body.vdnd-dragging *`) restyles the whole document at
+  // drag start and drop; the rule covers lists and items only
+  test('keeps the cursor of elements outside lists during a drag', async ({ page }) => {
     await demoPage.startDrag(demoPage.list1Items.first());
     await expect(page.locator('body')).toHaveClass(/vdnd-dragging/);
 
