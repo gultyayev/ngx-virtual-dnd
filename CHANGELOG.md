@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.4.0](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.3.0...v3.4.0) (2026-10-01)
+
+### Features
+
+- **lib:** scope the grabbing cursor to lists and items, skip it for touch drags ([#109](https://github.com/gultyayev/ngx-virtual-dnd/issues/109)) ([8c74877](https://github.com/gultyayev/ngx-virtual-dnd/commit/8c7487722d0be4e77372076f8d35efa1c1414109))
+
+### Performance
+
+- **lib:** run shift animations on the compositor by animating translate ([#110](https://github.com/gultyayev/ngx-virtual-dnd/issues/110)) ([4cccdcf](https://github.com/gultyayev/ngx-virtual-dnd/commit/4cccdcfb5abab89d80a87be70d8f3a66cc800867))
+
 ## [3.3.0](https://github.com/gultyayev/angular-vdnd/compare/v3.2.1...v3.3.0) (2026-09-30)
 
 ### Features
