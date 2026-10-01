@@ -15,8 +15,6 @@ This page builds a sortable list of 1,000 tasks. `<vdnd-sortable-list>` combines
 
 ```
 
-The `row` and `list` classes, and the dashed drop placeholder in the example, come from the demo app's own styles. The library does not style items; see [Styling](/guide/features/styling) for the classes to target.
-
 ## What each part does
 
 1. **`vdndGroup="tasks"`** names the group that draggables and drop targets belong to. Items can only move between drop targets in the same group. A group is required even for a single list; without one, dragging is disabled.
@@ -27,8 +25,34 @@ The `row` and `list` classes, and the dashed drop placeholder in the example, co
 6. **`<vdnd-drag-preview />`** renders the element that follows the pointer. Place it once, anywhere in the template.
 
 :::tip Keyboard support is built in
-Every draggable can be focused with <kbd>Tab</kbd>. <kbd>Space</kbd> picks it up, the arrow keys move it, and <kbd>Space</kbd> or <kbd>Enter</kbd> drops it. See [Accessibility](/guide/more/accessibility).
+Every draggable can be focused with <kbd>Tab</kbd>. <kbd>Space</kbd> picks it up, the arrow keys move it, and <kbd>Space</kbd> or <kbd>Enter</kbd> drops it. See [Accessibility](/guide/features/accessibility).
 :::
+
+## Styles
+
+The library does not style rows or the drop placeholder, so the code above renders plain text rows and an invisible placeholder. Add at least this CSS:
+
+```css
+/* In the component's styles: the row template is declared in its template */
+.row {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 48px; /* exactly itemHeight */
+  padding: 0 16px;
+  border-bottom: 1px solid #e2e7f0;
+  background: #fff;
+}
+
+/* In a global stylesheet (styles.css): the library renders the placeholder */
+.vdnd-drag-placeholder-visible {
+  box-sizing: border-box;
+  border: 1.5px dashed #0e9488;
+  background: #e4f3f2;
+}
+```
+
+With fixed heights, every row must be exactly `itemHeight` pixels tall, borders and padding included. Otherwise the rows on screen drift away from the positions the list calculates, and items drop in the wrong place. For rows that differ in height, see [Dynamic item heights](/guide/features/dynamic-heights). [Styling](/guide/features/styling) lists every class the library adds.
 
 ## Next steps
 

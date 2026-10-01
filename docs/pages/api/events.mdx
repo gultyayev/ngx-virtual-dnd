@@ -64,17 +64,22 @@ interface DragEndEvent {
 }
 ```
 
-`destinationIndex` is `null` when nothing was dropped:
+`destinationIndex` is `null` when nothing was dropped. That happens when:
 
-- the drag was cancelled (<kbd>Escape</kbd>, <kbd>Tab</kbd> during a keyboard drag, or, during a pointer drag, the window losing focus or the page being hidden (the release would never reach the page) or the system cancelling the touch)
-- it was released outside every droppable
-- it was released over a disabled droppable
+- the drag was **cancelled**, by any of:
+  - <kbd>Escape</kbd>
+  - <kbd>Tab</kbd> during a keyboard drag
+  - the window losing focus during a pointer drag
+  - the page being hidden during a pointer drag (the release would never reach the page)
+  - the system cancelling a touch
+- the item was released outside every droppable
+- the item was released over a disabled droppable
 
-A non-null value means a `drop` event fired on the destination. `cancelled` is `true` only when the drag was cancelled (the first case).
+A non-null value means a `drop` event fired on the destination. `cancelled` is `true` only in the first case, so check `destinationIndex === null` to detect "no drop".
 
 ## PlaceholderMoveEvent
 
-Added in 3.2.0 (pre-release: `npm install ngx-virtual-dnd@next`).
+Added in 3.2.0.
 
 ```ts
 interface PlaceholderMoveEvent {
@@ -89,4 +94,8 @@ interface PlaceholderMoveEvent {
 
 Emitted each time the placeholder moves within a list, including when it enters the list. It is not emitted for the initial pick-up or when the placeholder leaves. Indexes follow the `DropEvent.destination.index` convention: where the item would land if dropped now. For the first move in the source list, `previousIndex` is the item's original index.
 
-Typical use is haptic feedback. See [Animations and haptics](/guide/features/animations#placeholder-move-events).
+Each event reports one placeholder update. During a fast pointer drag the placeholder can skip rows between updates, so `currentIndex` may differ from `previousIndex` by more than one.
+
+Listening runs change detection: like any Angular template listener, `(placeholderMove)` marks your component and its ancestors for check each time it fires. A list without the listener does not re-render your component on placeholder moves.
+
+Typical uses are [haptic feedback](/guide/features/animations#placeholder-move-events) and [screen reader announcements](/guide/features/accessibility#screen-reader-announcements).

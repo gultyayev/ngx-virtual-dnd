@@ -20,12 +20,10 @@ The clone is made in the frame the item lifts, and copying the styles takes long
 
 Pass a template to render your own preview instead of a clone:
 
-```angular-html
-<ng-template #preview let-task let-droppableId="droppableId">
-  <div class="preview-card">Moving {{ task.title }}</div>
-</ng-template>
+<LiveDemo example="custom-preview" title="List with a custom drag preview" height={370} />
 
-<vdnd-drag-preview [previewTemplate]="preview" />
+```ts file="<root>/src/app/examples/custom-preview/custom-preview.ts"
+
 ```
 
 The template context:

@@ -1,0 +1,60 @@
+---
+title: API overview
+description: Every export of ngx-virtual-dnd on one page, grouped by what you use it for.
+---
+
+# API overview
+
+Everything is exported from `ngx-virtual-dnd`. Most apps only use the exports in the first two tables.
+
+## Start here
+
+| Export                                                                                                  | Use it to                                                                  |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`VirtualSortableListComponent`](/api/components#virtualsortablelistcomponent) (`<vdnd-sortable-list>`) | Render a sortable virtual list: droppable, scroller and placeholder in one |
+| [`DraggableDirective`](/api/directives#draggabledirective) (`[vdndDraggable]`)                          | Make an item draggable                                                     |
+| [`DroppableGroupDirective`](/api/directives#droppablegroupdirective) (`[vdndGroup]`)                    | Name the group that lets lists exchange items                              |
+| [`DragPreviewComponent`](/api/components#dragpreviewcomponent) (`<vdnd-drag-preview>`)                  | Render the element that follows the pointer (place it once)                |
+| [`DropEvent`](/api/events#dropevent)                                                                    | Read where an item came from and where it was dropped                      |
+| [`moveItem`, `reorderItems`, `applyMove`](/api/utilities)                                               | Apply a drop to your signals or immutable state                            |
+
+## Events and helpers
+
+| Export                                                     | Use it to                                                               |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [`DragStartEvent`](/api/events#dragstartevent)             | React to a drag starting (`(dragStart)` on a draggable)                 |
+| [`DragEndEvent`](/api/events#dragendevent)                 | React to every drag ending, dropped or not (`(dragEnd)` on a draggable) |
+| [`PlaceholderMoveEvent`](/api/events#placeholdermoveevent) | Give feedback on every placeholder step (haptics, announcements)        |
+| [`isNoOpDrop`, `insertAt`, `removeAt`](/api/utilities)     | Skip drops back to the same place, or edit arrays immutably             |
+| [`DragStateService`](/api/services#dragstateservice)       | Read the current drag anywhere in the app, as signals                   |
+| [`VDND_ANIMATION_CONFIG`](/api/types#injection-tokens)     | Turn on shift and drop animations                                       |
+| [`AutoScrollConfig`](/api/types#configuration)             | Type of the `autoScrollConfig` input                                    |
+
+## Other list building blocks
+
+Use these instead of `<vdnd-sortable-list>` when you need your own markup or page-level scrolling. See [Choosing a component](/guide/essentials/choosing-a-component).
+
+| Export                                                                                                         | Use it to                                                         |
+| -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`DroppableDirective`](/api/directives#droppabledirective) (`[vdndDroppable]`)                                 | Make your own element a drop target                               |
+| [`VirtualScrollContainerComponent`](/api/components#virtualscrollcontainercomponent) (`<vdnd-virtual-scroll>`) | Virtual scroller inside a `vdndDroppable`, with scrolling methods |
+| [`ScrollableDirective`](/api/directives#scrollabledirective) (`[vdndScrollable]`)                              | Mark the element that scrolls, for page-level scrolling           |
+| [`VirtualContentComponent`](/api/components#virtualcontentcomponent) (`<vdnd-virtual-content>`)                | Virtual rows inside a `vdndScrollable`                            |
+| [`ContentHeaderDirective`](/api/directives#contentheaderdirective) (`[vdndContentHeader]`)                     | Measure a header above the rows of `<vdnd-virtual-content>`       |
+| [`VirtualForDirective`](/api/directives#virtualfordirective) (`*vdndVirtualFor`)                               | Render only the visible items, as a structural directive          |
+| [`VirtualViewportComponent`](/api/components#virtualviewportcomponent) (`<vdnd-virtual-viewport>`)             | Self-scrolling container for `*vdndVirtualFor`                    |
+
+## Advanced
+
+Most apps never need these. They exist for custom containers and low-level integrations.
+
+| Export                                                                                                                                  | What it is                                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [`AutoScrollService`](/api/services#autoscrollservice)                                                                                  | Edge scrolling during drags                                            |
+| [`PositionCalculatorService`, `ElementCloneService`, `KeyboardDragService`, `OverlayContainerService`](/api/services#advanced-services) | Internals exported for customization                                   |
+| [`PlaceholderComponent`](/api/components#placeholdercomponent) (`<vdnd-placeholder>`)                                                   | A drop indicator you render yourself; the built-in lists do not use it |
+| [`DragPlaceholderComponent`](/api/components#dragplaceholdercomponent) (`<vdnd-drag-placeholder>`)                                      | The placeholder the built-in lists render                              |
+| [`VirtualScrollStrategy`, `FixedHeightStrategy`, `DynamicHeightStrategy`](/api/types#strategies)                                        | Virtual scroll math, for building your own container                   |
+| [`VDND_SCROLL_CONTAINER`, `VDND_VIRTUAL_VIEWPORT`, `VDND_GROUP_TOKEN`](/api/types#injection-tokens)                                     | Tokens the library's containers provide                                |
+| [Template contexts](/api/types#template-contexts) and [drag state types](/api/types#drag-state)                                         | Types of template variables and of `DragStateService` values           |
+| [`END_OF_LIST`, `INITIAL_DRAG_STATE`](/api/types#constants)                                                                             | Constants. `END_OF_LIST` is deprecated                                 |

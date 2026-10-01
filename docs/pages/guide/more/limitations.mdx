@@ -1,0 +1,66 @@
+---
+title: Known limitations
+description: What ngx-virtual-dnd does not do, and the browser and Angular behavior it cannot work around.
+---
+
+# Known limitations
+
+## Scope
+
+- **Vertical lists only.** Lists scroll and reorder vertically. Horizontal lists, grids with 2D reordering and freeform canvases are not supported. A board of side-by-side vertical columns works.
+- **Items move between lists, never outside them.** There is no free dragging to an arbitrary position, and no dropping files from the desktop.
+- **No enter predicate.** A droppable has no input that rejects some items. Bind its `disabled` input from the drag state instead; see [Accepting only some items](/guide/essentials/multiple-lists#accepting-only-some-items).
+
+## Hit-testing
+
+Because hit-testing uses geometry rather than `elementFromPoint()`, some browser behavior is not reproduced:
+
+- **Overlays do not block drops.** A modal or toolbar painted over a droppable does not stop the droppable underneath from being hit.
+- **Stacking order is approximated.** "Last in document order wins" matches the paint order in most layouts. It does not follow `z-index` or stacking contexts, so a droppable earlier in the DOM but raised visually loses to a later sibling.
+
+If your layout depends on either, keep overlapping droppables in different groups, or avoid painting interactive overlays across active drop targets during a drag.
+
+## Animations on rows that move
+
+This is a limitation of Angular. The lists move a row's view with `ViewContainerRef.move()`, as `*ngFor` does, and Angular animates a view that moves as if it left and came back: it plays the row's leave animation (`animate.leave`) and its enter animation (`animate.enter`). Only `@for` avoids that. Rows move when the items change order, for example after a drop or a sort. A row in `stickyItemIds` also moves each time it scrolls past the edge of the rendered rows.
+
+What happens to a row with `animate.leave` then depends on the Angular version:
+
+- Before Angular 21.2.1, Angular removes the row from the page when its leave animation ends, so it disappears.
+- From Angular 21.2.1, the row stays, unless it moves again before its leave animation ends: then Angular removes it.
+- On Angular 21, the row also keeps its leave class after the animation. A leave style that holds its end state, such as a transition to `opacity: 0`, leaves the row invisible.
+
+To avoid it during a drag, turn the animations off: give `[animate.leave]` an empty value from `dragStart` until the drop has rendered. Angular reads the value when the animation runs, after the render that moves the rows, so turn it back on in the `read` phase of that render:
+
+```ts
+readonly leaveAnimation = signal('row-leave');
+readonly #injector = inject(Injector);
+
+onDragStart(): void {
+  this.leaveAnimation.set('');
+}
+
+onDragEnd(): void {
+  // Angular runs the leave animations of the moved rows before the read phase of the next render
+  afterNextRender(
+    { read: () => this.leaveAnimation.set('row-leave') },
+    { injector: this.#injector },
+  );
+}
+```
+
+```html
+<div
+  class="item"
+  [animate.leave]="leaveAnimation()"
+  [vdndDraggable]="item.id"
+  (dragStart)="onDragStart()"
+  (dragEnd)="onDragEnd()"
+></div>
+```
+
+Bind `[animate.enter]` to a signal and clear it the same way, so moved rows don't replay their enter animation either.
+
+Before Angular 21.2.1 this is not enough, because Angular removes a row that moves even when its leave animation is empty. Update Angular, or keep `animate.leave` off rows that can move.
+
+This only covers drags. Turn the animations off the same way around a sort of your own, and keep `animate.leave` off rows in `stickyItemIds`: they move while the list scrolls. A bound `[animate.leave]` also keeps a row from being recycled, even while its value is empty (see [Row recycling](/guide/features/performance#row-recycling)).

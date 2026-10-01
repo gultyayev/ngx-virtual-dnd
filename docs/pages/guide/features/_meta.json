@@ -5,5 +5,7 @@
   "auto-scroll",
   "preview-and-placeholder",
   "animations",
-  "styling"
+  "styling",
+  "accessibility",
+  "performance"
 ]

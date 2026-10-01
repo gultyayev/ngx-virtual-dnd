@@ -28,6 +28,16 @@ export const EXAMPLE_ROUTES: Routes = [
       import('./dynamic-height/dynamic-height').then((m) => m.DynamicHeightExampleComponent),
   },
   {
+    path: 'page-scroll',
+    loadComponent: () =>
+      import('./page-scroll/page-scroll').then((m) => m.PageScrollExampleComponent),
+  },
+  {
+    path: 'custom-preview',
+    loadComponent: () =>
+      import('./custom-preview/custom-preview').then((m) => m.CustomPreviewExampleComponent),
+  },
+  {
     path: 'shift-animation',
     loadComponent: () =>
       import('./shift-animation/shift-animation').then((m) => m.ShiftAnimationExampleComponent),

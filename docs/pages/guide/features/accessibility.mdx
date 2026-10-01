@@ -1,6 +1,6 @@
 ---
 title: Accessibility
-description: Keyboard dragging, managed ARIA attributes, focus handling and screen reader announcements.
+description: Keyboard dragging, focus handling, screen reader instructions and announcements.
 ---
 
 # Accessibility
@@ -25,53 +25,96 @@ In `<vdnd-sortable-list>` and `<vdnd-virtual-scroll>`, moving past the edge of t
 ## Managed for you
 
 - `tabindex="0"` on draggables (`-1` when disabled)
-- `aria-grabbed` on draggables and `aria-dropeffect="move"` on droppables
 - After a keyboard drag, focus returns to the moved item in its new position
+- `aria-grabbed` on draggables and `aria-dropeffect="move"` on droppables
+
+`aria-grabbed` and `aria-dropeffect` are deprecated since ARIA 1.1, and most screen readers ignore them. They do not tell screen reader users that an item can be dragged, how to drag it, or where it is. Add instructions and announcements yourself, as described below.
+
+## Instructions
+
+Nothing tells a screen reader user that <kbd>Space</kbd> picks an item up. Describe the keys once in a hidden element and point every draggable at it with `aria-describedby`. Screen readers read the description when the item gets focus:
+
+```angular-html
+<p id="drag-instructions" hidden>
+  Press Space to pick up. Use the arrow keys to move, Space to drop and Escape to cancel.
+</p>
+
+<ng-template #taskTpl let-task>
+  <div [vdndDraggable]="task.id" aria-describedby="drag-instructions">{{ task.title }}</div>
+</ng-template>
+```
 
 ## Screen reader announcements
 
-The library does not make announcements itself, so wording and translations stay in your hands. The drag events carry everything you need. Render the messages in a live region:
+The library does not make announcements itself, so wording and translations stay in your hands. The events carry everything you need: `(dragStart)` for the pick-up, `(placeholderMove)` for every step and `(dragEnd)` for the result. Render the messages in a live region:
 
 ```ts
 @Component({
   template: `
+    <p id="drag-instructions" hidden>
+      Press Space to pick up. Use the arrow keys to move, Space to drop and Escape to cancel.
+    </p>
+
     <div vdndGroup="tasks">
       <ng-template #taskTpl let-task>
         <div
           [vdndDraggable]="task.id"
-          (dragStart)="
-            announce('Picked up ' + task.title + ', position ' + ($event.sourceIndex + 1))
-          "
-          (dragEnd)="announceEnd($event)"
+          [vdndDraggableData]="task"
+          aria-describedby="drag-instructions"
+          (dragStart)="onDragStart($event)"
+          (dragEnd)="onDragEnd($event)"
         >
           {{ task.title }}
         </div>
       </ng-template>
 
-      <!-- vdnd-sortable-list using taskTpl ... -->
+      <vdnd-sortable-list
+        droppableId="tasks"
+        [items]="tasks()"
+        [itemHeight]="48"
+        [containerHeight]="400"
+        [itemIdFn]="taskId"
+        [itemTemplate]="taskTpl"
+        (drop)="onDrop($event)"
+        (placeholderMove)="onPlaceholderMove($event)"
+      />
     </div>
 
     <div class="sr-only" aria-live="assertive">{{ announcement() }}</div>
   `,
 })
 export class TasksComponent {
+  readonly #dragState = inject(DragStateService);
   readonly announcement = signal('');
 
-  announce(message: string): void {
-    this.announcement.set(message);
+  onDragStart(event: DragStartEvent): void {
+    const task = event.data as Task;
+    this.announcement.set(
+      `Picked up ${task.title}, position ${event.sourceIndex + 1} of ${this.tasks().length}`,
+    );
   }
 
-  announceEnd(event: DragEndEvent): void {
-    this.announce(
+  onPlaceholderMove(event: PlaceholderMoveEvent): void {
+    // Pointer users see the placeholder move; announce keyboard steps only
+    if (!this.#dragState.isKeyboardDrag()) return;
+    this.announcement.set(`Position ${event.currentIndex + 1} of ${this.tasks().length}`);
+  }
+
+  onDragEnd(event: DragEndEvent): void {
+    this.announcement.set(
       event.destinationIndex === null
         ? `Cancelled. Back at position ${event.sourceIndex + 1}`
         : `Dropped at position ${event.destinationIndex + 1}`,
     );
   }
+
+  // tasks, taskId and onDrop as in the Quick start
 }
 ```
 
 `.sr-only` is the usual visually-hidden utility (`position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);`).
+
+With [multiple lists](/guide/essentials/multiple-lists), also name the list in the step message: `event.droppableId` is the list the placeholder is in.
 
 ## Touch
 

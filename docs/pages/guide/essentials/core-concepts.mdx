@@ -40,8 +40,9 @@ Breaking any of these rules causes no build error. The list just does not drag, 
 3. **The draggable ID must equal the list's item ID**: what `itemIdFn(item)` returns, or the `trackBy` key for `*vdndVirtualFor`. IDs are strings, so convert numeric IDs the same way in both places.
 4. **Draggable IDs must be unique across all lists**, and droppable IDs must be unique on the page.
 5. **Render `<vdnd-drag-preview />` once.** Without it, dragging works but nothing follows the pointer.
-6. **Give every virtual list a height**, with `containerHeight` or with CSS. A list without a height collapses to 0 px.
+6. **Give every virtual list a height**, with `containerHeight` or with CSS. A list without a height collapses to 0 px. To size `<vdnd-sortable-list>` with CSS, set the height on its inner `vdnd-virtual-scroll` from a global stylesheet.
 7. **Put `vdndDraggable` on the root element of the item template.** A wrapper around it would stay in the list during the drag and leave a gap.
 8. **Bind `(drop)` on every list that can receive items.** It fires on the destination only.
+9. **With fixed heights, make every row exactly `itemHeight` pixels tall**, borders and padding included. Otherwise the rows on screen drift away from the positions the list calculates. For rows of different heights, use [`dynamicItemHeight`](/guide/features/dynamic-heights).
 
 [Troubleshooting](/guide/more/troubleshooting) maps common symptoms back to these rules.

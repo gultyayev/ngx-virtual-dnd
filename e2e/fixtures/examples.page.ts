@@ -6,6 +6,8 @@ export type ExampleSlug =
   | 'multiple-lists'
   | 'drag-handle'
   | 'dynamic-height'
+  | 'page-scroll'
+  | 'custom-preview'
   | 'shift-animation';
 
 /**

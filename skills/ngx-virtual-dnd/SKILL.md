@@ -43,6 +43,8 @@ These mistakes produce no build error, only a list that does not drag or drops w
 
 8. **Bind `(drop)` on every list that can receive items.** It fires only on the destination droppable, so in a multi-list setup each list needs the handler.
 
+9. **With fixed heights, every row must be exactly `itemHeight` px tall**, borders and padding included (`box-sizing: border-box`). Fixed-height offsets are `index * itemHeight`, so rows of another height drift from the calculated positions and items drop in the wrong place. Use `[dynamicItemHeight]="true"` when rows differ.
+
 ## Quick start
 
 `VirtualSortableListComponent` (`<vdnd-sortable-list>`) is the default choice: it combines the droppable, virtual scroll, placeholder, and keeps the dragged item rendered.
@@ -333,6 +335,18 @@ Measurement relies on rules 3 and 7: the measured element is the one whose `data
 These inputs exist on `vdndDroppable` and on `vdnd-sortable-list`:
 
 - **`disabled`** — the droppable is skipped as a target: pointer hit-testing falls through to whatever enabled droppable is underneath, and keyboard ArrowLeft/ArrowRight skip it. Releasing over it emits no `(drop)`; `(dragEnd)` still fires with `cancelled: false` and `destinationIndex: null`. It gets `vdnd-droppable-disabled`.
+
+  **Accepting only some items:** there is no enter predicate, and returning early from `(drop)` still lets the list open a placeholder slot during the drag (a drop that then does not happen). Instead bind `disabled` from the drag state; it is read on every hit-test, so a change mid-drag applies from the next frame:
+
+  ```typescript
+  readonly #dragState = inject(DragStateService);
+  // Draggables set [vdndDraggableData]="task"
+  readonly doneRejectsDrag = computed(() => {
+    const task = this.#dragState.draggedItem()?.data as Task | undefined;
+    return task !== undefined && !task.assignee;
+  });
+  // <vdnd-sortable-list droppableId="done" [disabled]="doneRejectsDrag()" ... />
+  ```
 - **`constrainToContainer`** — clamps the preview and the drop position to the container's bounds (the nearest `vdndScrollable` ancestor if there is one, otherwise the droppable).
 - **`autoScrollEnabled`** (default `true`) and **`autoScrollConfig`** — edge scrolling while dragging near the edge of a scrollable container. Also available on `vdnd-virtual-scroll`, `vdnd-virtual-viewport`, and `vdndScrollable`.
 
@@ -391,7 +405,7 @@ Items then slide into their new position (works with virtual scrolling and dynam
 
 With the config present, the drop animation also plays: on drop or cancel the preview stays up (class `vdnd-drag-preview-dropping`) and glides from the release point onto the item's final position, while that item stays invisible (`opacity` animation) until it lands. `drop`/`dragEnd` still fire immediately — it is purely visual. It lands on the item as rendered after your `(drop)` handler, so commit the move synchronously (`moveItem()`/`reorderItems()`); if the item is not rendered or scrolled out of view, the preview fades out in place. A new drag cuts it short. Set `dropDuration: 0` to keep shift animations only.
 
-**Rows with `animate.leave` or `animate.enter` (Angular limitation).** The lists move rows with `ViewContainerRef.move()` (as `*ngFor` does), and Angular plays the leave and enter animations of a view that moves; only `@for` avoids it. Rows move when items change order (a drop, a sort), and a `stickyItemIds` row moves when it scrolls past the edge of the rendered rows. A moved row with `animate.leave` is removed from the page when the animation ends before Angular 21.2.1; from 21.2.1 it stays unless it moves again before the animation ends, and on Angular 21 it keeps its leave class (a leave style that holds its end state, like a transition to `opacity: 0`, leaves it invisible). To avoid it during a drag, turn the animations off: bind `[animate.leave]="leaveAnimation()"` (and `[animate.enter]` the same way), set `leaveAnimation` to `''` in `(dragStart)`, and back from `(dragEnd)` with `afterNextRender({ read: () => ... }, { injector })` (Angular reads the value when the animation runs, after the render that moves the rows). Before Angular 21.2.1 a moved row is removed even with an empty value: update Angular or keep `animate.leave` off rows that can move. Do the same around your own sorts, keep `animate.leave` off `stickyItemIds` rows, and note that a bound `[animate.leave]` keeps rows from being recycled. Details: How it works → Known limitations in the docs.
+**Rows with `animate.leave` or `animate.enter` (Angular limitation).** The lists move rows with `ViewContainerRef.move()` (as `*ngFor` does), and Angular plays the leave and enter animations of a view that moves; only `@for` avoids it. Rows move when items change order (a drop, a sort), and a `stickyItemIds` row moves when it scrolls past the edge of the rendered rows. A moved row with `animate.leave` is removed from the page when the animation ends before Angular 21.2.1; from 21.2.1 it stays unless it moves again before the animation ends, and on Angular 21 it keeps its leave class (a leave style that holds its end state, like a transition to `opacity: 0`, leaves it invisible). To avoid it during a drag, turn the animations off: bind `[animate.leave]="leaveAnimation()"` (and `[animate.enter]` the same way), set `leaveAnimation` to `''` in `(dragStart)`, and back from `(dragEnd)` with `afterNextRender({ read: () => ... }, { injector })` (Angular reads the value when the animation runs, after the render that moves the rows). Before Angular 21.2.1 a moved row is removed even with an empty value: update Angular or keep `animate.leave` off rows that can move. Do the same around your own sorts, keep `animate.leave` off `stickyItemIds` rows, and note that a bound `[animate.leave]` keeps rows from being recycled. Details: Known limitations in the docs.
 
 For haptics on every step, use `(placeholderMove)` on `vdndDroppable` / `vdnd-sortable-list` (`PlaceholderMoveEvent`: `previousIndex` → `currentIndex`, same index convention as `DropEvent.destination.index`; `previousIndex` is `null` when the placeholder entered the list). Not emitted for the initial pick-up or when the placeholder leaves.
 
@@ -417,42 +431,72 @@ Useful signals: `isDragging`, `draggedItem`, `draggedItemId`, `sourceDroppableId
 | `ArrowLeft`/`ArrowRight` | —                             | Moves to the neighbouring droppable of the same group, by on-screen x position (disabled ones skipped) |
 | `Escape`             | —                                 | Cancels (also cancels pointer drags)                        |
 
-Managed automatically: `tabindex` (`0`, or `-1` when disabled) and `aria-grabbed` on draggables, `aria-dropeffect="move"` on droppables. After a keyboard drag ends, focus returns to the moved item.
+Managed automatically: `tabindex` (`0`, or `-1` when disabled) on draggables, and focus returns to the moved item after a keyboard drag. The library also sets `aria-grabbed` on draggables and `aria-dropeffect="move"` on droppables, but both are deprecated since ARIA 1.1 and most screen readers ignore them: add instructions and announcements yourself.
 
-The library does not announce anything to screen readers (to leave wording and i18n to you). Use the events:
+**Instructions.** Nothing tells a screen reader user that Space picks an item up. Describe the keys in a hidden element and reference it from every draggable with `aria-describedby`.
+
+**Announcements.** The library does not announce anything (to leave wording and i18n to you). Use `(dragStart)` for the pick-up, `(placeholderMove)` for every keyboard step (`currentIndex` is where the item would land; skip pointer drags with `DragStateService.isKeyboardDrag()`), and `(dragEnd)` for the result:
 
 ```typescript
 @Component({
   template: `
+    <p id="drag-instructions" hidden>
+      Press Space to pick up. Use the arrow keys to move, Space to drop and Escape to cancel.
+    </p>
+
     <div vdndGroup="tasks">
-      <ng-template #itemTpl let-item>
+      <ng-template #taskTpl let-task>
         <div
-          [vdndDraggable]="item.id"
-          (dragStart)="announce('Picked up ' + item.name + ', position ' + ($event.sourceIndex + 1))"
-          (dragEnd)="announceEnd($event)"
+          [vdndDraggable]="task.id"
+          [vdndDraggableData]="task"
+          aria-describedby="drag-instructions"
+          (dragStart)="onDragStart($event)"
+          (dragEnd)="onDragEnd($event)"
         >
-          {{ item.name }}
+          {{ task.title }}
         </div>
       </ng-template>
-      <!-- vdnd-sortable-list using itemTpl ... -->
+
+      <vdnd-sortable-list
+        droppableId="tasks"
+        [items]="tasks()"
+        [itemHeight]="48"
+        [containerHeight]="400"
+        [itemIdFn]="taskId"
+        [itemTemplate]="taskTpl"
+        (drop)="onDrop($event)"
+        (placeholderMove)="onPlaceholderMove($event)"
+      />
     </div>
+
     <div class="sr-only" aria-live="assertive">{{ announcement() }}</div>
   `,
 })
 export class TasksComponent {
+  readonly #dragState = inject(DragStateService);
   readonly announcement = signal('');
 
-  announce(message: string): void {
-    this.announcement.set(message);
+  onDragStart(event: DragStartEvent): void {
+    const task = event.data as Task;
+    this.announcement.set(
+      `Picked up ${task.title}, position ${event.sourceIndex + 1} of ${this.tasks().length}`,
+    );
   }
 
-  announceEnd(event: DragEndEvent): void {
-    this.announce(
+  onPlaceholderMove(event: PlaceholderMoveEvent): void {
+    if (!this.#dragState.isKeyboardDrag()) return; // pointer users see the placeholder
+    this.announcement.set(`Position ${event.currentIndex + 1} of ${this.tasks().length}`);
+  }
+
+  onDragEnd(event: DragEndEvent): void {
+    this.announcement.set(
       event.destinationIndex === null
         ? `Cancelled. Back at position ${event.sourceIndex + 1}`
         : `Dropped at position ${event.destinationIndex + 1}`,
     );
   }
+
+  // tasks, taskId and onDrop as in the quick start
 }
 ```
 

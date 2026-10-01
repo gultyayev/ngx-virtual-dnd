@@ -1,0 +1,52 @@
+---
+title: Performance
+description: Row recycling, overscan, the drag preview and the other settings that affect speed with large lists.
+---
+
+# Performance
+
+Virtual scrolling keeps the DOM small however long the list grows, so most apps need no tuning. This page collects the settings that matter when rows are costly to render or devices are slow.
+
+## Row recycling
+
+By default, `<vdnd-sortable-list>` and `<vdnd-virtual-scroll>` create a row's view (its elements, components and directives) when the row scrolls into range, and destroy it when the row scrolls out. With `[recycleRows]="true"` they keep the views of the rows that scroll out and render the rows that scroll in with them, so scrolling creates few components and elements. `*vdndVirtualFor` always recycles rows.
+
+A recycled view renders another item, and keeps whatever does not come from its bindings:
+
+- **Components in the row are not created again.** Their constructor and `ngOnInit` run once, for the first item the view renders; later items only change their inputs. Derive what a row shows from its inputs (`input()`, `computed()`), not from values read once in `ngOnInit`.
+- **Local state stays with the view.** A component's own fields and signals, and the value of an input field that is not bound to the item, show up on the next item.
+- **DOM state that no binding sets stays**: classes or styles set from code, an element's scroll position, an `<img>` until its new `src` loads.
+
+Focus does not carry over: a view leaves the DOM before it renders another item. A row keeps its view while its item stays rendered, as without recycling.
+
+A row with a leave animation (`animate.leave`) on its root element is not recycled, by `*vdndVirtualFor` either, even when its bound value is empty: Angular keeps the row in the DOM until the leave animation has run. On Angular 22 this also applies to `animate.leave` on any element inside the row. See [Animations on rows that move](/guide/more/limitations#animations-on-rows-that-move).
+
+Turn it on for rows that are costly to create (several components, many elements) and render only from their item.
+
+## Overscan
+
+`overscan` is the number of rows rendered beyond the visible area, above and below. The default is `3`. Raise it if fast scrolling shows empty space before rows appear. Lower it when rows are costly to render.
+
+```angular-html
+<vdnd-sortable-list [overscan]="5" ... />
+
+<ng-container *vdndVirtualFor="let task of tasks(); trackBy: trackById; overscan: 5">...</ng-container>
+```
+
+`<vdnd-sortable-list>`, `<vdnd-virtual-scroll>` and `*vdndVirtualFor` accept it.
+
+## Fixed or dynamic heights
+
+Fixed heights cost nothing to measure: every offset is `index * itemHeight`. [`dynamicItemHeight`](/guide/features/dynamic-heights) observes every rendered row with a `ResizeObserver`. Turn it on only when rows really differ in height.
+
+## The drag preview
+
+The default preview clones the dragged row and copies its computed styles, in the frame the item lifts. That takes longer the more elements the row has. For rows with many elements, a [custom preview template](/guide/features/preview-and-placeholder#custom-preview) is cheaper: with a template, drags skip the clone.
+
+## Placeholder move listeners
+
+Like any Angular template listener, `(placeholderMove)` marks your component and its ancestors for check each time it fires, which can be many times per second during a drag. Bind it only where you use it, and keep the handler cheap. See [Placeholder move events](/guide/features/animations#placeholder-move-events).
+
+## Global styles during a drag
+
+The library adds `vdnd-dragging` to `<body>` at drag start and removes it at drop. A rule such as `body.vdnd-dragging *` restyles every element on the page both times. Target the elements you need instead; see [The built-in cursor](/guide/features/styling#the-built-in-cursor).

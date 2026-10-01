@@ -1,0 +1,72 @@
+---
+title: FAQ
+description: Angular versions, zoneless apps, server-side rendering, lists in different components, and testing drag and drop.
+---
+
+# FAQ
+
+## Which Angular versions are supported?
+
+Angular 21 and 22. See [Installation](/guide/start/installation#requirements).
+
+## Does it work in zoneless apps? And with zone.js?
+
+Both. Drag state lives in signals, so zoneless apps need nothing extra; the live examples in these docs are zoneless. In zone.js apps, `dragStart`, `dragEnd` and `drop` are emitted inside the zone, so handlers that change plain fields still render.
+
+## Does it work with server-side rendering?
+
+Yes. On the server, the lists render their first rows without errors and without a browser `document`, and drag and drop starts once the app runs in the browser. The library's tests render every list component with Angular's server renderer.
+
+## Can lists in different components exchange items?
+
+Yes. Groups are matched by name, so two `vdndGroup="board"` elements in different components form one group. Each component declares its item template inside its own `vdndGroup` element, and draggable IDs must still be unique across all lists.
+
+Only the destination list emits `(drop)`, so the component of the source list does not hear about the move. Keep the lists' data in a shared service or store and apply the move there, for example with [`applyMove()`](/guide/essentials/handling-drops#stores-and-immutable-state).
+
+## Can a list accept only some items?
+
+Yes, by disabling it while an item it rejects is dragged. See [Accepting only some items](/guide/essentials/multiple-lists#accepting-only-some-items).
+
+## Can I reorder horizontally, or in a grid?
+
+No. Lists are vertical; a board of side-by-side vertical columns works. See [Known limitations](/guide/more/limitations#scope).
+
+## How do I save the new order to a server?
+
+Apply the move in `(drop)` straight away, send the request, and roll back if it fails. See [Saving to a server](/guide/essentials/handling-drops#saving-to-a-server).
+
+## Does it work with Ionic?
+
+Yes, including lists that scroll with `ion-content`. See [Page-level scrolling](/guide/features/page-scroll#ionic).
+
+## How do I test drag and drop in my app?
+
+**Unit-test the drop handler.** It only maps a `DropEvent` to new data, so call it with an event object:
+
+```ts
+it('moves a task to "done"', () => {
+  component.onDrop({
+    source: { draggableId: 'task-1', droppableId: 'todo', index: 0 },
+    // placeholderId is deprecated, but the type requires it until the next major version
+    destination: { droppableId: 'done', placeholderId: 'END_OF_LIST', index: 0 },
+  });
+
+  expect(component.done()[0].id).toBe('task-1');
+});
+```
+
+**Test the drag itself in a real browser**, with Playwright or Cypress. Hit-testing works from element positions, and jsdom (used by Jest) has no layout, so drags cannot be simulated there.
+
+- The library sets `data-draggable-id` and `data-droppable-id` to their IDs. Use them to find items and lists.
+- A virtual list renders only the rows in view. Scroll a row into view before you look for it.
+- Keyboard drags need no coordinates, which makes them the simplest to script:
+
+```ts
+await page.locator('[data-draggable-id="task-1"]').focus();
+await page.keyboard.press('Space');
+await expect(page.locator('.vdnd-drag-preview')).toBeVisible();
+await page.keyboard.press('ArrowDown');
+await page.keyboard.press('Space');
+```
+
+- For a pointer drag, press on the item, move past the drag threshold (5 px by default), wait for `.vdnd-drag-preview` to appear, then move to the target in several steps and release. A single jump straight to the target can be released before the library has processed the new position.

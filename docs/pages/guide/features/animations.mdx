@@ -7,10 +7,6 @@ description: Slide displaced rows into place while dragging, glide the dropped i
 
 By default, rows displaced by the placeholder jump to their new position, and the preview disappears on drop. Provide `VDND_ANIMATION_CONFIG` to make rows slide and the dropped item glide into its slot instead. For feedback on every step, such as a haptic tick, listen to `(placeholderMove)`.
 
-:::info Added in 3.2.0
-Both features are new in 3.2.0, which is currently a pre-release. Install it with `npm install ngx-virtual-dnd@next`.
-:::
-
 <LiveDemo
   example="shift-animation"
   title="Sliding rows and a placeholder move counter"
@@ -98,19 +94,6 @@ onPlaceholderMove(event: PlaceholderMoveEvent): void {
 }
 ```
 
-The event fires when the placeholder enters the list and on every move inside it. It does not fire for the initial pick-up, when the placeholder still sits in the item's own slot, or when the placeholder leaves the list.
+The event fires when the placeholder enters the list and on every move inside it. It does not fire for the initial pick-up or when the placeholder leaves the list. `currentIndex` is where the item would land if it were dropped now, so it also suits [screen reader announcements](/guide/features/accessibility#screen-reader-announcements). See [`PlaceholderMoveEvent`](/api/events#placeholdermoveevent) for every field.
 
-| Field               | Meaning                                                                             |
-| ------------------- | ----------------------------------------------------------------------------------- |
-| `draggableId`       | The dragged item                                                                    |
-| `sourceDroppableId` | The list the drag started in                                                        |
-| `droppableId`       | The list the placeholder moved within                                               |
-| `previousIndex`     | The previous insertion index, or `null` when the placeholder just entered this list |
-| `currentIndex`      | The new insertion index                                                             |
-| `data`              | The dragged item's `vdndDraggableData`                                              |
-
-Both indexes follow the same convention as [`DropEvent.destination.index`](/api/events#dropevent): the index the item would get if it were dropped now. For the first move in the source list, `previousIndex` is the item's original index.
-
-Each event reports one placeholder update. During a fast pointer drag the placeholder can skip rows between updates, so `currentIndex` may differ from `previousIndex` by more than one. Keep the handler cheap: it runs during the drag.
-
-Listening costs a change detection pass: like any Angular template listener, `(placeholderMove)` marks your component and its ancestors for check each time it fires. Bind it only where you use it; a list without the listener does not re-render your component on placeholder moves.
+Keep the handler cheap, and bind it only where you use it: each event runs change detection for your component and its ancestors (see [Performance](/guide/features/performance#placeholder-move-listeners)).

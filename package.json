@@ -2,6 +2,10 @@
   "name": "dnd",
   "version": "0.0.0",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gultyayev/ngx-virtual-dnd.git"
+  },
   "scripts": {
     "ng": "ng",
     "start": "ng serve",

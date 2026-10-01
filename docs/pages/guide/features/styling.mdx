@@ -5,7 +5,9 @@ description: The CSS classes the library adds, with common recipes.
 
 # Styling
 
-The library ships no visual styles for items or lists. Its only built-in style is a `grabbing` cursor over lists and items (`vdnd-droppable` and `vdnd-draggable` elements) during mouse and keyboard drags. The rest of the page keeps its cursor, and so do elements inside items and lists that set their own `cursor` (a drag handle with `cursor: grab`, a button); the `pointer-events: none` recipe below covers those inside items. Touch drags get no cursor. Everything else is state classes that you style however you like.
+The library ships no visual styles for items, lists or the drop placeholder. It adds state classes, listed below, that you style however you like.
+
+Put the rules below in a global stylesheet (`styles.css`, or a component with `ViewEncapsulation.None`). The library renders the preview, the placeholder and the lists' inner elements, so your component's scoped styles do not reach them. Styles for your own row elements can stay in the component that declares the row template.
 
 ## Classes
 
@@ -29,32 +31,22 @@ The library ships no visual styles for items or lists. Its only built-in style i
 
 ## Recipes
 
+Show where the item will land:
+
+```css
+.vdnd-drag-placeholder {
+  box-sizing: border-box;
+  border: 2px dashed #9aa4b2;
+  border-radius: 8px;
+}
+```
+
 Highlight the list under the pointer. With `<vdnd-sortable-list>` the droppable is an inner element, so target it through the list:
 
 ```css
 .vdnd-sortable-list .vdnd-droppable-active {
   background: #e4f3f2;
   box-shadow: inset 0 0 0 2px #0e9488;
-}
-```
-
-Show a grab cursor on hover, and stop hover styles from firing on other rows during a drag:
-
-```css
-.vdnd-draggable {
-  cursor: grab;
-}
-
-body.vdnd-dragging .vdnd-draggable {
-  pointer-events: none;
-}
-```
-
-Show the grabbing cursor over the whole page during a drag, not only over lists and items. A rule on `body` alone is enough, because `cursor` inherits; it costs a style recalculation that grows with the size of the page each time a drag starts and ends. Avoid `body.vdnd-dragging *`, which restyles every element:
-
-```css
-body.vdnd-dragging:not(.vdnd-dragging-touch) {
-  cursor: grabbing;
 }
 ```
 
@@ -77,4 +69,26 @@ Dim items that cannot be dragged:
 }
 ```
 
-These selectors must be global, in `styles.css` or with `ViewEncapsulation.None`, because the preview and placeholder are rendered outside your component's view.
+Show a grab cursor on hover, and stop hover styles from firing on other rows during a drag:
+
+```css
+.vdnd-draggable {
+  cursor: grab;
+}
+
+body.vdnd-dragging .vdnd-draggable {
+  pointer-events: none;
+}
+```
+
+## The built-in cursor
+
+The library's only built-in style is a `grabbing` cursor over lists and items (`vdnd-droppable` and `vdnd-draggable` elements) during mouse and keyboard drags. Touch drags get no cursor. The rest of the page keeps its cursor, and so do elements inside items and lists that set their own `cursor` (a drag handle with `cursor: grab`, a button); the `pointer-events: none` recipe above covers those inside items.
+
+Show the grabbing cursor over the whole page during a drag, not only over lists and items. A rule on `body` alone is enough, because `cursor` inherits; it costs a style recalculation that grows with the size of the page each time a drag starts and ends. Avoid `body.vdnd-dragging *`, which restyles every element:
+
+```css
+body.vdnd-dragging:not(.vdnd-dragging-touch) {
+  cursor: grabbing;
+}
+```

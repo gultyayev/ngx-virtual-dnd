@@ -85,8 +85,10 @@ Every draggable and droppable needs a group (here from `vdndGroup`), even for a 
 ## Documentation
 
 - [Getting started](https://gultyayev.github.io/ngx-virtual-dnd/guide/start/introduction.html): introduction, installation, quick start
-- [Guides](https://gultyayev.github.io/ngx-virtual-dnd/guide/essentials/core-concepts.html): multiple lists, dynamic heights, page scroll, drag behavior, styling, accessibility
-- [API reference](https://gultyayev.github.io/ngx-virtual-dnd/api/components.html): components, directives, events, utilities, services, types
+- [Guides](https://gultyayev.github.io/ngx-virtual-dnd/guide/essentials/core-concepts.html): multiple lists, dynamic heights, page scroll, drag behavior, styling, accessibility, performance
+- [Coming from Angular CDK](https://gultyayev.github.io/ngx-virtual-dnd/guide/start/coming-from-cdk.html): how the CDK drag-and-drop API maps to this one
+- [FAQ](https://gultyayev.github.io/ngx-virtual-dnd/guide/more/faq.html): SSR, zoneless apps, testing and more
+- [API reference](https://gultyayev.github.io/ngx-virtual-dnd/api/overview.html): components, directives, events, utilities, services, types
 
 ## AI agent skills
 
@@ -98,18 +100,9 @@ npx skills add gultyayev/ngx-virtual-dnd
 
 It works with Claude Code, Cursor, Windsurf, GitHub Copilot and [40+ other agents](https://skills.sh). The docs are also published as [llms.txt](https://gultyayev.github.io/ngx-virtual-dnd/llms.txt).
 
-## Development
+## Contributing
 
-Requires npm 12 (the version pinned in `packageManager`): `npm install -g npm@12`.
-
-```bash
-npm start              # Demo app (localhost:4200)
-npm run build:lib      # Build the library (required after library edits)
-npm run docs:dev       # Docs site (localhost:3000); live examples load from the demo on :4200
-npm test               # Unit tests
-npm run e2e            # E2E tests
-npm run site:build     # Full GitHub Pages build: docs at /, demo at /demo/
-```
+See [CONTRIBUTING.md](https://github.com/gultyayev/ngx-virtual-dnd/blob/master/CONTRIBUTING.md) to run the demo, the docs and the tests locally.
 
 ## License
 

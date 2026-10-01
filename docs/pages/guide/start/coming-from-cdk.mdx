@@ -1,0 +1,135 @@
+---
+title: Coming from Angular CDK
+description: How the Angular CDK drag-and-drop API maps to ngx-virtual-dnd, and what works differently.
+---
+
+# Coming from Angular CDK
+
+The Angular CDK's drag and drop (`@angular/cdk/drag-drop`) finds drop positions by measuring the rendered siblings, so it does not support virtual scrolling: in a `cdk-virtual-scroll-viewport`, most siblings are not rendered. ngx-virtual-dnd covers the same sortable-list use cases with virtual scrolling. This page maps one API to the other.
+
+## A sortable list, before and after
+
+With the CDK:
+
+```angular-html
+<div cdkDropList (cdkDropListDropped)="drop($event)">
+  @for (task of tasks; track task.id) {
+    <div class="row" cdkDrag>{{ task.title }}</div>
+  }
+</div>
+```
+
+```ts
+drop(event: CdkDragDrop<Task[]>): void {
+  moveItemInArray(this.tasks, event.previousIndex, event.currentIndex);
+}
+```
+
+With ngx-virtual-dnd:
+
+```angular-html
+<div vdndGroup="tasks">
+  <ng-template #taskTpl let-task>
+    <div class="row" [vdndDraggable]="task.id">{{ task.title }}</div>
+  </ng-template>
+
+  <vdnd-sortable-list
+    droppableId="tasks"
+    [items]="tasks()"
+    [itemHeight]="48"
+    [containerHeight]="400"
+    [itemIdFn]="taskId"
+    [itemTemplate]="taskTpl"
+    (drop)="onDrop($event)"
+  />
+</div>
+
+<vdnd-drag-preview />
+```
+
+```ts
+onDrop(event: DropEvent): void {
+  reorderItems(event, this.tasks); // tasks is a WritableSignal<Task[]>
+}
+```
+
+The differences that matter:
+
+- **The list renders the rows.** You pass the items and a row template instead of writing the `@for` loop, because only the visible rows are rendered.
+- **Every list needs a group**, even a single one. A group replaces `cdkDropListConnectedTo` and `cdkDropListGroup`: lists in the same group exchange items.
+- **Items and lists have string IDs.** The draggable's ID must equal what `itemIdFn` returns for its item.
+- **The preview is rendered once**, by `<vdnd-drag-preview />`, not per item.
+- **Rows have a known height.** Pass it as `itemHeight`, or turn on [`dynamicItemHeight`](/guide/features/dynamic-heights) to measure them.
+- **Your data is never mutated.** The helpers update signals or return new arrays.
+
+[Core concepts](/guide/essentials/core-concepts) explains each of these.
+
+## API mapping
+
+### Lists and items
+
+| Angular CDK                                     | ngx-virtual-dnd                                                                                                                      |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `cdkDropList` with an `@for` of `cdkDrag` items | `<vdnd-sortable-list>`, or [another list component](/guide/essentials/choosing-a-component)                                          |
+| `cdkDrag`                                       | `[vdndDraggable]="item.id"`                                                                                                          |
+| `cdkDropListConnectedTo`, `cdkDropListGroup`    | `vdndGroup="name"` around the lists                                                                                                  |
+| `cdkDragData`                                   | `[vdndDraggableData]`                                                                                                                |
+| `cdkDropListData`                               | `droppableData` (`vdndDroppableData` on `vdndDroppable`). Lists are usually told apart by `droppableId`                              |
+| `cdkDragHandle`                                 | `dragHandle="<CSS selector>"` on the draggable. See [Drag handles](/guide/features/drag-behavior#drag-handles)                       |
+| `cdkDragDisabled`, `cdkDropListDisabled`        | `disabled`                                                                                                                           |
+| `cdkDragStartDelay`                             | `dragDelay`                                                                                                                          |
+| `dragStartThreshold` (`CDK_DRAG_CONFIG`)        | `dragThreshold`                                                                                                                      |
+| `cdkDragLockAxis`                               | `lockAxis`, but **inverted**: it names the frozen axis. See [Axis locking](/guide/features/drag-behavior#axis-locking)               |
+| `cdkDragBoundary`                               | `constrainToContainer` on the list. See [Constraining to the container](/guide/features/drag-behavior#constraining-to-the-container) |
+| `*cdkDragPreview`                               | `<vdnd-drag-preview [previewTemplate]>`. See [Custom preview](/guide/features/preview-and-placeholder#custom-preview)                |
+| `*cdkDragPlaceholder`                           | No template. Style the `.vdnd-drag-placeholder` class                                                                                |
+| `cdkDropListEnterPredicate`                     | Bind `disabled` from the drag state. See [Accepting only some items](/guide/essentials/multiple-lists#accepting-only-some-items)     |
+| `cdkDropListOrientation`                        | Lists are vertical; `horizontal` and `mixed` are not supported                                                                       |
+| `cdkDropListSortingDisabled`                    | Not supported                                                                                                                        |
+
+### Events
+
+| Angular CDK                                   | ngx-virtual-dnd                                                                                  |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `(cdkDropListDropped)`                        | `(drop)`, on the destination list only                                                           |
+| `(cdkDragStarted)`, `(cdkDragEnded)`          | `(dragStart)`, `(dragEnd)` on the draggable                                                      |
+| `(cdkDropListSorted)`                         | `(placeholderMove)`                                                                              |
+| `(cdkDropListEntered)`, `(cdkDropListExited)` | No output. Read `activeDroppableId()` from `DragStateService`, or style `.vdnd-droppable-active` |
+
+`CdkDragDrop` maps to `DropEvent` like this:
+
+| `CdkDragDrop`       | `DropEvent`               |
+| ------------------- | ------------------------- |
+| `previousIndex`     | `source.index`            |
+| `currentIndex`      | `destination.index`       |
+| `previousContainer` | `source.droppableId`      |
+| `container`         | `destination.droppableId` |
+| `item.data`         | `source.data`             |
+| `container.data`    | `destination.data`        |
+
+The indexes mean the same as in the CDK: remove the item at `source.index`, then insert it at `destination.index`.
+
+Releasing outside every list emits no `(drop)` at all. `(dragEnd)` reports it with `destinationIndex: null`.
+
+### Helpers
+
+| Angular CDK                                       | ngx-virtual-dnd                                         |
+| ------------------------------------------------- | ------------------------------------------------------- |
+| `moveItemInArray(array, from, to)`                | `reorderItems(event, listSignal)`                       |
+| `transferArrayItem(from, to, fromIndex, toIndex)` | `moveItem(event, { todo: this.todo, done: this.done })` |
+| Both, for immutable state                         | `applyMove(event, lists)` returns new arrays            |
+
+`moveItem()` handles moves within one list and between lists, so one handler serves every list. See [Handling drops](/guide/essentials/handling-drops).
+
+### CSS classes
+
+| Angular CDK               | ngx-virtual-dnd                                                                     |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `.cdk-drag-preview`       | `.vdnd-drag-preview`                                                                |
+| `.cdk-drag-placeholder`   | `.vdnd-drag-placeholder`                                                            |
+| `.cdk-drag-animating`     | `.vdnd-drag-preview-dropping`, while the preview glides into place                  |
+| `.cdk-drop-list-dragging` | `.vdnd-droppable-active` on the targeted list, `body.vdnd-dragging` during any drag |
+| `.cdk-drag-disabled`      | `.vdnd-draggable-disabled`                                                          |
+| `.cdk-drop-list-disabled` | `.vdnd-droppable-disabled`                                                          |
+
+CDK apps usually animate rows with a CSS `transition` on `.cdk-drag`. Remove it when you migrate: here, animations are opt-in through [`VDND_ANIMATION_CONFIG`](/guide/features/animations), and a transition on rows competes with them.

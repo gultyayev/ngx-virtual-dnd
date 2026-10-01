@@ -70,13 +70,39 @@ Draggable IDs must be unique across **all** columns, because drag state is share
 
 ## Controlling where items can go
 
-| Goal                                    | How                                                              |
-| --------------------------------------- | ---------------------------------------------------------------- |
-| Lists that never exchange items         | Put them in different groups (separate `vdndGroup` elements)     |
-| A list that temporarily accepts nothing | `[disabled]="true"` on the list or on `vdndDroppable`            |
-| Items that cannot be moved              | `[disabled]="true"` on the draggable                             |
-| Accept only some items                  | Check the event in `(drop)` and return early; the item stays put |
+| Goal                                    | How                                                                          |
+| --------------------------------------- | ---------------------------------------------------------------------------- |
+| Lists that never exchange items         | Put them in different groups (separate `vdndGroup` elements)                 |
+| A list that temporarily accepts nothing | `[disabled]="true"` on the list or on `vdndDroppable`                        |
+| Items that cannot be moved              | `[disabled]="true"` on the draggable                                         |
+| Accept only some items                  | Bind `disabled` from the drag state, see [below](#accepting-only-some-items) |
 
 A disabled droppable is skipped completely. The pointer passes through it to whatever is underneath, and the keyboard's left and right arrows skip it. See [Drag behavior](/guide/features/drag-behavior#disabling).
 
 Releasing over nothing, or over a disabled list, emits no `(drop)`. The item returns to where it started.
+
+## Accepting only some items
+
+There is no predicate input that rejects some items. Returning early from `(drop)` keeps your data unchanged, but during the drag the target list still opens a slot for the item, so the user sees a drop that then does not happen.
+
+Instead, disable the list while an item it does not accept is being dragged. `DragStateService` tells you which item that is, and a droppable whose `disabled` changes mid-drag is skipped from the next frame:
+
+```ts
+readonly #dragState = inject(DragStateService);
+
+// Only tasks with an assignee can move to "Done"
+readonly doneRejectsDrag = computed(() => {
+  const task = this.#dragState.draggedItem()?.data as Task | undefined;
+  return task !== undefined && !task.assignee;
+});
+```
+
+```angular-html
+<ng-template #taskTpl let-task>
+  <div class="row" [vdndDraggable]="task.id" [vdndDraggableData]="task">{{ task.title }}</div>
+</ng-template>
+
+<vdnd-sortable-list droppableId="done" [disabled]="doneRejectsDrag()" ... />
+```
+
+The pointer then passes over the list without a placeholder, and the keyboard's left and right arrows skip it. Style `.vdnd-droppable-disabled` to show that the list does not accept the item.

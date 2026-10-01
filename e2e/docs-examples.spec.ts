@@ -30,6 +30,22 @@ test.describe('Docs live examples', () => {
       .toEqual(['task-2', 'task-3', 'task-1']);
   });
 
+  test('quick start reorders with the keyboard, as the FAQ testing recipe does', async ({
+    page,
+  }) => {
+    await examples.goto('quick-start');
+
+    await examples.draggable('task-1').focus();
+    await page.keyboard.press('Space');
+    await expect(examples.dragPreview).toBeVisible();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Space');
+
+    await expect
+      .poll(async () => (await examples.renderedIds('backlog')).slice(0, 2))
+      .toEqual(['task-2', 'task-1']);
+  });
+
   test('multiple lists move an item across lists', async ({ page }) => {
     await examples.goto('multiple-lists');
 
@@ -90,6 +106,45 @@ test.describe('Docs live examples', () => {
         .evaluateAll((rows) => rows.map((row) => Math.round(row.getBoundingClientRect().height)));
       expect(new Set(heights).size).toBeGreaterThan(1);
     }).toPass({ timeout: 2000 });
+  });
+
+  test('page scroll renders rows below the header and reorders by drag', async ({ page }) => {
+    await examples.goto('page-scroll');
+
+    const header = page.getByRole('heading', { name: 'Today' });
+    const headerBox = await header.boundingBox();
+    const firstRow = await examples.draggable('task-1').boundingBox();
+    if (!headerBox || !firstRow) throw new Error('No bounding box for the header or first row');
+    // vdndContentHeader is measured and offsets the rows.
+    expect(firstRow.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height - 1);
+
+    const third = await examples.draggable('task-3').boundingBox();
+    if (!third) throw new Error('No bounding box for task-3');
+    await examples.dragTo('task-1', third.x + third.width / 2, third.y + third.height / 2, 'today');
+
+    await expect
+      .poll(async () => (await examples.renderedIds('today')).slice(0, 3))
+      .toEqual(['task-2', 'task-3', 'task-1']);
+
+    // The footer after the list scrolls with it, inside the vdndScrollable element.
+    const footer = page.getByText('Regular content after the list');
+    await footer.scrollIntoViewIfNeeded();
+    await expect(footer).toBeInViewport();
+  });
+
+  test('custom preview renders the template with the dragged item', async ({ page }) => {
+    await examples.goto('custom-preview');
+
+    const box = await examples.draggable('task-1').boundingBox();
+    if (!box) throw new Error('No bounding box for task-1');
+    await examples.pressAndMove(box.x + box.width / 2, box.y + box.height / 2);
+
+    await expect(examples.dragPreview).toBeVisible({ timeout: 2000 });
+    await expect(examples.dragPreview).toHaveText('Moving Task 1');
+
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+    await expect(examples.dragPreview).toBeHidden();
   });
 
   test('shift animation slides displaced rows and counts placeholder moves', async ({ page }) => {
