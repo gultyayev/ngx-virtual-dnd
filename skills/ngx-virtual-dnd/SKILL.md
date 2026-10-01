@@ -488,7 +488,7 @@ On release, `(dragEnd)` fires first, then `(drop)` on the destination, both befo
 | `vdnd-dragging-touch`                                 | `<body>`                             | While a touch drag is in progress     |
 | `vdnd-sortable-list`, `vdnd-virtual-scroll`, `vdnd-virtual-viewport`, `vdnd-virtual-content`, `vdnd-scrollable`, `vdnd-placeholder` | Their host elements | Always |
 
-The only built-in style is a `grabbing` cursor on `vdnd-droppable` and `vdnd-draggable` elements during mouse and keyboard drags (not touch drags). Elsewhere the page keeps its cursor. For a page-wide cursor, add `body.vdnd-dragging:not(.vdnd-dragging-touch) { cursor: grabbing; }`; never `body.vdnd-dragging *`, which restyles every element at drag start and drop.
+The only built-in style is a `grabbing` cursor on `vdnd-droppable` and `vdnd-draggable` elements during mouse and keyboard drags (not touch drags). Elsewhere the page keeps its cursor, and so do elements inside items and lists that set their own `cursor` (handles, buttons); `body.vdnd-dragging .vdnd-draggable { pointer-events: none; }` covers those inside items. For a page-wide cursor, add `body.vdnd-dragging:not(.vdnd-dragging-touch) { cursor: grabbing; }`; never `body.vdnd-dragging *`, which restyles every element at drag start and drop.
 
 ## Troubleshooting
 

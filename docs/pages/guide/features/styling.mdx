@@ -5,7 +5,7 @@ description: The CSS classes the library adds, with common recipes.
 
 # Styling
 
-The library ships no visual styles for items or lists. Its only built-in style is a `grabbing` cursor over lists and items (`vdnd-droppable` and `vdnd-draggable` elements) during mouse and keyboard drags. The rest of the page keeps its cursor, and touch drags get none. Everything else is state classes that you style however you like.
+The library ships no visual styles for items or lists. Its only built-in style is a `grabbing` cursor over lists and items (`vdnd-droppable` and `vdnd-draggable` elements) during mouse and keyboard drags. The rest of the page keeps its cursor, and so do elements inside items and lists that set their own `cursor` (a drag handle with `cursor: grab`, a button); the `pointer-events: none` recipe below covers those inside items. Touch drags get no cursor. Everything else is state classes that you style however you like.
 
 ## Classes
 
