@@ -47,6 +47,9 @@
   --danger: #dc2626;
   --danger-soft: #fdecec;
   --danger-text: #c62f2f;
+  --warn-soft: #faf4ec;
+  --warn-bd: #ecd8bc;
+  --warn-text: #8a5a12;
   --cat-personal-soft: #ecebfd;
   --cat-personal-text: #5b52c9;
 }
@@ -96,6 +99,9 @@ html.dark {
   --danger: #f87171;
   --danger-soft: color-mix(in srgb, #ef4444 24%, #161d2c);
   --danger-text: #f2a2a2;
+  --warn-soft: color-mix(in srgb, #d69a4a 14%, #161d2c);
+  --warn-bd: color-mix(in srgb, #d69a4a 38%, #161d2c);
+  --warn-text: #e8bd84;
   --cat-personal-soft: color-mix(in srgb, #6f66e8 26%, #161d2c);
   --cat-personal-text: #b7b0f2;
 }

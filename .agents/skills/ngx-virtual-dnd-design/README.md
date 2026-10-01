@@ -51,7 +51,7 @@ A minimal, professional design system for the `ngx-virtual-dnd` Angular library,
 ## VISUAL FOUNDATIONS
 
 ### Colors
-Teal accent `#0e9488` (hover `#0b7a70`). Soft tint `--accent-soft` = `color-mix(accent 11%, #fff)`, with `--accent-soft-bd` (30%) for rings and `--accent-ring` for focus. No gradients anywhere. Active drop zone: `--accent-soft` fill + inset `--accent-soft-bd` ring. Green `#22c55e` (`--live`) is reserved for the debug panel's live dot. Legacy `--color-*` names remain as aliases.
+Teal accent `#0e9488` (hover `#0b7a70`). Soft tint `--accent-soft` = `color-mix(accent 11%, #fff)`, with `--accent-soft-bd` (30%) for rings and `--accent-ring` for focus. No gradients anywhere. Active drop zone: `--accent-soft` fill + inset `--accent-soft-bd` ring. Green `#22c55e` (`--live`) is reserved for the debug panel's live dot. Amber `--warn-soft` / `--warn-bd` / `--warn-text` are for warning callouts in the docs. Legacy `--color-*` names remain as aliases.
 
 ### Themes & density
 Light and dark via `[data-theme="light|dark"]` on a root element (the docs site uses Rspress's `html.dark` class, mapped to the same tokens). Density via `[data-density="comfortable|compact"]` (row height 50 / 38px).
@@ -72,7 +72,7 @@ Light and dark via `[data-theme="light|dark"]` on a root element (the docs site 
 60px (plus the top safe-area inset in the docs), sticky, translucent `--topbar-bg` with `backdrop-filter: blur(16px) saturate(150%)` and a 1px bottom border. Brand tile 32px / 9px radius on `--accent-soft`, 15px/700 wordmark, 13px nav tabs (active = accent-soft), 36px icon button for the theme toggle (auto / light / dark).
 
 ### Docs site
-Uses the same top bar treatment. Sidebar on `--field-bg` with 11px uppercase group labels and accent-soft active items (7px radius). Content on `--surface`. Code blocks are dark (`#0e131e`) in both themes. Page titles 30px / 700 / -0.025em.
+Uses the same top bar treatment, with a 232px search field and a ⌘K key cap. Doc pages: 264px sidebar on `--field-bg` (11px uppercase group labels, 32px items, accent-soft active items, 9px radius), an 800px article on `--surface`, and a 264px outline whose headings sit on a 1px rail with a 2px accent bar for the active one. Page titles 30px / 700 / -0.025em, then a 17px `--ink-2` lead paragraph; sections are separated by space, not rules. Code blocks are dark (`#0e131e`) in both themes, with a title bar (file icon, muted directory, file name, copy button). Callouts are 12px-radius boxes with an icon: tip on `--accent-soft`, warning on `--warn-soft`. Ordered lists are numbered steps in accent-soft circles. Tables use 11px uppercase column labels. The home page is a two-column hero (text left, a virtual list mid-drag right), six feature cards with icon tiles, and a "Quick look" band on `--surface` with tabbed code.
 
 ### Animations
 - 150ms ease for state changes; `--ease-emph` `cubic-bezier(0.3,0.7,0.4,1)` for collapse and segmented thumb.

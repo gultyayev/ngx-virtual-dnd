@@ -52,6 +52,11 @@ html:root {
 
   --rp-nav-height: 60px;
 
+  /* Doc layout: 264px sidebar and outline around an 800px article (plus 56px padding). */
+  --rp-sidebar-width: 264px;
+  --rp-outline-width: 264px;
+  --rp-content-max-width: 912px;
+
   /* No gradients anywhere: flat hero title, flat page background. */
   --rp-home-hero-title-color: var(--ink);
   --rp-home-hero-title-bg: none;
@@ -78,6 +83,16 @@ html:root {
   --rp-container-info-border: var(--border);
   --rp-container-info-text: var(--ink);
   --rp-container-info-code-bg: var(--surface-2);
+  --rp-container-warning-bg: var(--warn-soft);
+  --rp-container-warning-border: var(--warn-bd);
+  --rp-container-warning-text: var(--warn-text);
+  --rp-container-warning-code-bg: color-mix(in srgb, var(--warn-bd) 45%, transparent);
+}
+
+@media (width >= 1280px) {
+  html:root {
+    --rp-content-padding-x: 56px;
+  }
 }
 
 /* Dark --bg-sunk is darker than the page, which makes inline code look like holes. */
@@ -324,15 +339,64 @@ html
   color: var(--accent-hover);
 }
 
+/* Search: a 232px field with a ⌘K key cap, like the demo's controls. */
 html .rp-search-button {
+  width: 232px;
+  height: 36px;
+  padding: 0 6px 0 12px;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--field-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html .rp-search-button:hover {
+  border-color: var(--border-2);
+}
+
+html .rp-search-button__content {
+  gap: 8px;
+}
+
+html .rp-search-button__icon {
+  font-size: 16px;
+  color: var(--ink-2);
+}
+
+html .rp-search-button__word {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+html .rp-search-button__hotkey {
+  display: inline-flex;
+  gap: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
 }
 
 /* ══════════ SIDEBAR ══════════ */
 html .rp-doc-layout__sidebar {
+  padding: 20px 16px 40px;
+  border-right: 1px solid var(--border);
   background: var(--field-bg);
+}
+
+html .rp-sidebar-section-header {
+  margin-top: 22px;
+  padding: 0 12px 6px;
+}
+
+html .rp-sidebar-section-header:first-child {
+  margin-top: 8px;
 }
 
 html .rp-sidebar-section-header__left {
@@ -340,49 +404,213 @@ html .rp-sidebar-section-header__left {
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--ink-2);
+  color: var(--ink);
 }
 
+/* 32px rows, stacked without gaps. */
 html .rp-sidebar-item {
-  border-radius: 7px;
+  margin-top: 0;
+  padding: 4px 12px;
+  border-radius: 9px;
   font-size: 13.5px;
-  line-height: 22px;
+  line-height: 24px;
+}
+
+html .rp-sidebar-item:hover {
+  background-color: var(--surface-2);
 }
 
 html .rp-sidebar-item--active,
 html .rp-sidebar-item--active:hover {
   background-color: var(--accent-soft);
   color: var(--accent-text);
+  font-weight: 600;
+}
+
+/* ══════════ OUTLINE ══════════ */
+/* A 1px rail beside the headings only; the active heading gets a 2px accent bar on it. */
+html .rp-outline {
+  border-left: 0;
+}
+
+@media (width >= 1280px) {
+  html .rp-doc-layout__outline {
+    box-shadow: none;
+  }
+}
+
+html .rp-outline__title {
+  height: auto;
+  margin-bottom: 12px;
+  padding-inline: 8px 24px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* The reading-progress ring next to the title. */
+html .rp-outline__title > * {
+  display: none;
+}
+
+html .rp-outline__toc {
+  margin-left: 8px;
+  margin-right: 24px;
+  padding: 0;
+  border-left: 1px solid var(--border);
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+html .rp-toc-item {
+  margin-top: 0;
+  padding: 5px 0 5px 15px;
+}
+
+/* Rspress indents nested headings with an inline padding-left. */
+html .rp-toc-item[data-depth='0'] {
+  padding-left: 15px !important;
+}
+
+html .rp-toc-item[data-depth='1'] {
+  padding-left: 27px !important;
+}
+
+html .rp-toc-item[data-depth='2'] {
+  padding-left: 39px !important;
+}
+
+html .rp-toc-item--active::before {
+  left: -1px;
+  width: 2px;
+  background-color: var(--accent);
 }
 
 /* Outline: 13px fits the longest API names (VirtualScrollContainerComponent) on one line.
    The text span also carries .rp-doc, hence the extra class. */
 html .rp-toc-item .rp-toc-item__text {
   font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+html .rp-toc-item:hover .rp-toc-item__text {
+  color: var(--ink);
+}
+
+html .rp-toc-item--active .rp-toc-item__text,
+html .rp-toc-item--active:hover .rp-toc-item__text {
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+html .rp-outline__divider {
+  margin: 20px 24px 12px 8px;
+  background: var(--border);
+}
+
+html .rp-outline__bottom {
+  gap: 0;
+  padding-inline: 8px 24px;
+}
+
+html .rp-outline__bottom :where(a, button) {
+  min-height: 30px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+html .rp-outline__bottom svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* ══════════ DOC CONTENT ══════════ */
 html .rp-doc {
   font-size: 15px;
   line-height: 1.7;
+  color: var(--ink);
+}
+
+html .rp-doc-layout__doc-container > .rp-doc {
+  max-width: 800px;
+  margin-inline: auto;
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h1) {
+  margin-bottom: 0;
   font-size: 30px;
   font-weight: 700;
+  line-height: 1.2;
   letter-spacing: -0.025em;
 }
 
+/* The page's lead paragraph. */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h1 + p) {
+  margin-top: 12px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+/* Sections are separated by space, not rules. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2) {
+  margin-top: 56px;
+  padding-top: 0;
+  border-top: 0;
   font-size: 22px;
   font-weight: 700;
+  line-height: 1.3;
   letter-spacing: -0.015em;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2)::before {
+  display: none;
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h3) {
   font-size: 17px;
   font-weight: 650;
   letter-spacing: -0.01em;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(li)::marker {
+  color: var(--ink-3);
+}
+
+/* Numbered steps: the number sits in an accent-soft circle. */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol) {
+  padding-left: 0;
+  list-style: none;
+  counter-reset: vdnd-step;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li) {
+  position: relative;
+  margin-top: 14px;
+  padding-left: 38px;
+  counter-increment: vdnd-step;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li)::before {
+  content: counter(vdnd-step);
+  position: absolute;
+  top: 2px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 /* Code ligatures turn `=>` into an arrow; show what the reader should type. */
@@ -411,6 +639,112 @@ html .rp-doc :not(pre) > code {
   line-height: 1.4;
 }
 
+/* API selector line (docs/plugins/rehype-api-details.ts). */
+html .rp-doc .vdnd-api-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+html .rp-doc .vdnd-api-selector strong {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+html .rp-doc .vdnd-api-selector__colon {
+  display: none;
+}
+
+html .rp-doc .vdnd-api-selector code {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--field-bg);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+/* "Added in x.y.z" badge in API tables (docs/plugins/rehype-api-details.ts). */
+.vdnd-since {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.vdnd-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ══════════ CALLOUTS (docs/theme/components/Callout.tsx) ══════════ */
+html .rp-callout {
+  max-width: 700px;
+  margin: 28px 0;
+  padding: 14px 18px 16px;
+  border-radius: 12px;
+}
+
+html .rp-callout__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+html .rp-callout__title svg {
+  flex-shrink: 0;
+}
+
+/* No accent bar on the left edge. */
+html .rp-callout__title::before {
+  display: none;
+}
+
+html .rp-callout__content {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+html .rp-callout__content p {
+  margin: 0;
+}
+
+html .rp-callout__content p + p {
+  margin-top: 8px;
+}
+
+html .rp-callout__content a {
+  text-underline-offset: 2px;
+  font-weight: 500;
+}
+
+html .rp-callout :not(pre) > code {
+  color: var(--ink);
+  background-color: var(--rp-c-text-code-bg);
+}
+
 /* ══════════ TABLES ══════════ */
 /* Rspress draws tables with the code-block border and title colors, which are dark here. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(table) {
@@ -423,15 +757,42 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(thead) {
   color: var(--ink);
 }
 
+/* Column labels: 11px uppercase, like the sidebar's group labels. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(th) {
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-2);
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(td) {
+  padding: 11px 16px;
   font-size: 14px;
   line-height: 1.55;
   vertical-align: top;
+}
+
+/* Names in the first column read as identifiers in the accent color, without a chip. */
+html .rp-doc td:first-child > code:only-child {
+  padding: 0;
+  background: none;
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+/* **required** in a table cell becomes an outlined tag. */
+html .rp-doc td > strong:only-child {
+  display: inline-block;
+  padding: 0 7px;
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
 }
 
 /* Code in tables wraps at spaces. In the 4-column API tables (name, type, default,
@@ -524,26 +885,153 @@ html .rp-doc td:first-child code {
   }
 }
 
+/* ══════════ CODE BLOCKS (docs/theme/components/CodeBlock.tsx) ══════════ */
 html .rp-codeblock {
+  margin: 20px 0;
   border-radius: 12px;
+  background: var(--code-bg);
 }
 
+/* Title bar: file icon, muted directory, the file name, copy button. */
 html .rp-codeblock__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 6px 0 16px;
+  color: var(--code-muted);
+  font-size: 12px;
+}
+
+.vdnd-codeblock__icon {
+  flex-shrink: 0;
+}
+
+.vdnd-codeblock__path {
+  flex-grow: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.vdnd-codeblock__file {
+  color: var(--code-fg);
+}
+
+html .rp-codeblock__title .rp-code-button-group {
+  position: static;
+}
+
+html .rp-codeblock__title .rp-code-button-group__button {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  opacity: 1;
+}
+
+html .rp-codeblock__title .rp-code-button-group__button:hover {
+  background: var(--code-border);
+}
+
+html .rp-codeblock__title .rp-code-button-group__icon {
+  width: 16px;
+  height: 16px;
   color: var(--code-muted);
 }
 
-/* ══════════ HOME ══════════ */
-html .rp-home-hero__title {
-  font-weight: 700;
-  letter-spacing: -0.035em;
+html .rp-codeblock__title .rp-code-button-group__button:hover .rp-code-button-group__icon {
+  color: var(--code-fg);
 }
 
-html .rp-home-hero__title-brand {
-  background: none;
+/* Untitled blocks: the language in the corner, hidden while the hover buttons show. */
+.vdnd-codeblock__lang {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 2;
+  color: var(--code-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+html .rp-codeblock:hover .vdnd-codeblock__lang {
+  opacity: 0;
+}
+
+html .rp-code-button-group {
+  top: 12px;
+  right: 12px;
+}
+
+html .rp-code-button-group__icon {
+  width: 18px;
+  height: 18px;
+  color: var(--code-muted);
+}
+
+html .rp-code-button-group__icon:hover {
+  color: var(--code-fg);
+}
+
+/* Keyboard users see the hover buttons too. */
+html .rp-codeblock__content:focus-within .rp-code-button-group__button {
+  opacity: 1;
+}
+
+/* Highlighted lines ({3} in the fence meta): accent tint with a 2px accent edge. */
+html .shiki.has-highlighted .line.highlighted:not(.error):not(.warning) {
+  background-color: var(--code-highlight);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* ══════════ PREVIOUS / NEXT ══════════ */
+html .rp-prev-next-page {
+  gap: 16px;
+  align-items: stretch;
+}
+
+html .rp-prev-next-page__item {
+  gap: 2px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 150ms ease;
+}
+
+html .rp-prev-next-page__item:hover {
+  border-color: var(--accent-soft-bd);
+  background: var(--surface);
+  opacity: 1;
+}
+
+html .rp-prev-next-page__item__desc {
+  padding: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+html .rp-prev-next-page__item__title {
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+html .rp-prev-next-page__icon {
   color: var(--accent-text);
-  -webkit-text-fill-color: currentcolor;
 }
 
+html .rp-prev-next-page__next {
+  text-align: right;
+}
+
+/* ══════════ BUTTONS (404 page) ══════════ */
 html .rp-button {
   border-radius: 9px;
 }
@@ -565,19 +1053,626 @@ html .rp-button--alt {
   color: var(--ink);
 }
 
-html .rp-home-feature__card {
+/* ══════════ HOME (docs/theme/components/HomeLayout.tsx) ══════════ */
+.vdnd-home {
+  position: relative;
+  background: var(--bg);
+}
+
+.vdnd-home-hero {
+  padding: 88px 40px 80px;
+}
+
+.vdnd-home-hero__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 64px;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.vdnd-home-hero__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.vdnd-home-announce {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 12px 0 4px;
   border: 1px solid var(--border);
-  border-radius: 15px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  transition: border-color 150ms ease;
+}
+
+.vdnd-home-announce:hover {
+  border-color: var(--accent-soft-bd);
+  color: var(--ink);
+}
+
+.vdnd-home-announce svg {
+  flex-shrink: 0;
+}
+
+.vdnd-home-announce__badge {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vdnd-home-announce__text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.vdnd-home-hero__name {
+  margin: 32px 0 0;
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.vdnd-home-hero__title {
+  max-width: 600px;
+  margin: 10px 0 0;
+  color: var(--ink);
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+}
+
+.vdnd-home-hero__highlight {
+  color: var(--accent-text);
+}
+
+.vdnd-home-hero__tagline {
+  max-width: 540px;
+  margin: 20px 0 0;
+  color: var(--ink-2);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.vdnd-home-hero__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.vdnd-home-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+/* White on the raw accent is 3.7:1, so the button uses the darker accent (5.2:1). */
+.vdnd-home-button--brand,
+.vdnd-home-button--brand:hover {
+  color: var(--on-accent);
+}
+
+.vdnd-home-button--brand {
+  background: var(--accent-hover);
+  box-shadow: var(--shadow);
+}
+
+.vdnd-home-button--brand:hover {
+  background: color-mix(in srgb, var(--accent-hover) 85%, #000);
+}
+
+.vdnd-home-button--alt,
+.vdnd-home-button--alt:hover {
+  color: var(--ink);
+}
+
+.vdnd-home-button--alt {
+  border: 1px solid var(--border);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
 
-html .rp-home-feature__item__shine {
+.vdnd-home-button--alt:hover {
+  border-color: var(--border-2);
+}
+
+/* Rspress marks external links with an arrow; the buttons draw their own icon. */
+.vdnd-home-button::after {
+  display: none !important;
+}
+
+.vdnd-home-install {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  margin-top: 16px;
+  padding: 0 4px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--field-bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.vdnd-home-install__prompt {
+  color: var(--ink-2);
+}
+
+.vdnd-home-install__command {
+  flex-grow: 1;
+  font-family: inherit;
+}
+
+.vdnd-home-install__copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.vdnd-home-install__copy:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* Hero illustration: a virtual list mid-drag. */
+.vdnd-hero-art {
+  position: relative;
+  justify-self: center;
+  width: 100%;
+  max-width: 540px;
+  padding: 8px 0;
+}
+
+.vdnd-hero-art__virtuals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 76px 0 24px;
+  opacity: 0.6;
+}
+
+.vdnd-hero-art__virtual {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px dashed var(--border-2);
+  border-radius: 10px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.vdnd-hero-art__virtual-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.vdnd-hero-art__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 56px 10px 0;
+  padding: 12px;
+  border: 1.5px solid var(--accent);
+  border-radius: 15px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.vdnd-hero-art__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 6px 6px;
+}
+
+.vdnd-hero-art__name {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.vdnd-hero-art__count {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.vdnd-hero-art__row,
+.vdnd-hero-art__preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13.5px;
+}
+
+.vdnd-hero-art__row svg {
+  color: var(--ink-3);
+}
+
+.vdnd-hero-art__placeholder {
+  height: 44px;
+  border: 1.5px dashed var(--accent);
+  border-radius: 10px;
+  background: var(--accent-soft);
+}
+
+.vdnd-hero-art__preview {
+  position: absolute;
+  top: 262px;
+  left: 36%;
+  right: 0;
+  border-color: var(--accent-soft-bd);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  transform: rotate(1.5deg);
+  font-weight: 500;
+}
+
+.vdnd-hero-art__preview svg {
+  color: var(--accent-text);
+}
+
+/* Feature cards. */
+.vdnd-home-features {
+  padding: 0 40px 104px;
+}
+
+.vdnd-home-features__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.vdnd-home-feature {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.vdnd-home-feature__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.vdnd-home-feature__title {
+  margin: 16px 0 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.vdnd-home-feature__details {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* The page's MDX content ("Quick look" in index.mdx), on a surface band. */
+.vdnd-home-content {
+  padding: 96px 40px;
+  border-block: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.vdnd-home-content__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.vdnd-quick-look {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 64px;
+  align-items: center;
+}
+
+.vdnd-quick-look__text {
+  min-width: 0;
+  max-width: 460px;
+}
+
+.vdnd-quick-look .vdnd-quick-look__eyebrow {
+  margin: 0;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.vdnd-quick-look h2 {
+  margin: 12px 0 0;
+  color: var(--ink);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+/* Rspress's heading anchor (#) is not useful on the home page. */
+.vdnd-quick-look h2 .header-anchor,
+.vdnd-quick-look h2 .rp-header-anchor {
   display: none;
+}
+
+.vdnd-quick-look p {
+  margin: 14px 0 0;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.vdnd-quick-look ol {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: vdnd-step;
+}
+
+.vdnd-quick-look li {
+  position: relative;
+  padding-left: 40px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.6;
+  counter-increment: vdnd-step;
+}
+
+.vdnd-quick-look li::before {
+  content: counter(vdnd-step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* The step's bold lead is its title, on its own line. */
+.vdnd-quick-look li strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.vdnd-quick-look :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--bg-sunk);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-ligatures: none;
+}
+
+.vdnd-quick-look p:has(> a:only-child) {
+  margin-top: 28px;
+}
+
+.vdnd-quick-look p > a:only-child {
+  color: var(--accent-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.vdnd-quick-look p > a:only-child:hover {
+  color: var(--accent-hover);
+}
+
+/* Code tabs (docs/components/CodeTabs.tsx). */
+.vdnd-code-tabs {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--code-border);
+  border-radius: 12px;
+  background: var(--code-bg);
+  box-shadow: var(--shadow-lg);
+}
+
+.vdnd-code-tabs__bar {
+  display: flex;
+  align-items: stretch;
+  height: 44px;
+  padding: 0 6px 0 8px;
+  border-bottom: 1px solid var(--code-border);
+  background: var(--code-title-bg);
+}
+
+.vdnd-code-tabs__tab {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--code-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vdnd-code-tabs__tab:hover {
+  color: var(--code-fg);
+}
+
+.vdnd-code-tabs__tab[aria-selected='true'] {
+  box-shadow: inset 0 -2px 0 var(--accent);
+  color: var(--code-fg);
+  font-weight: 500;
+}
+
+.vdnd-code-tabs__tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+  border-radius: 6px;
+}
+
+.vdnd-code-tabs .rp-codeblock {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.vdnd-code-tabs .vdnd-codeblock__lang {
+  display: none;
+}
+
+/* Footer. */
+html .vdnd-home .rp-home-footer {
+  margin-top: 0;
+  padding: 0;
+  border-top: 0;
+  background: var(--bg);
+}
+
+html .vdnd-home .rp-home-footer__container {
+  padding: 32px 40px 40px;
+}
+
+html .rp-home-footer__message {
+  font-weight: 400;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 20px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+html .rp-home-footer__message a {
+  color: var(--ink-2);
+}
+
+html .rp-home-footer__message a:hover {
+  color: var(--accent-text);
+}
+
+@media (width <= 1000px) {
+  .vdnd-home-hero__inner,
+  .vdnd-quick-look {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+
+  .vdnd-home-features__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width <= 640px) {
+  .vdnd-home-hero {
+    padding: 40px 16px 56px;
+  }
+
+  .vdnd-home-hero__title {
+    font-size: 38px;
+  }
+
+  .vdnd-home-hero__actions {
+    flex-direction: column;
+    align-self: stretch;
+  }
+
+  .vdnd-home-install {
+    align-self: stretch;
+  }
+
+  .vdnd-home-features {
+    padding: 0 16px 64px;
+  }
+
+  .vdnd-home-features__grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .vdnd-home-content {
+    padding: 64px 16px;
+  }
+
+  .vdnd-code-tabs .rp-codeblock__content :where(code) {
+    font-size: 12px;
+  }
+
+  html .vdnd-home .rp-home-footer__container {
+    padding: 28px 16px 36px;
+  }
 }
 
 /* ══════════ LIVE DEMO (docs/components/LiveDemo.tsx) ══════════ */
 .vdnd-live-demo {
-  margin: 24px 0;
+  margin: 28px 0;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 15px;
@@ -589,13 +1684,22 @@ html .rp-home-feature__item__shine {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px;
+  gap: 12px;
+  height: 42px;
+  padding: 0 14px 0 16px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
-  font-size: 12px;
+}
+
+.vdnd-live-demo__caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .vdnd-live-demo__label {
+  flex-shrink: 0;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.07em;
@@ -603,8 +1707,29 @@ html .rp-home-feature__item__shine {
   color: var(--ink-2);
 }
 
+.vdnd-live-demo__dot {
+  flex-shrink: 0;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border-2);
+}
+
+.vdnd-live-demo__title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
 .vdnd-live-demo__open {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
   color: var(--accent-text);
+  font-size: 12.5px;
   font-weight: 500;
 }
 
@@ -612,4 +1737,11 @@ html .rp-home-feature__item__shine {
   display: block;
   width: 100%;
   border: 0;
+}
+
+@media (width <= 480px) {
+  .vdnd-live-demo__dot,
+  .vdnd-live-demo__title {
+    display: none;
+  }
 }
