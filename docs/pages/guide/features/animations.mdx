@@ -42,12 +42,12 @@ export const appConfig: ApplicationConfig = {
 | `dropDuration`  | `200`                        | [Drop animation](#drop-animation) duration in ms. `0` turns it off |
 | `dropEasing`    | `cubic-bezier(0.2, 0, 0, 1)` | Any CSS easing function                                            |
 
-- The slide is a `transform` animation, so it stays on the compositor. It works with virtual scrolling and with [dynamic heights](/guide/features/dynamic-heights).
+- The slide animates the `translate` CSS property, so it runs on the compositor. It works with virtual scrolling and with [dynamic heights](/guide/features/dynamic-heights).
 - It is skipped when the user has turned on reduced motion (`prefers-reduced-motion: reduce`).
 - If the placeholder moves again mid-slide, rows continue from where they currently are.
 - Drop positions are calculated from geometry, so a row that is still sliding never changes where an item lands.
 - Rows also slide on drop or cancel. After a drop they usually already sit in their final slots, so a slide in progress simply finishes. After a cancel, displaced rows slide back.
-- The slide is added on top of any `transform` you set on rows, so your own transforms are kept.
+- Your own `transform` on rows is kept: the slide moves the row as a whole, and your rotation or scale does not distort the slide. If you set `translate` on rows yourself, the slide is added to it, but then it runs on the main thread instead of the compositor, so prefer `transform` for your own offsets.
 
 The config is read each time an animation starts, so a getter can switch it at runtime, for example from a user setting:
 

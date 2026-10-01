@@ -19,6 +19,15 @@ interface RunningShift {
   /** Starting offset of the animation (it eases from here to 0) */
   x: number;
   y: number;
+  /** The row has its own `translate`, so the slide is added to it (see `#hasOwnTranslate`). */
+  additive: boolean;
+}
+
+interface PendingShift {
+  element: HTMLElement;
+  x: number;
+  y: number;
+  additive: boolean;
 }
 
 /** Layout changes smaller than this are ignored (sub-pixel rounding noise). */
@@ -29,8 +38,15 @@ const MIN_SHIFT_PX = 0.5;
  *
  * Call `beforeUpdate()` before the DOM reflects a new drag/placeholder state. When the
  * placeholder moved (or the drag ended), it snapshots every rendered element's visual position, then after
- * the render measures again and plays a compositor-only `transform` animation from the
- * old position to the new one.
+ * the render measures again and plays a `translate` animation from the old position to the
+ * new one.
+ *
+ * The slide animates the individual `translate` property with a replace effect, so it runs
+ * on the compositor (Chromium never composites a `composite: 'add'` keyframe effect) and
+ * composes with any `transform` the consumer sets on the row. `translate` applies before
+ * `transform`, in the parent's coordinate space, where the deltas are measured. A row
+ * that sets its own `translate` gets an additive effect instead, which keeps that value
+ * but is ticked on the main thread.
  *
  * Positions are measured relative to the scroll content, so scrolling (including
  * programmatic scroll in the same tick) never animates. Measurements include any
@@ -166,7 +182,7 @@ export class ShiftAnimator {
 
     const last = this.#measure();
     const stale: HTMLElement[] = [];
-    const shifts: { element: HTMLElement; x: number; y: number }[] = [];
+    const shifts: PendingShift[] = [];
 
     // Read phase — no writes until every element is measured.
     for (const [element, to] of last) {
@@ -186,7 +202,12 @@ export class ShiftAnimator {
       // Both measurements include the in-flight offset, so the new animation must
       // start from that offset plus the layout delta to continue from the current spot.
       const current = this.#currentOffset(element);
-      shifts.push({ element, x: dx + current.x, y: dy + current.y });
+      shifts.push({
+        element,
+        x: dx + current.x,
+        y: dy + current.y,
+        additive: this.#running.get(element)?.additive ?? this.#hasOwnTranslate(element),
+      });
     }
 
     // Write phase
@@ -194,8 +215,17 @@ export class ShiftAnimator {
       this.cancel(element);
     }
     for (const shift of shifts) {
-      this.#start(shift.element, shift.x, shift.y);
+      this.#start(shift);
     }
+  }
+
+  /**
+   * Whether the row sets its own `translate` (which a replace effect would hide while it
+   * runs). Only read while no slide runs on the element: the computed value would include it.
+   */
+  #hasOwnTranslate(element: HTMLElement): boolean {
+    const translate = getComputedStyle(element).translate;
+    return !!translate && translate !== 'none';
   }
 
   #currentOffset(element: HTMLElement): { x: number; y: number } {
@@ -209,19 +239,15 @@ export class ShiftAnimator {
     return { x: running.x * remaining, y: running.y * remaining };
   }
 
-  #start(element: HTMLElement, x: number, y: number): void {
+  #start({ element, x, y, additive }: PendingShift): void {
     this.#running.get(element)?.animation.cancel();
 
-    const animation = element.animate(
-      [{ transform: `translate(${x}px, ${y}px)` }, { transform: 'translate(0px, 0px)' }],
-      {
-        duration: this.#duration(),
-        easing: this.#config.shiftEasing ?? DEFAULT_SHIFT_EASING,
-        // Layer on top of any transform the consumer already applies to the item.
-        composite: 'add',
-      },
-    );
-    this.#running.set(element, { animation, x, y });
+    const animation = element.animate([{ translate: `${x}px ${y}px` }, { translate: '0px 0px' }], {
+      duration: this.#duration(),
+      easing: this.#config.shiftEasing ?? DEFAULT_SHIFT_EASING,
+      composite: additive ? 'add' : 'replace',
+    });
+    this.#running.set(element, { animation, x, y, additive });
     animation.onfinish = () => {
       if (this.#running.get(element)?.animation === animation) {
         this.#running.delete(element);
