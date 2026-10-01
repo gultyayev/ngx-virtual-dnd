@@ -68,6 +68,9 @@ export class PointerDragHandler {
   /** Identifier of the finger that pressed, for touch gestures (other fingers are ignored) */
   #touchId: number | null = null;
 
+  /** Whether the tracked press is a touch (which shows no cursor) */
+  #isTouch = false;
+
   /** Bound event handlers for cleanup */
   #boundPointerMove: ((e: MouseEvent | TouchEvent) => void) | null = null;
   #boundPointerUp: ((e: MouseEvent | TouchEvent) => void) | null = null;
@@ -96,6 +99,14 @@ export class PointerDragHandler {
    */
   getStartPosition(): CursorPosition | null {
     return this.#startPosition;
+  }
+
+  /**
+   * Whether the tracked press is a touch. Read by the directive when the drag starts: a touch
+   * drag shows no cursor, so it gets no grabbing cursor.
+   */
+  isTouchPress(): boolean {
+    return this.#isTouch;
   }
 
   /**
@@ -167,6 +178,7 @@ export class PointerDragHandler {
 
     this.#isTracking = true;
     this.#pressedId = ctx.draggableId;
+    this.#isTouch = isTouch;
     if (touch) {
       this.#touchId = touch.identifier;
       this.#startPosition = { x: touch.clientX, y: touch.clientY };
@@ -226,6 +238,7 @@ export class PointerDragHandler {
     this.#pressedId = null;
     this.#startPosition = null;
     this.#touchId = null;
+    this.#isTouch = false;
     this.#deps.callbacks.onPendingChange(false); // Clear pending state on cleanup
     this.#cancelDelayTimer();
 

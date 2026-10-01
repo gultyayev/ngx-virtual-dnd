@@ -27,8 +27,9 @@ describe('DragStateService', () => {
   });
 
   afterEach(() => {
-    // Ensure clean state for next test
+    // Ensure clean state for next test, including the body classes
     service.endDrag();
+    TestBed.tick();
   });
 
   /** Every public signal reads its idle value. */
@@ -49,6 +50,24 @@ describe('DragStateService', () => {
     expect(service.isKeyboardDrag()).toBe(false);
     expect(service.keyboardTargetIndex()).toBeNull();
   };
+
+  /** `startDrag` arguments after the item for a keyboard drag */
+  const keyboardDragArgs = [undefined, undefined, null, 'list-1', null, 0, 0, true] as const;
+
+  const startTouchDrag = (): void =>
+    service.startDrag(
+      createMockDraggedItem(),
+      { x: 10, y: 20 },
+      { x: 0, y: 0 },
+      null,
+      'list-1',
+      null,
+      0,
+      0,
+      false,
+      undefined,
+      true,
+    );
 
   it('should start idle', () => {
     expectIdle();
@@ -468,6 +487,104 @@ describe('DragStateService', () => {
       service.endDrag();
       TestBed.tick();
       expect(document.body.classList.contains('vdnd-dragging')).toBe(false);
+    });
+
+    it('should add vdnd-dragging-touch to body only while a touch drag is active', () => {
+      startTouchDrag();
+      TestBed.tick();
+      expect(document.body.classList.contains('vdnd-dragging')).toBe(true);
+      expect(document.body.classList.contains('vdnd-dragging-touch')).toBe(true);
+
+      service.endDrag();
+      TestBed.tick();
+      expect(document.body.classList.contains('vdnd-dragging')).toBe(false);
+      expect(document.body.classList.contains('vdnd-dragging-touch')).toBe(false);
+    });
+
+    it('should not add vdnd-dragging-touch for mouse or keyboard drags', () => {
+      service.startDrag(createMockDraggedItem());
+      TestBed.tick();
+      expect(document.body.classList.contains('vdnd-dragging-touch')).toBe(false);
+      service.endDrag();
+
+      service.startDrag(createMockDraggedItem(), ...keyboardDragArgs);
+      TestBed.tick();
+      expect(document.body.classList.contains('vdnd-dragging')).toBe(true);
+      expect(document.body.classList.contains('vdnd-dragging-touch')).toBe(false);
+    });
+
+    it('should not carry the touch flag into the next drag after a cancelled touch drag', () => {
+      startTouchDrag();
+      TestBed.tick();
+      service.cancelDrag();
+      TestBed.tick();
+      expect(document.body.classList.contains('vdnd-dragging-touch')).toBe(false);
+
+      service.startDrag(createMockDraggedItem());
+      TestBed.tick();
+      expect(document.body.classList.contains('vdnd-dragging-touch')).toBe(false);
+    });
+  });
+
+  describe('grabbing cursor', () => {
+    let list: HTMLElement;
+    let item: HTMLElement;
+    let unrelated: HTMLElement;
+
+    beforeEach(() => {
+      list = document.createElement('div');
+      list.className = 'vdnd-droppable';
+      item = document.createElement('div');
+      item.className = 'vdnd-draggable';
+      list.appendChild(item);
+      unrelated = document.createElement('p');
+      document.body.append(list, unrelated);
+    });
+
+    afterEach(() => {
+      list.remove();
+      unrelated.remove();
+    });
+
+    const cursorOf = (element: HTMLElement): string => getComputedStyle(element).cursor;
+
+    it('should show on lists and items during a mouse drag', () => {
+      service.startDrag(createMockDraggedItem());
+      TestBed.tick();
+
+      expect(cursorOf(list)).toBe('grabbing');
+      expect(cursorOf(item)).toBe('grabbing');
+    });
+
+    it('should show on lists and items during a keyboard drag', () => {
+      service.startDrag(createMockDraggedItem(), ...keyboardDragArgs);
+      TestBed.tick();
+
+      expect(cursorOf(list)).toBe('grabbing');
+      expect(cursorOf(item)).toBe('grabbing');
+    });
+
+    // A rule matching every element (`body.vdnd-dragging *`) restyles the whole document when
+    // the drag starts and ends
+    it('should not apply to elements outside lists and items', () => {
+      service.startDrag(createMockDraggedItem());
+      TestBed.tick();
+
+      expect(cursorOf(unrelated)).not.toBe('grabbing');
+      expect(cursorOf(document.body)).not.toBe('grabbing');
+    });
+
+    it('should not show during a touch drag, which has no cursor', () => {
+      startTouchDrag();
+      TestBed.tick();
+
+      expect(cursorOf(list)).not.toBe('grabbing');
+      expect(cursorOf(item)).not.toBe('grabbing');
+    });
+
+    it('should not show when no drag is active', () => {
+      expect(cursorOf(list)).not.toBe('grabbing');
+      expect(cursorOf(item)).not.toBe('grabbing');
     });
   });
 

@@ -379,6 +379,14 @@ describe('DraggableDirective', () => {
 
       expect(mousedown.defaultPrevented).toBe(true);
     });
+
+    it('should not mark a mouse drag as a touch drag', () => {
+      attemptPointerDrag(draggableNative);
+      fixture.detectChanges();
+
+      expect(document.body.classList.contains('vdnd-dragging')).toBe(true);
+      expect(document.body.classList.contains('vdnd-dragging-touch')).toBe(false);
+    });
   });
 
   describe('touchstart listener', () => {
@@ -540,6 +548,27 @@ describe('DraggableDirective', () => {
       } finally {
         jest.useRealTimers();
       }
+    });
+
+    it('should mark a touch drag on the body, which shows no grabbing cursor', () => {
+      component.dragDelay.set(0);
+      fixture.detectChanges();
+
+      draggableNative.dispatchEvent(touchStart());
+      const touch = { clientX: 100, clientY: 120 } as Touch;
+      document.dispatchEvent(
+        new TouchEvent('touchmove', {
+          touches: [touch],
+          changedTouches: [touch],
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      fixture.detectChanges();
+
+      expect(dragStateService.isDragging()).toBe(true);
+      expect(document.body.classList.contains('vdnd-dragging')).toBe(true);
+      expect(document.body.classList.contains('vdnd-dragging-touch')).toBe(true);
     });
 
     it('should listen passively with a negative delay, which never cancels the scroll', () => {

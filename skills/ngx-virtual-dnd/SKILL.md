@@ -484,7 +484,11 @@ On release, `(dragEnd)` fires first, then `(drop)` on the destination, both befo
 | `vdnd-drag-preview`                                   | Preview box inside `vdnd-drag-preview` | During drag                         |
 | `vdnd-drag-preview-dropping`                          | Preview box                          | While it plays the drop animation (`VDND_ANIMATION_CONFIG`) |
 | `vdnd-overlay-container`                              | Body-level container for the preview | Once `<vdnd-drag-preview>` has rendered |
+| `vdnd-dragging`                                       | `<body>`                             | While any drag is in progress         |
+| `vdnd-dragging-touch`                                 | `<body>`                             | While a touch drag is in progress     |
 | `vdnd-sortable-list`, `vdnd-virtual-scroll`, `vdnd-virtual-viewport`, `vdnd-virtual-content`, `vdnd-scrollable`, `vdnd-placeholder` | Their host elements | Always |
+
+The only built-in style is a `grabbing` cursor on `vdnd-droppable` and `vdnd-draggable` elements during mouse and keyboard drags (not touch drags). Elsewhere the page keeps its cursor. For a page-wide cursor, add `body.vdnd-dragging:not(.vdnd-dragging-touch) { cursor: grabbing; }`; never `body.vdnd-dragging *`, which restyles every element at drag start and drop.
 
 ## Troubleshooting
 

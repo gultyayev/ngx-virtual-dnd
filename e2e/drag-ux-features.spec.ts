@@ -48,7 +48,66 @@ test.describe('Drag UX Features - Cursor Management', () => {
     await expect(styleElement).toBeAttached();
     expect(await styleElement.textContent()).toContain('cursor: grabbing');
   });
+
+  test('shows the grabbing cursor over lists and items during a mouse drag', async ({ page }) => {
+    await demoPage.startDrag(demoPage.list1Items.first());
+
+    // What the user sees: the cursor of the element under the pointer (the demo turns off
+    // pointer events on items during a drag, so over an item that is the list beneath)
+    const target = demoPage.list2Items.nth(1);
+    const box = await target.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2, { steps: 5 });
+    await demoPage.waitForActiveDroppable('list2');
+    expect(await cursorAtPoint(page, box!.x + box!.width / 2, box!.y + box!.height / 2)).toBe(
+      'grabbing',
+    );
+    await expect(demoPage.list1Container).toHaveCSS('cursor', 'grabbing');
+    await expect(target).toHaveCSS('cursor', 'grabbing');
+
+    await page.mouse.up();
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(demoPage.list2Container).not.toHaveCSS('cursor', 'grabbing');
+    await expect(target).not.toHaveCSS('cursor', 'grabbing');
+  });
+
+  test('shows the grabbing cursor over lists during a keyboard drag', async () => {
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+
+    await expect(demoPage.list1Container).toHaveCSS('cursor', 'grabbing');
+    await expect(demoPage.list2Container).toHaveCSS('cursor', 'grabbing');
+
+    await demoPage.keyboardCancel();
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(demoPage.list1Container).not.toHaveCSS('cursor', 'grabbing');
+  });
+
+  // Toggling a rule that matches every element restyles the whole document at drag start and
+  // drop; the cursor rule covers lists and items only
+  test('does not restyle the rest of the page during a drag', async ({ page }) => {
+    await demoPage.startDrag(demoPage.list1Items.first());
+    await expect(page.locator('body')).toHaveClass(/vdnd-dragging/);
+
+    expect(await page.evaluate(() => getComputedStyle(document.body).cursor)).not.toBe('grabbing');
+    expect(
+      await demoPage.settingsCollapse.evaluate((element) => getComputedStyle(element).cursor),
+    ).not.toBe('grabbing');
+
+    await page.mouse.up();
+  });
 });
+
+/** The cursor of the element under a viewport point, as the user sees it there. */
+async function cursorAtPoint(page: Page, x: number, y: number): Promise<string | null> {
+  return page.evaluate(
+    ([px, py]) => {
+      const element = document.elementFromPoint(px, py);
+      return element ? getComputedStyle(element).cursor : null;
+    },
+    [x, y] as const,
+  );
+}
 
 test.describe('Drag UX Features - Drag Handle', () => {
   let demoPage: DemoPage;
