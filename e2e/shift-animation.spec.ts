@@ -158,6 +158,86 @@ test.describe('Shift animation', () => {
     await demoPage.keyboardCancel();
   });
 
+  test('the slide animates translate with a replace effect (compositor-friendly)', async ({
+    page,
+  }) => {
+    const demoPage = new DemoPage(page);
+    await demoPage.goto({ shiftAnimation: SHIFT_MS });
+    const secondItem = demoPage.list1Items.nth(1);
+
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+    await demoPage.keyboardMoveDown();
+    await poll(() => activeAnimationCount(secondItem)).toBe(1);
+
+    const effect = await secondItem.evaluate((el) => {
+      const keyframeEffect = el.getAnimations()[0].effect as KeyframeEffect;
+      return {
+        composite: keyframeEffect.composite,
+        properties: keyframeEffect
+          .getKeyframes()
+          .flatMap((keyframe) => Object.keys(keyframe))
+          .filter((key) => !['offset', 'computedOffset', 'easing', 'composite'].includes(key)),
+      };
+    });
+    // Chromium never runs a `composite: 'add'` keyframe effect on the compositor.
+    expect(effect.composite).toBe('replace');
+    expect([...new Set(effect.properties)]).toEqual(['translate']);
+
+    await demoPage.keyboardCancel();
+  });
+
+  test("a row's own transform neither stops nor distorts the slide", async ({ page }) => {
+    const demoPage = new DemoPage(page);
+    await demoPage.goto({ shiftAnimation: SHIFT_MS });
+    const secondItem = demoPage.list1Items.nth(1);
+    const scroll = demoPage.list1VirtualScroll;
+    const itemHeight = 50;
+    // Same box as without it, but an offset applied after it would point the other way.
+    await secondItem.evaluate((el) => (el.style.transform = 'rotate(180deg)'));
+    const initialTop = await contentTop(secondItem, scroll);
+
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+    await demoPage.keyboardMoveDown();
+    await poll(() => activeAnimationCount(secondItem)).toBe(1);
+
+    await seekShiftAnimation(secondItem, 0);
+    expect(await contentTop(secondItem, scroll)).toBeCloseTo(initialTop, 0);
+    expect(await secondItem.evaluate((el) => getComputedStyle(el).transform)).not.toBe('none');
+    await finishShiftAnimations(secondItem);
+    expect(await contentTop(secondItem, scroll)).toBeCloseTo(initialTop - itemHeight, 0);
+
+    await demoPage.keyboardCancel();
+  });
+
+  test("a row's own translate is kept while it slides", async ({ page }) => {
+    const demoPage = new DemoPage(page);
+    await demoPage.goto({ shiftAnimation: SHIFT_MS });
+    const secondItem = demoPage.list1Items.nth(1);
+    const scroll = demoPage.list1VirtualScroll;
+    const itemHeight = 50;
+    await secondItem.evaluate((el) => (el.style.translate = '8px 0px'));
+    const initialTop = await contentTop(secondItem, scroll);
+    const initialLeft = (await secondItem.boundingBox())!.x;
+
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+    await demoPage.keyboardMoveDown();
+    await poll(() => activeAnimationCount(secondItem)).toBe(1);
+
+    await seekShiftAnimation(secondItem, 0);
+    expect(await contentTop(secondItem, scroll)).toBeCloseTo(initialTop, 0);
+    expect((await secondItem.boundingBox())!.x).toBeCloseTo(initialLeft, 0);
+    await seekShiftAnimation(secondItem, 0.5);
+    expect((await secondItem.boundingBox())!.x).toBeCloseTo(initialLeft, 0);
+    await finishShiftAnimations(secondItem);
+    expect(await contentTop(secondItem, scroll)).toBeCloseTo(initialTop - itemHeight, 0);
+    expect((await secondItem.boundingBox())!.x).toBeCloseTo(initialLeft, 0);
+
+    await demoPage.keyboardCancel();
+  });
+
   test('drops land in the right order with animation enabled', async ({ page }) => {
     const demoPage = new DemoPage(page);
     await demoPage.goto({ shiftAnimation: SHIFT_MS });

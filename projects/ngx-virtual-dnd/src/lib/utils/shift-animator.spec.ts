@@ -23,16 +23,15 @@ describe('ShiftAnimator', () => {
 
   const createElement = (top: number): HTMLElement => {
     const el = document.createElement('div');
+    // Connected, so computed style follows inline style changes.
+    document.body.appendChild(el);
     tops.set(el, top);
     el.getBoundingClientRect = () => {
       const running = animations.get(el)?.at(-1);
       // Visual position = layout position + in-flight animation offset
       let offset = 0;
       if (running && running.cancel.mock.calls.length === 0 && running.progress !== null) {
-        const from = /translate\([^,]+, ([-\d.]+)px\)/.exec(
-          String(running.keyframes[0]['transform']),
-        );
-        offset = Number(from?.[1] ?? 0) * (1 - running.progress);
+        offset = fromY(running) * (1 - running.progress);
       }
       const y = (tops.get(el) ?? 0) + offset;
       const hidden = y < 0;
@@ -47,10 +46,9 @@ describe('ShiftAnimator', () => {
   };
 
   const lastAnimation = (el: HTMLElement): FakeAnimation | undefined => animations.get(el)?.at(-1);
+  /** Starting y offset of a `translate: <x>px <y>px` keyframe. */
   const fromY = (animation: FakeAnimation | undefined): number =>
-    Number(
-      /translate\([^,]+, ([-\d.]+)px\)/.exec(String(animation?.keyframes[0]['transform']))?.[1],
-    );
+    Number(/^[-\d.]+px ([-\d.]+)px$/.exec(String(animation?.keyframes[0]['translate']))?.[1]);
 
   const createAnimator = (config: VdndAnimationConfig = { shiftDuration: 200 }): ShiftAnimator =>
     new ShiftAnimator({
@@ -104,6 +102,7 @@ describe('ShiftAnimator', () => {
 
   afterEach(() => {
     Element.prototype.animate = originalAnimate;
+    document.body.replaceChildren();
   });
 
   it('does not animate the drag start render', () => {
@@ -132,10 +131,55 @@ describe('ShiftAnimator', () => {
     expect(animations.has(a)).toBe(false);
     const animation = lastAnimation(b);
     expect(fromY(animation)).toBe(-50);
-    expect(animation?.keyframes[1]['transform']).toBe('translate(0px, 0px)');
+    expect(animation?.keyframes[1]['translate']).toBe('0px 0px');
     expect(animation?.options).toEqual(
-      expect.objectContaining({ duration: 150, easing: 'linear', composite: 'add' }),
+      expect.objectContaining({ duration: 150, easing: 'linear' }),
     );
+  });
+
+  it('animates the translate property with a replace effect so it can run on the compositor', () => {
+    const b = createElement(50);
+    entries = [['b', b]];
+    const animator = createAnimator();
+    render(animator, true, 1);
+
+    render(animator, true, 2, () => tops.set(b, 100));
+
+    const animation = lastAnimation(b);
+    // `translate` composes with the row's own `transform` without an additive effect;
+    // Chromium never composites a keyframe effect with `composite: 'add'`.
+    expect(animation?.keyframes.every((keyframe) => !('transform' in keyframe))).toBe(true);
+    expect(animation?.options.composite ?? 'replace').toBe('replace');
+  });
+
+  it('adds the slide on top of a translate the consumer sets on the row', () => {
+    const b = createElement(50);
+    b.style.translate = '10px 0px';
+    entries = [['b', b]];
+    const animator = createAnimator();
+    render(animator, true, 1);
+
+    render(animator, true, 2, () => tops.set(b, 100));
+
+    expect(fromY(lastAnimation(b))).toBe(-50);
+    expect(lastAnimation(b)?.options.composite).toBe('add');
+  });
+
+  it('keeps the consumer translate check when retargeting an in-flight slide', () => {
+    const b = createElement(50);
+    entries = [['b', b]];
+    const animator = createAnimator();
+    render(animator, true, 1);
+    render(animator, true, 2, () => tops.set(b, 100));
+    const first = lastAnimation(b)!;
+    first.progress = 0.5;
+    // Computed style now includes the running slide's own translate.
+    b.style.translate = '0px -25px';
+
+    render(animator, true, 1, () => tops.set(b, 50));
+
+    expect(animations.get(b)?.length).toBe(2);
+    expect(lastAnimation(b)?.options.composite ?? 'replace').toBe('replace');
   });
 
   it('retargets an in-flight animation from the current visual position', () => {
@@ -173,6 +217,22 @@ describe('ShiftAnimator', () => {
     expect(running.cancel).not.toHaveBeenCalled();
     expect(animations.get(a)?.length).toBe(1);
     expect(fromY(lastAnimation(b))).toBe(-50);
+  });
+
+  it('checks the consumer translate again once the previous slide no longer applies', () => {
+    const b = createElement(50);
+    entries = [['b', b]];
+    const animator = createAnimator();
+    render(animator, true, 1);
+    render(animator, true, 2, () => tops.set(b, 100));
+    // Cancelled from outside (or finished before its onfinish ran): no longer in effect.
+    lastAnimation(b)!.progress = null;
+    b.style.translate = '10px 0px';
+
+    render(animator, true, 1, () => tops.set(b, 50));
+
+    expect(animations.get(b)?.length).toBe(2);
+    expect(lastAnimation(b)?.options.composite).toBe('add');
   });
 
   it('ignores scroll offset changes between the two measurements', () => {

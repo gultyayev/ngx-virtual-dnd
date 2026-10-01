@@ -42,12 +42,12 @@ export const appConfig: ApplicationConfig = {
 | `dropDuration`  | `200`                        | [Drop animation](#drop-animation) duration in ms. `0` turns it off |
 | `dropEasing`    | `cubic-bezier(0.2, 0, 0, 1)` | Any CSS easing function                                            |
 
-- The slide is a `transform` animation, so it stays on the compositor. It works with virtual scrolling and with [dynamic heights](/guide/features/dynamic-heights).
+- The slide animates the `translate` CSS property, so it runs on the compositor. It works with virtual scrolling and with [dynamic heights](/guide/features/dynamic-heights).
 - It is skipped when the user has turned on reduced motion (`prefers-reduced-motion: reduce`).
 - If the placeholder moves again mid-slide, rows continue from where they currently are.
 - Drop positions are calculated from geometry, so a row that is still sliding never changes where an item lands.
 - Rows also slide on drop or cancel. After a drop they usually already sit in their final slots, so a slide in progress simply finishes. After a cancel, displaced rows slide back.
-- The slide is added on top of any `transform` you set on rows, so your own transforms are kept.
+- Your own `transform` on rows is kept: the slide moves the row as a whole, and your rotation or scale does not distort the slide. If you set `translate` on rows yourself, the slide is added to it, but then it runs on the main thread instead of the compositor, so prefer `transform` for your own offsets. A `translate` you change while a row is sliding applies once the slide ends.
 
 The config is read each time an animation starts, so a getter can switch it at runtime, for example from a user setting:
 
@@ -81,7 +81,7 @@ With the same config, releasing an item no longer makes the preview vanish. The 
 Rows animate in `<vdnd-sortable-list>`, `<vdnd-virtual-scroll>` and every `*vdndVirtualFor` list, including those inside `<vdnd-virtual-viewport>` and `<vdnd-virtual-content>`.
 
 :::warning
-Do not add your own CSS `transition` on the rows' `transform` or `top` to get this effect. Rows are repositioned by layout (or by an inline `top` in a `*vdndVirtualFor` placed directly in a `vdndScrollable`), and a transition on either property competes with the built-in slide.
+Do not add your own CSS `transition` on the rows' `transform`, `translate` or `top` to get this effect. Rows are repositioned by layout (or by an inline `top` in a `*vdndVirtualFor` placed directly in a `vdndScrollable`), and a transition on any of them competes with the built-in slide.
 :::
 
 ## Placeholder move events
