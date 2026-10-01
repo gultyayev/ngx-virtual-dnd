@@ -201,12 +201,14 @@ export class ShiftAnimator {
 
       // Both measurements include the in-flight offset, so the new animation must
       // start from that offset plus the layout delta to continue from the current spot.
-      const current = this.#currentOffset(element);
+      const active = this.#activeShift(element);
+      const remaining = active ? 1 - active.progress : 0;
       shifts.push({
         element,
-        x: dx + current.x,
-        y: dy + current.y,
-        additive: this.#running.get(element)?.additive ?? this.#hasOwnTranslate(element),
+        x: dx + (active?.shift.x ?? 0) * remaining,
+        y: dy + (active?.shift.y ?? 0) * remaining,
+        // While a slide applies, computed style includes it: keep the decision it was made with.
+        additive: active?.shift.additive ?? this.#hasOwnTranslate(element),
       });
     }
 
@@ -228,15 +230,16 @@ export class ShiftAnimator {
     return !!translate && translate !== 'none';
   }
 
-  #currentOffset(element: HTMLElement): { x: number; y: number } {
-    const running = this.#running.get(element);
+  /** The element's running slide and its progress, or null when none is in effect. */
+  #activeShift(element: HTMLElement): { shift: RunningShift; progress: number } | null {
+    const shift = this.#running.get(element);
     // Effect-level easing makes `progress` the eased progress, i.e. the fraction travelled.
-    const progress = running?.animation.effect?.getComputedTiming().progress;
-    if (!running || progress === null || progress === undefined) {
-      return { x: 0, y: 0 };
+    // It is null once the animation was cancelled or finished (even before `onfinish` ran).
+    const progress = shift?.animation.effect?.getComputedTiming().progress;
+    if (!shift || progress === null || progress === undefined) {
+      return null;
     }
-    const remaining = 1 - progress;
-    return { x: running.x * remaining, y: running.y * remaining };
+    return { shift, progress };
   }
 
   #start({ element, x, y, additive }: PendingShift): void {

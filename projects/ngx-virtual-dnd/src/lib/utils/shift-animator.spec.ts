@@ -23,6 +23,8 @@ describe('ShiftAnimator', () => {
 
   const createElement = (top: number): HTMLElement => {
     const el = document.createElement('div');
+    // Connected, so computed style follows inline style changes.
+    document.body.appendChild(el);
     tops.set(el, top);
     el.getBoundingClientRect = () => {
       const running = animations.get(el)?.at(-1);
@@ -100,6 +102,7 @@ describe('ShiftAnimator', () => {
 
   afterEach(() => {
     Element.prototype.animate = originalAnimate;
+    document.body.replaceChildren();
   });
 
   it('does not animate the drag start render', () => {
@@ -214,6 +217,22 @@ describe('ShiftAnimator', () => {
     expect(running.cancel).not.toHaveBeenCalled();
     expect(animations.get(a)?.length).toBe(1);
     expect(fromY(lastAnimation(b))).toBe(-50);
+  });
+
+  it('checks the consumer translate again once the previous slide no longer applies', () => {
+    const b = createElement(50);
+    entries = [['b', b]];
+    const animator = createAnimator();
+    render(animator, true, 1);
+    render(animator, true, 2, () => tops.set(b, 100));
+    // Cancelled from outside (or finished before its onfinish ran): no longer in effect.
+    lastAnimation(b)!.progress = null;
+    b.style.translate = '10px 0px';
+
+    render(animator, true, 1, () => tops.set(b, 50));
+
+    expect(animations.get(b)?.length).toBe(2);
+    expect(lastAnimation(b)?.options.composite).toBe('add');
   });
 
   it('ignores scroll offset changes between the two measurements', () => {
