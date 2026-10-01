@@ -64,6 +64,9 @@ export class DragStateService {
   /** Index where the placeholder should be inserted — updated on each placeholder move */
   readonly #placeholderIndex = signal<number | null>(null);
 
+  /** Whether the drag in progress is a touch drag (no cursor shows, so no grabbing cursor) */
+  readonly #isTouchDrag = signal(false);
+
   /** Snapshot captured synchronously immediately before the last drag state reset. */
   readonly #endedDragState = signal<DragState | null>(null);
 
@@ -123,15 +126,18 @@ export class DragStateService {
   readonly keyboardTargetIndex = this.#keyboardTargetIndex.asReadonly();
 
   constructor() {
-    // Inject cursor styles once (for consistent grabbing cursor during drag)
+    // Inject the grabbing cursor styles once. They target lists and items only: a rule matching
+    // every element (`body.vdnd-dragging *`, or a `*` anywhere right of the body class) restyles
+    // the whole document each time the body class changes, at drag start and at drop. Touch drags
+    // show no cursor, so they skip it.
     if (typeof document !== 'undefined') {
       const styleId = 'vdnd-cursor-styles';
       if (!document.getElementById(styleId)) {
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-          body.vdnd-dragging,
-          body.vdnd-dragging * {
+          body.vdnd-dragging:not(.vdnd-dragging-touch) .vdnd-droppable,
+          body.vdnd-dragging:not(.vdnd-dragging-touch) .vdnd-draggable {
             cursor: grabbing !important;
           }
         `;
@@ -139,17 +145,20 @@ export class DragStateService {
       }
     }
 
-    // Effect to toggle body class during drag
+    // Effect to toggle the body classes during drag
     effect(() => {
       if (typeof document === 'undefined') return;
       const isDragging = this.isDragging();
-      document.body.classList.toggle('vdnd-dragging', isDragging);
+      const classList = document.body.classList;
+      classList.toggle('vdnd-dragging', isDragging);
+      classList.toggle('vdnd-dragging-touch', isDragging && this.#isTouchDrag());
     });
   }
 
   /**
    * Start a drag operation.
    * `placeholderId` is deprecated with the `placeholderId` signal; the library passes `END_OF_LIST`.
+   * `isTouchDrag` marks a drag started by touch, which gets no grabbing cursor.
    */
   startDrag(
     item: DraggedItem,
@@ -162,10 +171,12 @@ export class DragStateService {
     sourceIndex?: number | null,
     isKeyboardDrag?: boolean,
     axisLockPosition?: CursorPosition,
+    isTouchDrag?: boolean,
   ): void {
     // Reset terminal drag metadata at start of new drag
     this.#endedDragState.set(null);
     this.#wasCancelled.set(false);
+    this.#isTouchDrag.set(isTouchDrag ?? false);
     this.#cursorPosition.set(cursorPosition ?? null);
     this.#keyboardTargetIndex.set(isKeyboardDrag ? (sourceIndex ?? 0) : null);
     this.#activeDroppableId.set(activeDroppableId ?? null);
@@ -263,7 +274,7 @@ export class DragStateService {
     const endedState = this.getStateSnapshot();
     this.#endedDragState.set(endedState);
     this.#wasCancelled.set(false);
-    this.#resetHighFrequencySignals();
+    this.#resetSignalsOutsideCoreState();
     this.#state.set(INITIAL_CORE_STATE);
 
     // After the reset, so the drop handler sees the drag as over. Delivered here rather than
@@ -284,19 +295,20 @@ export class DragStateService {
 
     this.#endedDragState.set(this.getStateSnapshot());
     this.#wasCancelled.set(true);
-    this.#resetHighFrequencySignals();
+    this.#resetSignalsOutsideCoreState();
     this.#state.set(INITIAL_CORE_STATE);
   }
 
   /**
-   * Reset the dedicated high-frequency signals to their initial null state.
+   * Reset the signals kept outside the core state (high-frequency fields, touch flag) to idle.
    */
-  #resetHighFrequencySignals(): void {
+  #resetSignalsOutsideCoreState(): void {
     this.#cursorPosition.set(null);
     this.#keyboardTargetIndex.set(null);
     this.#activeDroppableId.set(null);
     this.#placeholderId.set(null);
     this.#placeholderIndex.set(null);
+    this.#isTouchDrag.set(false);
   }
 
   /**

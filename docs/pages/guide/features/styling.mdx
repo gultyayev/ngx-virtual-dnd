@@ -5,7 +5,7 @@ description: The CSS classes the library adds, with common recipes.
 
 # Styling
 
-The library ships no visual styles for items or lists. Its only built-in style is a `grabbing` cursor while a drag is in progress. Everything else is state classes that you style however you like.
+The library ships no visual styles for items or lists. Its only built-in style is a `grabbing` cursor over lists and items (`vdnd-droppable` and `vdnd-draggable` elements) during mouse and keyboard drags. The rest of the page keeps its cursor, and so do elements inside items and lists that set their own `cursor` (a drag handle with `cursor: grab`, a button); the `pointer-events: none` recipe below covers those inside items. Touch drags get no cursor. Everything else is state classes that you style however you like.
 
 ## Classes
 
@@ -23,6 +23,7 @@ The library ships no visual styles for items or lists. Its only built-in style i
 | `vdnd-drag-preview-dropping`                             | Preview box                         | While it plays the drop animation                    |
 | `vdnd-overlay-container`                                 | Body-level container of the preview | After `<vdnd-drag-preview>` renders                  |
 | `vdnd-dragging`                                          | `<body>`                            | While any drag is in progress                        |
+| `vdnd-dragging-touch`                                    | `<body>`                            | While a touch drag is in progress                    |
 
 `<vdnd-sortable-list>`, `<vdnd-virtual-scroll>`, `<vdnd-virtual-viewport>`, `<vdnd-virtual-content>`, `vdndScrollable` and `<vdnd-placeholder>` also carry their own name as a class (for example `vdnd-sortable-list`).
 
@@ -46,6 +47,14 @@ Show a grab cursor on hover, and stop hover styles from firing on other rows dur
 
 body.vdnd-dragging .vdnd-draggable {
   pointer-events: none;
+}
+```
+
+Show the grabbing cursor over the whole page during a drag, not only over lists and items. A rule on `body` alone is enough, because `cursor` inherits; it costs a style recalculation that grows with the size of the page each time a drag starts and ends. Avoid `body.vdnd-dragging *`, which restyles every element:
+
+```css
+body.vdnd-dragging:not(.vdnd-dragging-touch) {
+  cursor: grabbing;
 }
 ```
 

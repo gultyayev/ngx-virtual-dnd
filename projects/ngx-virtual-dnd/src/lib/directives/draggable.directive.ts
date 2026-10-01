@@ -590,6 +590,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       sourceIndex,
       undefined,
       lockAxis ? startPos : undefined,
+      this.#pointerHandler.isTouchPress(),
     );
 
     // Start the scheduler RAF loop (drives pointer-move updates + autoscroll participant).

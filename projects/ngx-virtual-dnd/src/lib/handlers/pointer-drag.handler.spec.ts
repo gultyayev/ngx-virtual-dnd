@@ -197,6 +197,43 @@ describe('PointerDragHandler', () => {
       expect(handler.getStartPosition()).toEqual({ x: 150, y: 220 });
     });
 
+    it('should report a touch press as touch when its drag starts', () => {
+      let touchAtStart: boolean | null = null;
+      (mockCallbacks.onDragStart as jest.Mock).mockImplementation(() => {
+        touchAtStart = handler.isTouchPress();
+        isDragging = true;
+      });
+
+      handler.onPointerDown(createTouchStart(150, 220), true);
+      document.dispatchEvent(createTouchEvent('touchmove', 150, 260));
+
+      expect(mockCallbacks.onDragStart).toHaveBeenCalled();
+      expect(touchAtStart).toBe(true);
+    });
+
+    it('should not report a mouse press as touch when its drag starts', () => {
+      let touchAtStart: boolean | null = null;
+      (mockCallbacks.onDragStart as jest.Mock).mockImplementation(() => {
+        touchAtStart = handler.isTouchPress();
+        isDragging = true;
+      });
+
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 150, 260));
+
+      expect(mockCallbacks.onDragStart).toHaveBeenCalled();
+      expect(touchAtStart).toBe(false);
+    });
+
+    it('should not report a touch press once it has ended', () => {
+      handler.onPointerDown(createTouchStart(150, 220), true);
+      expect(handler.isTouchPress()).toBe(true);
+
+      handler.cleanup();
+
+      expect(handler.isTouchPress()).toBe(false);
+    });
+
     it('should ignore clicks on interactive elements', () => {
       const addSpy = jest.spyOn(document, 'addEventListener');
       const button = document.createElement('button');

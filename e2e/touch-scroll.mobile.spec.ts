@@ -238,4 +238,28 @@ test.describe('Touch Scroll with Drag Delay (Mobile)', () => {
     await expect(firstItem).not.toHaveClass(/vdnd-drag-pending/);
     await expect(demoPage.dragPreview).not.toBeVisible();
   });
+
+  test('a touch drag marks the body as a touch drag and gets no grabbing cursor', async ({
+    page,
+  }) => {
+    await demoPage.goto();
+
+    const firstItem = demoPage.list1Items.first();
+    const start = await centerOf(firstItem);
+    const body = page.locator('body');
+
+    await dispatchTouch(firstItem, 'touchstart', start.x, start.y);
+    await dispatchTouch(firstItem, 'touchmove', start.x, start.y + 30);
+    await expect(demoPage.dragPreview).toBeVisible();
+
+    // The documented body class is set for every drag; the touch class turns the cursor rule off
+    await expect(body).toHaveClass(/(^|\s)vdnd-dragging(\s|$)/);
+    await expect(body).toHaveClass(/(^|\s)vdnd-dragging-touch(\s|$)/);
+    await expect(demoPage.list1Container).not.toHaveCSS('cursor', 'grabbing');
+    await expect(demoPage.list2Items.first()).not.toHaveCSS('cursor', 'grabbing');
+
+    await dispatchTouch(firstItem, 'touchend', start.x, start.y + 30);
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(body).not.toHaveClass(/vdnd-dragging/);
+  });
 });
