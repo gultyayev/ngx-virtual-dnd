@@ -1712,6 +1712,33 @@ describe('DraggableDirective', () => {
       conditional.destroy();
     });
 
+    it('should report the source list as droppableId when only the keyboard-dragged item is destroyed', () => {
+      const conditional = TestBed.createComponent(ConditionalDraggableHostComponent);
+      conditional.detectChanges();
+      const item = conditional.nativeElement.querySelector(
+        '[data-draggable-id="conditional-item"]',
+      ) as HTMLElement;
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+
+      item.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      expect(keyboardDrag.isActive()).toBe(true);
+      expect(dragStateService.sourceDroppableId()).toBe('surviving-list');
+
+      conditional.componentInstance.show.set(false);
+      conditional.detectChanges();
+
+      const ends = conditional.componentInstance.dragEndEvents;
+      expect(dragStateService.isDragging()).toBe(false);
+      expect(keyboardDrag.isActive()).toBe(false);
+      expect(ends.length).toBe(1);
+      expect(ends[0].cancelled).toBe(true);
+      expect(ends[0].droppableId).toBe('surviving-list');
+
+      conditional.destroy();
+    });
+
     it('should destroy cleanly before its first change detection', () => {
       const unrendered = TestBed.createComponent(TestHostComponent);
 
