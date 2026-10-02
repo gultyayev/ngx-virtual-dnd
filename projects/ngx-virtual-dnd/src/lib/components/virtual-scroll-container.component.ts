@@ -291,6 +291,9 @@ export class VirtualScrollContainerComponent<T>
   /** Content offset last written to the content wrapper */
   #contentTransformSet: string | null = null;
 
+  /** Whether #revealPlaceholder is scheduled to run again after the next render */
+  #revealAfterRenderPending = false;
+
   /** Whether duplicate track keys were reported (once per list) */
   #warnedDuplicateKeys = false;
 
@@ -853,8 +856,13 @@ export class VirtualScrollContainerComponent<T>
   /**
    * Scroll so the placeholder is fully visible during a keyboard drag into this list.
    * Reads only signals and strategy offsets, so it works before the placeholder renders.
+   *
+   * A scroll down runs it once more after the next render (`isFollowUp`): before the placeholder
+   * renders after the last row, the content is one placeholder shorter, and the browser clamps
+   * the scroll to that shorter range. The follow-up re-applies the scroll once the rendered
+   * content is tall enough.
    */
-  #revealPlaceholder(): void {
+  #revealPlaceholder(isFollowUp = false): void {
     // Only apply when this droppable is active during keyboard drag
     if (!this.#dragState.isKeyboardDrag()) return;
     const activeDroppable = this.#dragState.activeDroppableId();
@@ -892,7 +900,21 @@ export class VirtualScrollContainerComponent<T>
       const newScrollTop = targetBottom - height;
       element.scrollTop = newScrollTop;
       this.#scrollTop.set(newScrollTop);
+      if (!isFollowUp) this.#revealPlaceholderAfterRender();
     }
+  }
+
+  /** Run #revealPlaceholder again, once, after the next render, when the scroll range includes the placeholder. */
+  #revealPlaceholderAfterRender(): void {
+    if (this.#revealAfterRenderPending) return;
+    this.#revealAfterRenderPending = true;
+    afterNextRender(
+      () => {
+        this.#revealAfterRenderPending = false;
+        this.#revealPlaceholder(true);
+      },
+      { injector: this.#injector },
+    );
   }
 
   /**
