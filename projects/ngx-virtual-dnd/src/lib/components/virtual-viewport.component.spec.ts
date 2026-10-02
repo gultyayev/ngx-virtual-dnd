@@ -10,6 +10,31 @@ class MockResizeObserver {
   disconnect = jest.fn();
 }
 
+const nextAnimationFrame = (): Promise<void> =>
+  new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+/**
+ * Lay out `element` like a browser would: scrollTop clamps to the scrollable range, and
+ * scrollTo() moves it and fires a scroll event (jsdom has no layout and no Element.scrollTo).
+ */
+function emulateScrollableLayout(element: HTMLElement, scrollHeight: number, clientHeight: number) {
+  const maxScroll = scrollHeight - clientHeight;
+  let scrollTop = 0;
+  Object.defineProperty(element, 'scrollHeight', { configurable: true, get: () => scrollHeight });
+  Object.defineProperty(element, 'clientHeight', { configurable: true, get: () => clientHeight });
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    get: () => scrollTop,
+    set: (value: number) => {
+      scrollTop = Math.max(0, Math.min(value, maxScroll));
+    },
+  });
+  element.scrollTo = ((options: ScrollToOptions) => {
+    element.scrollTop = options.top ?? scrollTop;
+    element.dispatchEvent(new Event('scroll'));
+  }) as typeof element.scrollTo;
+}
+
 @Component({
   template: `
     <vdnd-virtual-viewport
@@ -111,5 +136,57 @@ describe('VirtualViewportComponent', () => {
       component.nativeElement,
       {},
     );
+  });
+  describe('scrollBy', () => {
+    let element: HTMLElement;
+
+    beforeEach(() => {
+      element = component.nativeElement;
+      emulateScrollableLayout(element, 5000, 300);
+    });
+
+    it('should add up two calls in one task', () => {
+      component.scrollBy(100);
+      component.scrollBy(100);
+
+      expect(element.scrollTop).toBe(200);
+    });
+
+    it('should add up steps smaller than the scroll signal threshold', async () => {
+      for (let i = 0; i < 20; i++) {
+        component.scrollBy(2);
+        await nextAnimationFrame();
+      }
+
+      expect(element.scrollTop).toBe(40);
+    });
+
+    it('should start from a small user scroll', async () => {
+      element.scrollTop = 3;
+      element.dispatchEvent(new Event('scroll'));
+      await nextAnimationFrame();
+
+      component.scrollBy(50);
+
+      expect(element.scrollTop).toBe(53);
+    });
+
+    it('should start from a scrollTo() in the same task', () => {
+      component.scrollTo({ top: 1000 });
+      component.scrollBy(50);
+
+      expect(element.scrollTop).toBe(1050);
+    });
+
+    it('should clamp to the scrollable range', () => {
+      // Assert the requested target: the emulated element clamps too, so its scrollTop can't tell.
+      const scrollToSpy = jest.spyOn(element, 'scrollTo');
+
+      component.scrollBy(-100);
+      expect(scrollToSpy).toHaveBeenLastCalledWith({ top: 0 });
+
+      component.scrollBy(10_000);
+      expect(scrollToSpy).toHaveBeenLastCalledWith({ top: 5000 - 300 });
+    });
   });
 });

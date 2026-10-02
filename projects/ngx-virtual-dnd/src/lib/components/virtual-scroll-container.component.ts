@@ -1369,7 +1369,10 @@ export class VirtualScrollContainerComponent<T>
    * Get the current scroll position.
    */
   getScrollTop(): number {
-    return this.#scrollTop();
+    // Read the element: the scroll signal is the rendered position, committed once per animation
+    // frame and only after a 5px move. Server rendering has no layout, so fall back to it there.
+    const scrollTop = this.#elementRef.nativeElement.scrollTop;
+    return Number.isFinite(scrollTop) ? scrollTop : this.#scrollTop();
   }
 
   /**

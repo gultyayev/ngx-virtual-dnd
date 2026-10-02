@@ -681,6 +681,8 @@ interface VdndScrollContainer {
 
 Provided by: `VirtualViewportComponent`, `VirtualContentComponent`, `ScrollableDirective`
 
+`scrollTop()` is the rendered scroll position (reactive): the built-in containers commit it once per animation frame, after a move of 5px or more, so it can lag the scrolling element. Read that element's `scrollTop` for a position to compute from: `nativeElement` for `VirtualViewportComponent` and `ScrollableDirective`. `VirtualContentComponent`'s host does not scroll and its `scrollTop()` is relative to where its list starts: use the parent scroll container's element `scrollTop` minus the content offset, clamped at 0. The same holds for `VdndVirtualViewport.scrollTop()`.
+
 ### VDND_VIRTUAL_VIEWPORT
 
 ```typescript

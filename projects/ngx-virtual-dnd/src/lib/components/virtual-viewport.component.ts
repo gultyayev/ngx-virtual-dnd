@@ -234,7 +234,10 @@ export class VirtualViewportComponent
     const newPosition = Math.max(
       0,
       Math.min(
-        this.scrollTop() + delta,
+        // The element's position, not scrollTop(): that signal is the rendered position, committed
+        // once per animation frame and only after a 5px move, so calls in one frame (or after a
+        // scrollTo()) would overwrite each other and small steps would never add up.
+        this.nativeElement.scrollTop + delta,
         this.nativeElement.scrollHeight - this.nativeElement.clientHeight,
       ),
     );
