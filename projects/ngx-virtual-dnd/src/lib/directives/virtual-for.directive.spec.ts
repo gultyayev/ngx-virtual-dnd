@@ -8,6 +8,7 @@ import {
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { VirtualForDirective } from './virtual-for.directive';
+import { ScrollableDirective } from './scrollable.directive';
 import { VirtualViewportComponent } from '../components/virtual-viewport.component';
 import { VirtualContentComponent } from '../components/virtual-content.component';
 import { DragStateService } from '../services/drag-state.service';
@@ -1370,5 +1371,256 @@ describe('VirtualForDirective (change detection scope)', () => {
     appRef.tick();
 
     expect(selectedAttr('k22')).toBe('true');
+  });
+});
+
+/** `*vdndVirtualFor` directly in a `vdndScrollable` element, with no viewport component */
+@Component({
+  template: `
+    <div class="scroller" vdndScrollable [style.position]="scrollerPosition()">
+      <ng-container
+        *vdndVirtualFor="
+          let item of items();
+          itemHeight: 50;
+          trackBy: trackByFn;
+          droppableId: 'list'
+        "
+      >
+        <div class="item" [attr.data-id]="item.key">{{ item.key }}</div>
+      </ng-container>
+    </div>
+  `,
+  imports: [ScrollableDirective, VirtualForDirective],
+})
+class StandaloneScrollableHostComponent {
+  readonly items = signal(Array.from({ length: 30 }, (_, i) => ({ key: `k${i}` })));
+  readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+  readonly scrollerPosition = signal<string | null>(null);
+}
+
+describe('VirtualForDirective (standalone in vdndScrollable)', () => {
+  let fixture: ComponentFixture<StandaloneScrollableHostComponent>;
+  let host: StandaloneScrollableHostComponent;
+  let dragState: DragStateService;
+  let appRef: ApplicationRef;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  const render = (): void => {
+    fixture.detectChanges();
+    appRef.tick();
+  };
+
+  const scroller = (): HTMLElement => fixture.nativeElement.querySelector('.scroller');
+  const placeholder = (): HTMLElement | null =>
+    fixture.nativeElement.querySelector('.vdnd-drag-placeholder');
+  const spacer = (): HTMLElement => fixture.nativeElement.querySelector('.vdnd-virtual-for-spacer');
+  const rowTop = (key: string): string =>
+    (fixture.nativeElement.querySelector(`[data-id="${key}"]`) as HTMLElement).style.top;
+
+  const startDrag = (sourceDroppableId: string, placeholderIndex: number): void => {
+    dragState.startDrag(
+      {
+        draggableId: sourceDroppableId === 'list' ? 'k0' : 'other-item',
+        droppableId: sourceDroppableId,
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      null,
+      'list',
+      END_OF_LIST,
+      placeholderIndex,
+      sourceDroppableId === 'list' ? 0 : null,
+    );
+    render();
+  };
+
+  const movePlaceholder = (placeholderIndex: number): void => {
+    dragState.updateDragPosition({
+      cursorPosition: { x: 0, y: 0 },
+      activeDroppableId: 'list',
+      placeholderId: END_OF_LIST,
+      placeholderIndex,
+    });
+    render();
+  };
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    // jsdom has no layout: give the scroller its 200px height (4 rows of 50px)
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(200);
+    TestBed.configureTestingModule({ imports: [StandaloneScrollableHostComponent] });
+    dragState = TestBed.inject(DragStateService);
+    appRef = TestBed.inject(ApplicationRef);
+    fixture = TestBed.createComponent(StandaloneScrollableHostComponent);
+    host = fixture.componentInstance;
+  });
+
+  afterEach(() => {
+    dragState.endDrag();
+    fixture.destroy();
+    jest.restoreAllMocks();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  describe('placeholder', () => {
+    beforeEach(() => render());
+
+    it('opens a gap at the placeholder index during a same-list drag', () => {
+      // k0 is dragged (hidden, its slot closed up); the placeholder goes before k3
+      startDrag('list', 3);
+
+      const el = placeholder();
+      expect(el).not.toBeNull();
+      expect(el!.style.position).toBe('absolute');
+      expect(el!.style.top).toBe('100px');
+      expect(el!.style.height).toBe('50px');
+      expect(['k1', 'k2', 'k3', 'k4'].map(rowTop)).toEqual(['0px', '50px', '150px', '200px']);
+      // The gap fills the dragged item's closed-up slot: the scroll height stays the same
+      expect(spacer().style.height).toBe('1500px');
+    });
+
+    it('moves the gap with the placeholder', () => {
+      startDrag('list', 3);
+      movePlaceholder(2);
+
+      expect(placeholder()!.style.top).toBe('50px');
+      expect(['k1', 'k2', 'k3'].map(rowTop)).toEqual(['0px', '100px', '150px']);
+    });
+
+    it('opens a gap and grows the scroll height for an item dragged in from another list', () => {
+      startDrag('other', 2);
+
+      expect(placeholder()!.style.top).toBe('100px');
+      expect(['k0', 'k1', 'k2', 'k3'].map(rowTop)).toEqual(['0px', '50px', '150px', '200px']);
+      expect(spacer().style.height).toBe('1550px');
+    });
+
+    it('closes the gap when the drag ends', () => {
+      startDrag('other', 2);
+      dragState.endDrag();
+      render();
+
+      expect(placeholder()).toBeNull();
+      expect(['k1', 'k2', 'k3'].map(rowTop)).toEqual(['50px', '100px', '150px']);
+      expect(spacer().style.height).toBe('1500px');
+    });
+  });
+
+  describe('scroll container position', () => {
+    it('positions a static scroll container so the rows scroll with it', () => {
+      render();
+
+      expect(scroller().style.position).toBe('relative');
+    });
+
+    it('leaves a positioned scroll container as it is', () => {
+      host.scrollerPosition.set('absolute');
+      render();
+
+      expect(scroller().style.position).toBe('absolute');
+    });
+
+    it('restores the scroll container position when destroyed', () => {
+      render();
+      const el = scroller();
+      fixture.destroy();
+
+      expect(el.style.position).toBe('');
+    });
+
+    it('positions a scroll container that joins the page after the first render', () => {
+      const root = fixture.nativeElement as HTMLElement;
+      const parent = root.parentNode!;
+      root.remove();
+      render();
+      expect(scroller().style.position).toBe('');
+
+      // The next render after it is in the page (here, for an items change) positions it
+      parent.appendChild(root);
+      host.items.update((items) => [...items]);
+      render();
+
+      expect(scroller().style.position).toBe('relative');
+    });
+  });
+});
+
+/** Two `*vdndVirtualFor` lists sharing one `vdndScrollable`, each one removable */
+@Component({
+  template: `
+    <div class="scroller" vdndScrollable>
+      @if (showA()) {
+        <ng-container
+          *vdndVirtualFor="let item of items; itemHeight: 50; trackBy: trackByFn; droppableId: 'a'"
+        >
+          <div class="item">{{ item.key }}</div>
+        </ng-container>
+      }
+      @if (showB()) {
+        <ng-container
+          *vdndVirtualFor="let item of items; itemHeight: 50; trackBy: trackByFn; droppableId: 'b'"
+        >
+          <div class="item">{{ item.key }}</div>
+        </ng-container>
+      }
+    </div>
+  `,
+  imports: [ScrollableDirective, VirtualForDirective],
+})
+class SharedScrollableHostComponent {
+  readonly items = Array.from({ length: 5 }, (_, i) => ({ key: `k${i}` }));
+  readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+  readonly showA = signal(true);
+  readonly showB = signal(true);
+}
+
+describe('VirtualForDirective (lists sharing a vdndScrollable)', () => {
+  let fixture: ComponentFixture<SharedScrollableHostComponent>;
+  let appRef: ApplicationRef;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  const render = (): void => {
+    fixture.detectChanges();
+    appRef.tick();
+  };
+  const scroller = (): HTMLElement => fixture.nativeElement.querySelector('.scroller');
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    TestBed.configureTestingModule({ imports: [SharedScrollableHostComponent] });
+    appRef = TestBed.inject(ApplicationRef);
+    fixture = TestBed.createComponent(SharedScrollableHostComponent);
+    render();
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  it('keeps the scroll container positioned until the last list is destroyed', () => {
+    expect(scroller().style.position).toBe('relative');
+
+    fixture.componentInstance.showA.set(false);
+    render();
+    expect(scroller().style.position).toBe('relative');
+
+    fixture.componentInstance.showB.set(false);
+    render();
+    expect(scroller().style.position).toBe('');
+  });
+
+  it('keeps the scroll container positioned for a list added while another one uses it', () => {
+    fixture.componentInstance.showB.set(false);
+    render();
+    fixture.componentInstance.showB.set(true);
+    render();
+    fixture.componentInstance.showA.set(false);
+    render();
+
+    expect(scroller().style.position).toBe('relative');
   });
 });
