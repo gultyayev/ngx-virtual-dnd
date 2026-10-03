@@ -331,15 +331,21 @@ export class KeyboardDragHandler {
   #restoreFocus(draggableId: string, fallbackDroppableId: string | null): void {
     afterNextRender(
       () => {
-        const element = queryByAttribute<HTMLElement>(document, 'data-draggable-id', draggableId);
+        // The list the item ended up in comes from the droppable registry, so it is found inside
+        // a shadow root too; a document query covers an item rendered outside its list
+        const container = fallbackDroppableId
+          ? this.#deps.positionCalculator.getDroppableById(fallbackDroppableId)
+          : null;
+        const element =
+          (container &&
+            queryByAttribute<HTMLElement>(container, 'data-draggable-id', draggableId)) ??
+          queryByAttribute<HTMLElement>(document, 'data-draggable-id', draggableId);
 
         if (element) {
           element.focus();
-        } else if (fallbackDroppableId) {
+        } else {
           // Fallback: focus the first draggable in the list the item ended up in
-          const container = this.#deps.positionCalculator.getDroppableById(fallbackDroppableId);
-          const firstDraggable = container?.querySelector<HTMLElement>('[data-draggable-id]');
-          firstDraggable?.focus();
+          container?.querySelector<HTMLElement>('[data-draggable-id]')?.focus();
         }
       },
       { injector: this.#deps.envInjector },

@@ -2,6 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { type CursorPosition, END_OF_LIST, type GrabOffset } from '../models/drag-drop.models';
 import { PositionCalculatorService } from './position-calculator.service';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
+import { closestAcrossShadow } from '../utils/composed-dom';
 
 interface DroppableCache {
   droppableId: string | null;
@@ -96,7 +97,10 @@ export class DragIndexCalculatorService {
       scrollContainer = virtualScrollElement;
     } else if (virtualContentElement) {
       containerType = 'virtualContent';
-      scrollableParent = virtualContentElement.closest('.vdnd-scrollable') as HTMLElement | null;
+      scrollableParent = closestAcrossShadow<HTMLElement>(
+        virtualContentElement,
+        '.vdnd-scrollable',
+      );
       scrollContainer = scrollableParent ?? virtualContentElement;
     } else {
       containerType = 'fallback';
@@ -415,7 +419,7 @@ export class DragIndexCalculatorService {
   #findVirtualContent(droppableElement: HTMLElement): HTMLElement | null {
     return droppableElement.matches('vdnd-virtual-content')
       ? droppableElement
-      : droppableElement.closest<HTMLElement>('vdnd-virtual-content');
+      : closestAcrossShadow<HTMLElement>(droppableElement, 'vdnd-virtual-content');
   }
 
   #getDraggedItemHeightFallback(height: number, fallback: number): number {

@@ -43,6 +43,11 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'shadow-dom',
+    loadComponent: () =>
+      import('./shadow-dom-demo/shadow-dom-demo').then((m) => m.ShadowDomDemoComponent),
+  },
+  {
     path: 'examples',
     loadComponent: () => import('./examples/examples-shell').then((m) => m.ExamplesShellComponent),
     loadChildren: () => import('./examples/examples.routes').then((m) => m.EXAMPLE_ROUTES),

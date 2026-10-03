@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { DragState } from '../models/drag-drop.models';
+import { compareAcrossShadow } from '../utils/composed-dom';
 
 /**
  * Receives the ended drag state when a drag is dropped on the droppable. Returns whether it
@@ -85,7 +86,7 @@ export class DroppableRegistryService {
         elements.push(element);
       }
     }
-    return elements.sort(compareElements);
+    return elements.sort(compareAcrossShadow);
   }
 
   /**
@@ -117,7 +118,7 @@ export class DroppableRegistryService {
       .sort(
         (a, b) =>
           Number(b.group === dragGroup) - Number(a.group === dragGroup) ||
-          compareElements(a.element, b.element),
+          compareAcrossShadow(a.element, b.element),
       );
 
     for (const { onDrop } of candidates) {
@@ -147,7 +148,7 @@ export class DroppableRegistryService {
     for (const registration of registrations) {
       if (
         registration.element.isConnected &&
-        (!match || compareElements(registration.element, match.element) < 0)
+        (!match || compareAcrossShadow(registration.element, match.element) < 0)
       ) {
         match = registration;
       }
@@ -189,19 +190,4 @@ export class DroppableRegistryService {
       listener(group);
     }
   }
-}
-
-/**
- * Negative when `a` comes before `b` in the document (an ancestor comes before its
- * descendants). Across shadow roots the order is stable but implementation-defined.
- */
-function compareElements(a: Node, b: Node): number {
-  if (a === b) {
-    return 0;
-  }
-  const position = a.compareDocumentPosition(b);
-  return position & Node.DOCUMENT_POSITION_FOLLOWING ||
-    position & Node.DOCUMENT_POSITION_CONTAINED_BY
-    ? -1
-    : 1;
 }
