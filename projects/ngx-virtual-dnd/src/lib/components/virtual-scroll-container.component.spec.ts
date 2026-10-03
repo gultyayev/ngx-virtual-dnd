@@ -920,6 +920,56 @@ describe('VirtualScrollContainerComponent', () => {
       expect(virtualScrollEl.scrollTop).toBe(1050 - 300);
     });
 
+    it('should reveal the placeholder again once it renders past the last row', async () => {
+      // Browsers clamp scrollTop to the scrollable range, and a placeholder after the last row
+      // makes the content one placeholder taller only once it is in the DOM. jsdom stores any
+      // value, so emulate the browser.
+      const itemCount = 20;
+      const scrollRange = (): number => {
+        const placeholder = virtualScrollEl.querySelector('.vdnd-drag-placeholder-visible');
+        return itemCount * 50 + (placeholder ? 50 : 0) - 300;
+      };
+      let scrollTop = 0;
+      Object.defineProperty(virtualScrollEl, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value: number) => {
+          scrollTop = Math.max(0, Math.min(value, scrollRange()));
+        },
+      });
+
+      component.items.set(generateItems(itemCount));
+      component.droppableId.set('list');
+      fixture.detectChanges();
+      virtualScrollComponent.scrollTo(itemCount * 50 - 300);
+      fixture.detectChanges();
+
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      keyboardDrag.startKeyboardDrag(
+        {
+          draggableId: 'other-0',
+          droppableId: 'other',
+          element: document.createElement('div'),
+          height: 50,
+          width: 200,
+        },
+        0,
+        100,
+        'other',
+      );
+      dragStateService.setKeyboardTargetIndex(itemCount);
+      fixture.detectChanges();
+
+      // Enter this list at its end: the placeholder goes after the last row, at [1000, 1050)
+      keyboardDrag.moveToDroppable('list', itemCount, itemCount);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(virtualScrollEl.querySelector('.vdnd-drag-placeholder-visible')).not.toBeNull();
+      expect(virtualScrollEl.scrollTop).toBe(1050 - 300);
+      expect(virtualScrollComponent.getScrollTop()).toBe(1050 - 300);
+    });
+
     it('should not scroll to the placeholder during a pointer drag', () => {
       component.droppableId.set('list');
       fixture.detectChanges();

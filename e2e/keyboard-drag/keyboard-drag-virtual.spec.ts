@@ -98,3 +98,35 @@ test.describe('Keyboard Drag - Virtual Scroll Integration', () => {
     await poll(() => demoPage.getRenderedIndexOf('list1', draggedId!)).toBe(10);
   });
 });
+
+test.describe('Keyboard Drag - Virtual Scroll List Ends', () => {
+  test('should keep the placeholder in view when entering a list at its end', async ({ page }) => {
+    const demoPage = new DemoPage(page);
+    // List 1 gets 50 items, list 2 gets 51
+    await demoPage.goto({ itemCount: 101 });
+
+    // Scroll list 2 to its bottom. Retry the write with the read: it clips to 0 if content
+    // height isn't ready yet.
+    await expect(async () => {
+      await demoPage.scrollList('list2', 51 * 50);
+      expect(await demoPage.getScrollTop('list2')).toBe(51 * 50 - 400);
+    }).toPass({ timeout: 2000 });
+
+    // Pick up list 2's last item (index 50) without letting focus() scroll anything
+    const lastItem = page.locator('[data-draggable-id="list2-50"]');
+    await expect(lastItem).toBeVisible();
+    await lastItem.evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
+    await page.keyboard.press('Space');
+    await expect(demoPage.dragPreview).toBeVisible();
+
+    // Target index 50 carries over: list 1's end, after its last row. The content grows by the
+    // placeholder only once it renders, so the list must scroll for it after that render.
+    await demoPage.keyboardMoveToList('left');
+    await expect(demoPage.list1Container.locator('.vdnd-drag-placeholder-visible')).toBeVisible();
+    await poll(() => demoPage.isPlaceholderInView('list1')).toBe(true);
+
+    await demoPage.keyboardDrop();
+    await expect(demoPage.dragPreview).not.toBeVisible();
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '50');
+  });
+});
