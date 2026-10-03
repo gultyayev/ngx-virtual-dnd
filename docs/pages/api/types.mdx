@@ -155,6 +155,8 @@ interface VdndGroupContext {
 }
 ```
 
+`scrollTop()` on both interfaces is the rendered scroll position, a reactive value for computing what to render. The built-in containers commit it once per animation frame, after a move of 5px or more, so it can lag the scrolling element. To compute a position (for example a scroll target), read that element's `scrollTop`. For `VirtualViewportComponent` and `ScrollableDirective` it is `nativeElement`. `VirtualContentComponent`'s host does not scroll, and its `scrollTop()` is relative to where its list starts: take the parent scroll container's element `scrollTop`, subtract the content offset, and clamp at 0.
+
 ## Constants
 
 ```ts
