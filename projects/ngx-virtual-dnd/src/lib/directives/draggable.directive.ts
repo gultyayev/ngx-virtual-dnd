@@ -32,7 +32,7 @@ import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
-import { findNoDragElement, INTERACTIVE_ELEMENT_SELECTOR } from '../utils/interactive-elements';
+import { findNestedControl, findNoDragElement } from '../utils/interactive-elements';
 
 /** Key names as Angular's `keydown.<key>` bindings spell them, for the `event.key` values that differ */
 const KEY_NAMES: Record<string, string> = {
@@ -439,8 +439,8 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       return true;
     }
 
-    const control = target.closest(INTERACTIVE_ELEMENT_SELECTOR);
-    if (control === null || control === host || !host.contains(control)) {
+    const control = findNestedControl(target, host);
+    if (control === null) {
       return false;
     }
 

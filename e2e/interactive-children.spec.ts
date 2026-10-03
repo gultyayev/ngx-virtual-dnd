@@ -1,11 +1,49 @@
-import { expect, test } from '@playwright/test';
-import { afterInputHandled } from './fixtures/drag-sync';
+import { expect, Page, test } from '@playwright/test';
+import {
+  afterInputHandled,
+  settleDragPosition,
+  waitForActiveDroppable,
+} from './fixtures/drag-sync';
+
+/** IDs of the rows of a list, in page order */
+function rowIds(page: Page, listId: string): Promise<(string | null)[]> {
+  return page
+    .locator(`[data-droppable-id="${listId}"] [data-draggable-id]`)
+    .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-draggable-id')));
+}
+
+/** Drag a list's first row by the pointer and drop it below its last row. */
+async function dragFirstRowToEnd(page: Page, listId: string, ids: string[]): Promise<void> {
+  const list = page.locator(`[data-droppable-id="${listId}"]`);
+  await list.scrollIntoViewIfNeeded();
+  const source = await list.locator(`[data-draggable-id="${ids[0]}"]`).boundingBox();
+  if (!source) throw new Error('Could not get source row bounding box');
+  const x = source.x + source.width / 2;
+  const y = source.y + source.height / 2;
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + 10, { steps: 2 });
+  await expect(page.getByTestId('vdnd-drag-preview')).toBeVisible();
+
+  // Measured after the drag starts: the dragged row is hidden, and these plain lists render no
+  // placeholder, so the rows below it have moved up
+  const target = await list.locator(`[data-draggable-id="${ids[ids.length - 1]}"]`).boundingBox();
+  if (!target) throw new Error('Could not get target row bounding box');
+  const targetY = target.y + target.height * 0.75;
+  await page.mouse.move(x, targetY, { steps: 10 });
+  await settleDragPosition(page, x, targetY);
+  await waitForActiveDroppable(page, listId);
+  await page.mouse.up();
+}
 
 /**
  * Controls inside a draggable keep their own behavior, presses inside a `no-drag` element never
  * start a drag, and the default drag preview (a clone of the row) must not change the controls'
- * state. Fixture: /interactive-children, a plain list whose rows hold a text field, a radio
- * group, a `no-drag` tag and a button.
+ * state. Only controls inside a row count: a row inside a contenteditable region or a row that
+ * is a button itself drags. Fixture: /interactive-children, a plain list whose rows hold a text
+ * field, a radio group, a `no-drag` tag and a button, a list inside a contenteditable region and
+ * a list of button rows.
  */
 test.describe('Interactive children', () => {
   test.beforeEach(async ({ page }) => {
@@ -79,5 +117,35 @@ test.describe('Interactive children', () => {
 
     await expect(high).toBeChecked();
     await expect(row.getByTestId('row-priority-low')).not.toBeChecked();
+  });
+
+  test('a row inside a contenteditable region drags with the pointer', async ({ page }) => {
+    await expect(page.getByTestId('editor')).toHaveAttribute('contenteditable', 'true');
+
+    await dragFirstRowToEnd(page, 'blocks', ['block-1', 'block-2', 'block-3']);
+
+    await expect(async () => {
+      expect(await rowIds(page, 'blocks')).toEqual(['block-2', 'block-3', 'block-1']);
+    }).toPass();
+  });
+
+  test('a row that is a button drags with the pointer', async ({ page }) => {
+    await dragFirstRowToEnd(page, 'buttons', ['button-1', 'button-2', 'button-3']);
+
+    await expect(async () => {
+      expect(await rowIds(page, 'buttons')).toEqual(['button-2', 'button-3', 'button-1']);
+    }).toPass();
+  });
+
+  test('Space on a row that is a button picks it up', async ({ page }) => {
+    const row = page.locator('[data-draggable-id="button-1"]');
+
+    await row.focus();
+    await page.keyboard.press('Space');
+
+    await expect(page.getByTestId('vdnd-drag-preview')).toBeVisible();
+    await expect(row).toHaveAttribute('aria-grabbed', 'true');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('vdnd-drag-preview')).toBeHidden();
   });
 });

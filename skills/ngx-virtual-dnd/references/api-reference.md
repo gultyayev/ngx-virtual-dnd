@@ -207,7 +207,7 @@ Makes an element draggable via mouse, touch, or keyboard.
 | `vdndDraggableGroup` | `string` | `undefined` | No* | Group name. *Required unless a `vdndGroup` is in scope where the element's template is declared; without a group, drag is disabled (dev-mode warning) |
 | `vdndDraggableData` | `unknown` | `undefined` | No | Custom data (in `DragStartEvent`/`DragEndEvent`/`DropSource` `data` and as the preview template's `$implicit`) |
 | `disabled` | `boolean` | `false` | No | Disable dragging |
-| `dragHandle` | `string` | `undefined` | No | CSS selector restricting drag initiation area. Pointer-downs inside `button`, `input`, `textarea`, `select`, `[contenteditable]`, or inside a `.no-drag` element never start a drag |
+| `dragHandle` | `string` | `undefined` | No | CSS selector restricting drag initiation area (only matches inside the item count). Pointer-downs inside a `button`, `input`, `textarea`, `select`, `[contenteditable]` (not `contenteditable="false"`) or `.no-drag` element inside the item never start a drag; controls around the item and a `<button>` draggable don't count, while an `input`, `textarea`, `select` or `[contenteditable]` draggable never starts a pointer drag |
 | `dragThreshold` | `number` | `5` | No | Minimum distance (px) before drag starts |
 | `dragDelay` | `number` | `0` | No | Hold time (ms) before drag can start; moving past `dragThreshold` earlier aborts the attempt |
 | `lockAxis` | `'x' \| 'y' \| null` | `null` | No | Freeze one axis: `'x'` = X frozen (vertical-only), `'y'` = Y frozen (horizontal-only). Opposite of CDK's `cdkDragLockAxis`. |

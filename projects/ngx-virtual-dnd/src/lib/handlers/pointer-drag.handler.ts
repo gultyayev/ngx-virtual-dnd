@@ -1,6 +1,11 @@
 import { NgZone } from '@angular/core';
 import { CursorPosition } from '../models/drag-drop.models';
-import { findNoDragElement, INTERACTIVE_ELEMENT_SELECTOR } from '../utils/interactive-elements';
+import {
+  findDragHandle,
+  findNestedControl,
+  findNoDragElement,
+  isTextEntryControl,
+} from '../utils/interactive-elements';
 
 /**
  * Callbacks from the handler back into the directive for drag lifecycle.
@@ -130,18 +135,19 @@ export class PointerDragHandler {
       return;
     }
 
-    // Check if click is on drag handle (if specified)
-    if (ctx.dragHandle) {
-      const target = event.target as HTMLElement;
-      if (!target.closest(ctx.dragHandle)) {
-        return;
-      }
+    const target = event.target as HTMLElement;
+
+    // Check if click is on drag handle (if specified). Only a handle inside the draggable counts.
+    if (ctx.dragHandle && findDragHandle(target, ctx.element, ctx.dragHandle) === null) {
+      return;
     }
 
-    // Check for elements that should not trigger drag
-    const target = event.target as HTMLElement;
+    // Check for elements that should not trigger drag: controls nested inside the draggable (not
+    // controls around it), a draggable that is itself a text field, select or editable element
+    // (a press focuses it or places the caret; a button draggable drags), and no-drag elements
     if (
-      target.closest(INTERACTIVE_ELEMENT_SELECTOR) ||
+      findNestedControl(target, ctx.element) !== null ||
+      isTextEntryControl(ctx.element) ||
       findNoDragElement(target, ctx.element) !== null
     ) {
       return;

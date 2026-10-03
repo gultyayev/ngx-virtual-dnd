@@ -215,6 +215,27 @@ class PressOverridingDraggableDirective extends DraggableDirective {
 })
 class PressOverridingHostComponent {}
 
+// Draggables that are themselves controls
+@Component({
+  template: `
+    <div vdndDroppable="control-list" vdndDroppableGroup="test-group">
+      <button type="button" vdndDraggable="button-item" vdndDraggableGroup="test-group">
+        <span class="label">Button item</span>
+      </button>
+      <input type="text" vdndDraggable="input-item" vdndDraggableGroup="test-group" />
+      <textarea vdndDraggable="textarea-item" vdndDraggableGroup="test-group"></textarea>
+      <select vdndDraggable="select-item" vdndDraggableGroup="test-group">
+        <option>One</option>
+      </select>
+      <div contenteditable="true" vdndDraggable="editable-item" vdndDraggableGroup="test-group">
+        <span class="text">Editable item</span>
+      </div>
+    </div>
+  `,
+  imports: [DraggableDirective, DroppableDirective],
+})
+class ControlDraggablesHostComponent {}
+
 // A draggable rendered with a drag delay from the start, as lists that scroll by touch are
 @Component({
   template: `<div
@@ -386,6 +407,129 @@ describe('DraggableDirective', () => {
 
       expect(document.body.classList.contains('vdnd-dragging')).toBe(true);
       expect(document.body.classList.contains('vdnd-dragging-touch')).toBe(false);
+    });
+
+    it('should not start drag when pressing inside an editable element in the row', () => {
+      const editable = draggableNative.querySelector('.content') as HTMLElement;
+      editable.setAttribute('contenteditable', 'true');
+
+      attemptPointerDrag(editable);
+
+      expect(dragStateService.isDragging()).toBe(false);
+    });
+
+    it('should start a drag when pressing a contenteditable="false" element in the row', () => {
+      const notEditable = draggableNative.querySelector('.content') as HTMLElement;
+      notEditable.setAttribute('contenteditable', 'false');
+
+      attemptPointerDrag(notEditable);
+
+      expect(dragStateService.isDragging()).toBe(true);
+    });
+
+    it('should start a drag inside a draggable that sits in a contenteditable element', () => {
+      // Draggable blocks in a rich-text editor
+      const editor = document.createElement('div');
+      editor.setAttribute('contenteditable', 'true');
+      draggableNative.parentElement!.insertBefore(editor, draggableNative);
+      editor.appendChild(draggableNative);
+
+      attemptPointerDrag(draggableNative.querySelector('.content')!);
+
+      expect(dragStateService.isDragging()).toBe(true);
+      expect(component.dragStartEvents.length).toBe(1);
+    });
+
+    it('should start a drag inside a draggable that sits in a button', () => {
+      const outer = document.createElement('button');
+      draggableNative.parentElement!.insertBefore(outer, draggableNative);
+      outer.appendChild(draggableNative);
+
+      attemptPointerDrag(draggableNative.querySelector('.content')!);
+
+      expect(dragStateService.isDragging()).toBe(true);
+    });
+
+    it('should start a drag when pressing a contenteditable="FALSE" element in the row', () => {
+      // Browsers read the attribute value case-insensitively
+      const notEditable = draggableNative.querySelector('.content') as HTMLElement;
+      notEditable.setAttribute('contenteditable', 'FALSE');
+
+      attemptPointerDrag(notEditable);
+
+      expect(dragStateService.isDragging()).toBe(true);
+    });
+
+    describe('on draggables that are controls', () => {
+      let controlsFixture: ComponentFixture<ControlDraggablesHostComponent>;
+      let buttonItem: HTMLButtonElement;
+
+      const item = (id: string): HTMLElement =>
+        controlsFixture.nativeElement.querySelector(`[data-draggable-id="${id}"]`);
+
+      beforeEach(() => {
+        controlsFixture = TestBed.createComponent(ControlDraggablesHostComponent);
+        controlsFixture.detectChanges();
+        buttonItem = item('button-item') as HTMLButtonElement;
+      });
+
+      afterEach(() => {
+        dragStateService.endDrag();
+        controlsFixture.destroy();
+      });
+
+      // A press on a text field, a select or an editable element focuses it, opens it or places
+      // the caret: it keeps doing that instead of starting a drag
+      it.each(['input-item', 'textarea-item', 'select-item', 'editable-item'])(
+        'should not start a pointer drag or prevent the press on %s',
+        (id) => {
+          const mousedown = new MouseEvent('mousedown', {
+            clientX: 100,
+            clientY: 100,
+            button: 0,
+            bubbles: true,
+            cancelable: true,
+          });
+          item(id).dispatchEvent(mousedown);
+          document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 120 }));
+
+          expect(mousedown.defaultPrevented).toBe(false);
+          expect(dragStateService.isDragging()).toBe(false);
+        },
+      );
+
+      it('should not start a pointer drag from text inside an editable draggable', () => {
+        attemptPointerDrag(item('editable-item').querySelector('.text')!);
+
+        expect(dragStateService.isDragging()).toBe(false);
+      });
+
+      it('should start a pointer drag when pressing the button', () => {
+        attemptPointerDrag(buttonItem);
+
+        expect(dragStateService.isDragging()).toBe(true);
+        expect(dragStateService.draggedItemId()).toBe('button-item');
+      });
+
+      it('should start a pointer drag when pressing content inside the button', () => {
+        attemptPointerDrag(buttonItem.querySelector('.label')!);
+
+        expect(dragStateService.isDragging()).toBe(true);
+        expect(dragStateService.draggedItemId()).toBe('button-item');
+      });
+
+      it('should pick the item up with Space on the button', () => {
+        const space = new KeyboardEvent('keydown', {
+          key: ' ',
+          code: 'Space',
+          bubbles: true,
+          cancelable: true,
+        });
+        buttonItem.dispatchEvent(space);
+
+        expect(space.defaultPrevented).toBe(true);
+        expect(TestBed.inject(KeyboardDragService).isActive()).toBe(true);
+      });
     });
   });
 
@@ -685,6 +829,38 @@ describe('DraggableDirective', () => {
       attemptPointerDrag(draggableNative.querySelector('.handle')!);
 
       expect(dragStateService.isDragging()).toBe(true);
+    });
+
+    it('should not turn the whole row into a handle when an ancestor matches the selector', () => {
+      const outer = document.createElement('div');
+      outer.className = 'handle';
+      draggableNative.parentElement!.insertBefore(outer, draggableNative);
+      outer.appendChild(draggableNative);
+
+      attemptPointerDrag(draggableNative.querySelector('.content')!);
+
+      expect(dragStateService.isDragging()).toBe(false);
+    });
+
+    it('should still start drag from the handle inside a row whose ancestor matches the selector', () => {
+      const outer = document.createElement('div');
+      outer.className = 'handle';
+      draggableNative.parentElement!.insertBefore(outer, draggableNative);
+      outer.appendChild(draggableNative);
+
+      attemptPointerDrag(draggableNative.querySelector('.handle')!);
+
+      expect(dragStateService.isDragging()).toBe(true);
+    });
+
+    it('should not start drag when pressing a button that is the handle', () => {
+      // Documented: presses inside buttons never start a drag, the handle included
+      component.dragHandle.set('button');
+      fixture.detectChanges();
+
+      attemptPointerDrag(draggableNative.querySelector('button')!);
+
+      expect(dragStateService.isDragging()).toBe(false);
     });
   });
 
@@ -1257,6 +1433,23 @@ describe('DraggableDirective', () => {
       expect(space.defaultPrevented).toBe(true);
       expect(keyboardDrag.isActive()).toBe(true);
       expect(component.dragStartEvents.length).toBe(1);
+    });
+
+    it('should pick the item up with Space on a contenteditable="false" element in the row', () => {
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      const notEditable = draggableNative.querySelector('.content') as HTMLElement;
+      notEditable.setAttribute('contenteditable', 'false');
+      notEditable.tabIndex = 0;
+      const space = new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        bubbles: true,
+        cancelable: true,
+      });
+      notEditable.dispatchEvent(space);
+
+      expect(space.defaultPrevented).toBe(true);
+      expect(keyboardDrag.isActive()).toBe(true);
     });
 
     it('should pick the item up with Space on a button that is the drag handle', () => {
