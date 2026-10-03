@@ -428,7 +428,7 @@ Useful signals: `isDragging`, `draggedItem`, `draggedItemId`, `sourceDroppableId
 | `Space`              | Picks up the focused item         | Drops                                                       |
 | `Enter`              | —                                 | Drops                                                       |
 | `ArrowUp`/`ArrowDown`| —                                 | Moves the target position                                   |
-| `ArrowLeft`/`ArrowRight` | —                             | Moves to the neighbouring droppable of the same group, by on-screen x position (disabled ones skipped) |
+| `ArrowLeft`/`ArrowRight` | —                             | Moves to the neighbouring droppable of the same group, by on-screen x position (disabled ones, and hidden ones — `display: none`, `visibility: hidden` or zero size — skipped) |
 | `Escape`             | —                                 | Cancels (also cancels pointer drags)                        |
 
 Managed automatically: `tabindex` (`0`, or `-1` when disabled) on draggables, and focus returns to the moved item after a keyboard drag. The library also sets `aria-grabbed` on draggables and `aria-dropeffect="move"` on droppables, but both are deprecated since ARIA 1.1 and most screen readers ignore them: add instructions and announcements yourself.
