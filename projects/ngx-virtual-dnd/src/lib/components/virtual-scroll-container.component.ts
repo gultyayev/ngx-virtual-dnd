@@ -673,9 +673,6 @@ export class VirtualScrollContainerComponent<T>
   /** Track previous dragged ID to detect drag end */
   #previousDraggedId: string | null = null;
 
-  /** Track previous total height to detect if we were at bottom before drag ended */
-  #previousTotalHeight = 0;
-
   constructor() {
     createAutoScrollRegistration({
       autoScrollService: this.#autoScrollService,
@@ -721,47 +718,16 @@ export class VirtualScrollContainerComponent<T>
     });
     effect(() => this.#revealPlaceholder());
 
-    // Preserve scroll position when drag ends at bottom of list.
-    // Safety net: totalHeight no longer shrinks during drag (getTotalHeight
-    // ignores exclusion), but this logic remains as harmless protection
-    // in case future changes reintroduce height variance.
+    // At drag end, keep a row dropped into this list in view. Every other list, and every drop
+    // whose row stays in view, keeps its scroll position: the dropped row renders where the
+    // placeholder was.
     effect(() => {
       const currentDraggedId = this.draggedItemId();
-      const currentTotalHeight = this.totalHeight();
-      const element = this.#elementRef.nativeElement;
-
-      // Detect drag end (was dragging, now not)
-      if (this.#previousDraggedId !== null && currentDraggedId === null) {
-        const currentScrollTop = element.scrollTop;
-        const strategy = this.#strategy();
-        strategy.version();
-        const height = this.effectiveHeight();
-        const totalItems = this.items().length;
-
-        // Calculate if we were at/near bottom (within 10px tolerance)
-        // using the height FROM THE PREVIOUS CYCLE (when dragging was active)
-        const dragReducedMaxScroll = Math.max(0, this.#previousTotalHeight - height);
-        const wasAtBottom = currentScrollTop >= dragReducedMaxScroll - 10;
-
-        if (wasAtBottom && dragReducedMaxScroll > 0) {
-          // Clear exclusion before calculating new height
-          strategy.setExcludedIndex(null);
-
-          // Adjust scroll to new bottom position after totalHeight increases
-          afterNextRender(
-            () => {
-              const newTotalHeight = strategy.getTotalHeight(totalItems);
-              const newMaxScroll = Math.max(0, newTotalHeight - height);
-              element.scrollTop = newMaxScroll;
-              this.#scrollTop.set(newMaxScroll);
-            },
-            { injector: this.#injector },
-          );
-        }
-      }
-
+      const dragEnded = this.#previousDraggedId !== null && currentDraggedId === null;
       this.#previousDraggedId = currentDraggedId;
-      this.#previousTotalHeight = currentTotalHeight;
+      if (dragEnded) {
+        untracked(() => this.#revealDroppedItem());
+      }
     });
 
     // Clamp scrollTop during drag if totalHeight ever shrinks.
@@ -1228,6 +1194,73 @@ export class VirtualScrollContainerComponent<T>
       getScrollElement: () => this.#elementRef.nativeElement,
       getEntries: () => this.#shiftAnimationEntries(),
     });
+  }
+
+  /**
+   * After a drop into this list, show its row whole when it renders cut off by an edge of the
+   * visible area or less than a row's height outside it, scrolling just enough: a drop after the
+   * last row of a list scrolled to (or near) its bottom lands right below it. A row that renders
+   * in view stays where the placeholder showed it, and one far outside the view (its placeholder
+   * was out of view too) leaves the list where the user left it.
+   */
+  #revealDroppedItem(): void {
+    const droppableId = this.droppableId();
+    const ended = this.#dragState.endedDragState();
+    const placeholderIndex = ended?.placeholderIndex ?? -1;
+    if (
+      !droppableId ||
+      !ended?.draggedItem ||
+      this.#dragState.wasCancelled() ||
+      ended.activeDroppableId !== droppableId ||
+      placeholderIndex < 0
+    ) {
+      return;
+    }
+    const draggedId = ended.draggedItem.draggableId;
+    // A row dropped from another list is not measured here yet: with dynamic heights it renders
+    // as tall as the dragged item (the placeholder's height), not the estimate.
+    const unmeasuredHeight =
+      this.dynamicItemHeight() && ended.sourceDroppableId !== droppableId
+        ? ended.draggedItem.height
+        : 0;
+
+    // In the write phase: before the drop animation (and shift animations) measure the rows.
+    afterNextRender(
+      {
+        write: () => {
+          // The consumer's drop handler has inserted the row by now, at the drop's destination
+          // index: the placeholder index, or one less below its source in the same list. A drop
+          // it did not apply there scrolls nothing.
+          const items = this.items();
+          const idFn = this.itemIdFn();
+          const index = [placeholderIndex, placeholderIndex - 1].find(
+            (i) => i >= 0 && i < items.length && idFn(items[i]) === draggedId,
+          );
+          const height = this.effectiveHeight();
+          if (index === undefined || height <= 0) return;
+
+          const strategy = this.#strategy();
+          const top = strategy.getOffsetForIndex(index);
+          const rowHeight = unmeasuredHeight > 0 ? unmeasuredHeight : strategy.getItemHeight(index);
+          const bottom = top + rowHeight;
+          const element = this.#elementRef.nativeElement;
+          const scrollTop = element.scrollTop;
+          if (top > scrollTop + height + rowHeight || bottom < scrollTop - rowHeight) return;
+          let target: number;
+          if (top < scrollTop) {
+            target = top;
+          } else if (bottom > scrollTop + height) {
+            // A row taller than the viewport shows its top
+            target = Math.min(top, bottom - height);
+          } else {
+            return;
+          }
+          element.scrollTop = target;
+          this.#scrollTop.set(element.scrollTop);
+        },
+      },
+      { injector: this.#injector },
+    );
   }
 
   /**

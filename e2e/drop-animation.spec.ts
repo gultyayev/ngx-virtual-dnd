@@ -102,6 +102,37 @@ test.describe('Drop animation', () => {
     await expect(demoPage.dropGhost).toHaveCount(0);
   });
 
+  test('a drop after the last row of a list scrolled to its bottom lands on the row, scrolled into view', async ({
+    page,
+  }) => {
+    const demoPage = new DemoPage(page);
+    await demoPage.goto({ dropAnimation: DROP_MS });
+    const draggedId = (await demoPage.getItemId('list1', 0))!;
+    await expect(async () => {
+      await demoPage.scrollList('list2', 1_000_000);
+      const max = await demoPage.list2VirtualScroll.evaluate(
+        (el) => el.scrollHeight - el.clientHeight,
+      );
+      expect(max).toBeGreaterThan(0);
+      expect(await demoPage.getScrollTop('list2')).toBe(max);
+    }).toPass({ timeout: 2000 });
+
+    // Past the last item: the row lands below the visible rows, and the list scrolls to show it
+    await demoPage.dragItemToList('list1', 0, 'list2', 999);
+
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '50');
+    const dropped = demoPage.list2Container.locator(`[data-draggable-id="${draggedId}"]`);
+    await expect(demoPage.dropGhost).toBeVisible();
+    const droppedBox = (await dropped.boundingBox())!;
+    const listBox = (await demoPage.list2VirtualScroll.boundingBox())!;
+    expect(droppedBox.y).toBeGreaterThanOrEqual(listBox.y - 1);
+    expect(droppedBox.y + droppedBox.height).toBeLessThanOrEqual(listBox.y + listBox.height + 1);
+    expectSameBox(await boxAt(demoPage.dropGhost, 1), droppedBox);
+
+    await finishAnimations(demoPage.dropGhost);
+    await expect(demoPage.dropGhost).toHaveCount(0);
+  });
+
   test('a cancelled drag glides back to the original slot', async ({ page }) => {
     const demoPage = new DemoPage(page);
     await demoPage.goto({ dropAnimation: DROP_MS });
