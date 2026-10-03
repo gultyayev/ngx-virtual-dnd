@@ -1086,6 +1086,51 @@ describe('AutoScrollService', () => {
       service.unregisterContainer('col1');
     });
 
+    it('should scroll a container inside an open shadow root before the deeper-nested page scroller around it', () => {
+      const outer = makeScrollable({
+        rect: { top: 100, bottom: 500, left: 50, right: 250 },
+        scrollHeight: 1000,
+        clientHeight: 400,
+        scrollTop: 0,
+      });
+      // The page scroller sits deep in the light DOM; the list inside the shadow root is only
+      // one level below its shadow root, yet it is nested inside the page scroller.
+      let parent: HTMLElement = outer;
+      for (let i = 0; i < 5; i++) {
+        const wrapper = document.createElement('div');
+        parent.appendChild(wrapper);
+        parent = wrapper;
+      }
+      const host = document.createElement('div');
+      parent.appendChild(host);
+      const inner = makeScrollable({
+        rect: { top: 100, bottom: 500, left: 50, right: 250 },
+        scrollHeight: 1000,
+        clientHeight: 400,
+        scrollTop: 0,
+      });
+      host.attachShadow({ mode: 'open' }).appendChild(inner);
+      let top: HTMLElement = outer;
+      for (let i = 0; i < 5; i++) {
+        const wrapper = document.createElement('div');
+        wrapper.appendChild(top);
+        top = wrapper;
+      }
+
+      setupDrag({ x: 150, y: 480 });
+      service.registerContainer('outer', outer);
+      service.registerContainer('inner', inner);
+      startMonitoringWithScheduler();
+
+      flushRAF();
+
+      expect(inner.scrollTop).toBeGreaterThan(0);
+      expect(outer.scrollTop).toBe(0);
+
+      service.unregisterContainer('outer');
+      service.unregisterContainer('inner');
+    });
+
     it('should not claim the tick or fire the callback when the container is at its fractional boundary', () => {
       // scrollHeight/clientHeight are rounded integers (max computes to 600), but the real
       // max is fractional (599.6) — as on WebKit / non-integer DPR. The integer pre-check

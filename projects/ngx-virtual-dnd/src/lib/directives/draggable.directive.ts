@@ -29,6 +29,7 @@ import {
 } from '../models/drag-drop.models';
 import { VDND_GROUP_TOKEN } from './droppable-group.directive';
 import { createEffectiveGroupSignal } from '../utils/group-resolution';
+import { closestAcrossShadow } from '../utils/composed-dom';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
@@ -266,7 +267,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
    */
   #findConstraintElement(droppableElement: HTMLElement | null): HTMLElement | null {
     if (!droppableElement) return null;
-    const scrollable = droppableElement.closest('.vdnd-scrollable');
+    const scrollable = closestAcrossShadow(droppableElement, '.vdnd-scrollable');
     return (scrollable as HTMLElement) ?? droppableElement;
   }
 

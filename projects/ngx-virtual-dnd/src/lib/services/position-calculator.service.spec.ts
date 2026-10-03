@@ -1005,4 +1005,188 @@ describe('PositionCalculatorService', () => {
       expect(service.isDroppableDisabledById('nonexistent')).toBe(true);
     });
   });
+
+  describe('open shadow roots', () => {
+    const created: HTMLElement[] = [];
+
+    function stubRect(el: HTMLElement, rect: Partial<DOMRect>): void {
+      const full = {
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+        ...rect,
+      } as DOMRect;
+      el.getBoundingClientRect = () => full;
+    }
+
+    /** An element with an open shadow root, appended to `parent` (the body by default). */
+    function shadowHost(parent: HTMLElement = document.body): {
+      host: HTMLElement;
+      root: ShadowRoot;
+    } {
+      const host = document.createElement('div');
+      parent.appendChild(host);
+      if (parent === document.body) {
+        created.push(host);
+      }
+      return { host, root: host.attachShadow({ mode: 'open' }) };
+    }
+
+    function droppableEl(id: string, group = 'g'): HTMLElement {
+      const el = document.createElement('div');
+      el.setAttribute('data-droppable-id', id);
+      el.setAttribute('data-droppable-group', group);
+      return el;
+    }
+
+    afterEach(() => {
+      service.endDragSession();
+      created.forEach((el) => el.remove());
+      created.length = 0;
+    });
+
+    it('finds the droppable parent of an element inside a shadow root it contains', () => {
+      const list = droppableEl('list');
+      document.body.appendChild(list);
+      created.push(list);
+      const { root } = shadowHost(list);
+      const item = document.createElement('div');
+      item.setAttribute('data-draggable-id', 'item');
+      root.appendChild(item);
+
+      expect(service.getDroppableParent(item, 'g')).toBe(list);
+    });
+
+    it('finds the draggable host of an element inside its shadow root', () => {
+      const { host, root } = shadowHost();
+      host.setAttribute('data-draggable-id', 'card');
+      const inner = document.createElement('span');
+      root.appendChild(inner);
+
+      expect(service.getDraggableParent(inner)).toBe(host);
+    });
+
+    it('stops at the page root when walking out of shadow roots', () => {
+      const { root } = shadowHost();
+      const inner = document.createElement('span');
+      root.appendChild(inner);
+
+      expect(service.getDraggableParent(inner)).toBeNull();
+      expect(service.getDroppableParent(inner, 'g')).toBeNull();
+    });
+
+    it('finds the draggable at a point inside an open shadow root', () => {
+      const { host, root } = shadowHost();
+      const item = document.createElement('div');
+      item.setAttribute('data-draggable-id', 'item');
+      const label = document.createElement('span');
+      item.appendChild(label);
+      root.appendChild(item);
+      const dragged = document.createElement('div');
+
+      // jsdom has no layout: stub the hit-test of the document (which returns the shadow host)
+      // and of the shadow root (which returns the element under the point inside it)
+      const original = document.elementFromPoint;
+      document.elementFromPoint = jest.fn(() => host);
+      (root as unknown as { elementFromPoint: () => Element }).elementFromPoint = jest.fn(
+        () => label,
+      );
+      try {
+        expect(service.findDraggableAtPoint(10, 10, dragged)).toBe(item);
+      } finally {
+        document.elementFromPoint = original;
+      }
+    });
+
+    it('stops looking into shadow roots whose hit-tests point back at each other', () => {
+      const first = shadowHost();
+      first.host.setAttribute('data-draggable-id', 'first');
+      const second = shadowHost();
+      const dragged = document.createElement('div');
+      const stub = (root: ShadowRoot, element: Element): void => {
+        (root as unknown as { elementFromPoint: () => Element }).elementFromPoint = () => element;
+      };
+      stub(first.root, second.host);
+      stub(second.root, first.host);
+
+      const original = document.elementFromPoint;
+      document.elementFromPoint = jest.fn(() => first.host);
+      try {
+        // Ends on the last element it reached (second's host) instead of looping
+        expect(service.findDraggableAtPoint(10, 10, dragged)).toBeNull();
+      } finally {
+        document.elementFromPoint = original;
+      }
+    });
+
+    it('clips a droppable inside a shadow root to a scrollable ancestor outside it', () => {
+      const dragged = document.createElement('div');
+      const scrollable = document.createElement('div');
+      scrollable.className = 'vdnd-scrollable';
+      stubRect(scrollable, { top: 100, left: 100, right: 300, bottom: 300 });
+      document.body.appendChild(scrollable);
+      created.push(scrollable);
+
+      const { root } = shadowHost(scrollable);
+      const list = droppableEl('list');
+      stubRect(list, { top: 0, left: 100, right: 300, bottom: 600 });
+      root.appendChild(list);
+      registerDroppable(list);
+
+      service.beginDragSession('g');
+
+      expect(service.findDroppableAtPoint(200, 50, dragged, 'g')).toBeNull();
+      expect(service.findDroppableAtPoint(200, 200, dragged, 'g')).toBe(list);
+    });
+
+    it('hit-tests a droppable nested in a shadow root inside another droppable as the inner one', () => {
+      const dragged = document.createElement('div');
+      const outer = droppableEl('outer');
+      stubRect(outer, { top: 0, left: 0, right: 400, bottom: 400 });
+      document.body.appendChild(outer);
+      created.push(outer);
+      const { root } = shadowHost(outer);
+      const inner = droppableEl('inner');
+      stubRect(inner, { top: 100, left: 100, right: 200, bottom: 200 });
+      root.appendChild(inner);
+      // Inner registers first (a child renders before its parent registers)
+      registerDroppable(inner);
+      registerDroppable(outer);
+
+      // Browsers order nodes of different trees (a shadow tree and the page) arbitrarily, only
+      // consistently; jsdom happens to order them by page position. Order shadow trees first
+      // (wrong) so only a comparison within one tree can find the inner droppable.
+      const original = Node.prototype.compareDocumentPosition;
+      const spy = jest
+        .spyOn(Node.prototype, 'compareDocumentPosition')
+        .mockImplementation(function (this: Node, other: Node) {
+          if (this.getRootNode() === other.getRootNode()) {
+            return original.call(this, other);
+          }
+          const order =
+            this.getRootNode() instanceof ShadowRoot
+              ? Node.DOCUMENT_POSITION_FOLLOWING
+              : Node.DOCUMENT_POSITION_PRECEDING;
+          return (
+            Node.DOCUMENT_POSITION_DISCONNECTED |
+            Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC |
+            order
+          );
+        });
+      try {
+        service.beginDragSession('g');
+
+        expect(service.findDroppableAtPoint(150, 150, dragged, 'g')).toBe(inner);
+        expect(service.findDroppableAtPoint(50, 50, dragged, 'g')).toBe(outer);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
 });

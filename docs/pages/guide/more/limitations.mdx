@@ -20,6 +20,15 @@ Because hit-testing uses geometry rather than `elementFromPoint()`, some browser
 
 If your layout depends on either, keep overlapping droppables in different groups, or avoid painting interactive overlays across active drop targets during a drag.
 
+## Shadow DOM
+
+Lists, items and the drag preview work inside an open shadow root, for example in a component with `ViewEncapsulation.ShadowDom`. Droppables register themselves rather than being found by a document query, and the lookups that walk up from an element (the list of an item, the `vdndScrollable` container of a list) continue from a shadow root to its host. Some things still need care:
+
+- **An item must be in the same DOM tree as its list.** A list finds its items with `querySelectorAll()`, which does not look into shadow roots. For a row component that uses shadow DOM, put `vdndDraggable` on the component's host element, not on an element inside its shadow root. Items slotted (`<slot>`) into a list that a web component renders in its shadow root are not found either.
+- **Only open shadow roots are supported.** Nothing can look into a closed one from outside: `PositionCalculatorService.findDraggableAtPoint()`, for example, stops at its host.
+- **The preview leaves the shadow root.** It moves to a container under `<body>`, where the shadow root's styles (its `<style>` elements and `adoptedStyleSheets`) don't apply. The default preview still looks like the item, because the clone gets the item's computed styles inline. A custom preview template declared in a shadow-DOM component loses that component's styles, so style it from a global stylesheet. An item that is itself a shadow host previews without its shadow content (cloning an element does not copy its shadow root); give it a custom preview template.
+- **No grabbing cursor inside shadow roots.** The `cursor: grabbing` the library sets during a drag comes from a document stylesheet, which does not reach into shadow roots. Lists and items there keep their own cursor.
+
 ## Animations on rows that move
 
 This is a limitation of Angular. The lists move a row's view with `ViewContainerRef.move()`, as `*ngFor` does, and Angular animates a view that moves as if it left and came back: it plays the row's leave animation (`animate.leave`) and its enter animation (`animate.enter`). Only `@for` avoids that. Rows move when the items change order, for example after a drop or a sort. A row in `stickyItemIds` also moves each time it scrolls past the edge of the rendered rows.

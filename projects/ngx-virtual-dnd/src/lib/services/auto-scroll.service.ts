@@ -3,6 +3,7 @@ import { CursorPosition } from '../models/drag-drop.models';
 import { DragStateService } from './drag-state.service';
 import { PositionCalculatorService } from './position-calculator.service';
 import { DragSchedulerService } from './drag-scheduler.service';
+import { depthAcrossShadow } from '../utils/composed-dom';
 
 /**
  * Configuration for auto-scroll behavior.
@@ -193,13 +194,12 @@ export class AutoScrollService {
     return element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
   }
 
-  /** Number of ancestor elements — the element's absolute depth in the DOM tree. */
+  /**
+   * Number of ancestor elements — the element's absolute depth in the DOM tree, counting a shadow
+   * host as the parent of its shadow tree (a list in a shadow root nests in the page's scroller).
+   */
   #domDepth(element: HTMLElement): number {
-    let depth = 0;
-    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-      depth++;
-    }
-    return depth;
+    return depthAcrossShadow(element);
   }
 
   /**

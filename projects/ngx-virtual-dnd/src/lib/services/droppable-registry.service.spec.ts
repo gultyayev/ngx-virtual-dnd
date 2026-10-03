@@ -80,6 +80,62 @@ describe('DroppableRegistryService', () => {
       expect(registry.getGroup('g')).toEqual([inShadow]);
     });
 
+    it('orders droppables across open shadow roots by their place in the page', () => {
+      // outer > host > (shadow) inner, then a later sibling (and one in a sibling shadow root)
+      const outer = makeElement();
+      const inner = makeElement(makeElement(outer).attachShadow({ mode: 'open' }));
+      const deeper = makeElement(makeElement(inner).attachShadow({ mode: 'open' }));
+      const later = makeElement();
+      const laterInShadow = makeElement(makeElement().attachShadow({ mode: 'open' }));
+      // Registered out of page order: the registry must sort them
+      registry.register(laterInShadow, 'later-in-shadow', 'g');
+      registry.register(deeper, 'deeper', 'g');
+      registry.register(later, 'later', 'g');
+      registry.register(inner, 'inner', 'g');
+      registry.register(outer, 'outer', 'g');
+
+      // Browsers order nodes of different trees (a shadow tree and the page) arbitrarily, only
+      // consistently; jsdom happens to order them by page position. Make the order deliberately
+      // wrong (deeper shadow trees first) so only a comparison within one tree can pass.
+      const original = Node.prototype.compareDocumentPosition;
+      const shadowDepth = (node: Node): number => {
+        let depth = 0;
+        for (
+          let root = node.getRootNode();
+          root instanceof ShadowRoot;
+          root = root.host.getRootNode()
+        ) {
+          depth++;
+        }
+        return depth;
+      };
+      const spy = jest
+        .spyOn(Node.prototype, 'compareDocumentPosition')
+        .mockImplementation(function (this: Node, other: Node) {
+          if (this.getRootNode() === other.getRootNode()) {
+            return original.call(this, other);
+          }
+          const difference = shadowDepth(this) - shadowDepth(other);
+          const order =
+            difference === 0
+              ? original.call(this, other) &
+                (Node.DOCUMENT_POSITION_PRECEDING | Node.DOCUMENT_POSITION_FOLLOWING)
+              : difference > 0
+                ? Node.DOCUMENT_POSITION_FOLLOWING
+                : Node.DOCUMENT_POSITION_PRECEDING;
+          return (
+            Node.DOCUMENT_POSITION_DISCONNECTED |
+            Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC |
+            order
+          );
+        });
+      try {
+        expect(registry.getGroup('g')).toEqual([outer, inner, deeper, later, laterInShadow]);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it('returns a copy callers cannot use to corrupt the registry', () => {
       const a = makeElement();
       registry.register(a, 'a', 'g');

@@ -534,6 +534,10 @@ On release, `(dragEnd)` fires first, then `(drop)` on the destination, both befo
 
 The only built-in style is a `grabbing` cursor on `vdnd-droppable` and `vdnd-draggable` elements during mouse and keyboard drags (not touch drags). Elsewhere the page keeps its cursor, and so do elements inside items and lists that set their own `cursor` (handles, buttons); `body.vdnd-dragging .vdnd-draggable { pointer-events: none; }` covers those inside items. For a page-wide cursor, add `body.vdnd-dragging:not(.vdnd-dragging-touch) { cursor: grabbing; }`; never `body.vdnd-dragging *`, which restyles every element at drag start and drop.
 
+## Shadow DOM
+
+Lists, items and `<vdnd-drag-preview />` work inside an open shadow root (e.g. a component with `ViewEncapsulation.ShadowDom`). Keep each `vdndDraggable` in the same DOM tree as its list: a list finds its items with `querySelectorAll()`, which does not enter shadow roots, so for a shadow-DOM row component put `vdndDraggable` on its host element, and don't slot items into a list rendered inside a web component's shadow root. Closed shadow roots are not supported. The preview moves under `<body>`, so a custom preview template declared in a shadow-DOM component loses that component's styles (style it globally), and an item that is itself a shadow host previews without its shadow content. The drag's `cursor: grabbing` does not reach into shadow roots. Details: Known limitations in the docs.
+
 ## Troubleshooting
 
 | Symptom                                                    | Likely cause                                                                                   |

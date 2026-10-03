@@ -1,5 +1,10 @@
 import { DestroyRef, inject, Injectable, NgZone } from '@angular/core';
 import { DroppableRegistryService } from './droppable-registry.service';
+import {
+  closestAcrossShadow,
+  elementFromPointAcrossShadow,
+  parentAcrossShadow,
+} from '../utils/composed-dom';
 
 /**
  * Snapshot of the candidate droppables for an active drag session.
@@ -255,12 +260,12 @@ export class PositionCalculatorService {
 
   /**
    * The ancestor that clips a candidate's hit-test rect: its nearest `.vdnd-scrollable`
-   * ancestor, or null when it has none or is one itself. Without clipping a droppable scrolled
+   * ancestor (looking past shadow roots), or null when it has none or is one itself. Without clipping a droppable scrolled
    * mostly out of a clipping container still hit-tests over its full unclipped rect (issue #23
    * case 3).
    */
   #clipOf(el: HTMLElement): Element | null {
-    const scrollable = el.closest('.vdnd-scrollable');
+    const scrollable = closestAcrossShadow(el, '.vdnd-scrollable');
     return scrollable === el ? null : scrollable;
   }
 
@@ -368,7 +373,7 @@ export class PositionCalculatorService {
   }
 
   /**
-   * Find the draggable element at a given point.
+   * Find the draggable element at a given point, including one inside an open shadow root.
    *
    * @param x - Cursor X coordinate
    * @param y - Cursor Y coordinate
@@ -385,7 +390,7 @@ export class PositionCalculatorService {
     }
 
     try {
-      const elementAtPoint = document.elementFromPoint(x, y);
+      const elementAtPoint = elementFromPointAcrossShadow(x, y);
       if (!elementAtPoint) {
         return null;
       }
@@ -399,7 +404,8 @@ export class PositionCalculatorService {
   }
 
   /**
-   * Walk up the DOM tree to find a droppable parent element.
+   * Walk up the DOM tree to find a droppable parent element. The walk continues from a shadow
+   * root to its host.
    *
    * @param element - Starting element
    * @param groupName - The drag-and-drop group name to filter by
@@ -414,26 +420,28 @@ export class PositionCalculatorService {
     // Match on the attribute's presence and compare the value here, so the group name needs no
     // selector escaping. Nearer droppables of other groups are skipped.
     const selector = `[${this.#DROPPABLE_GROUP_ATTR}]`;
-    let current = element.closest<HTMLElement>(selector);
+    let current = closestAcrossShadow<HTMLElement>(element, selector);
     while (current && !isPageRoot(current)) {
       if (current.getAttribute(this.#DROPPABLE_GROUP_ATTR) === groupName) {
         return current;
       }
-      current = current.parentElement?.closest<HTMLElement>(selector) ?? null;
+      const parent = parentAcrossShadow(current);
+      current = parent ? closestAcrossShadow<HTMLElement>(parent, selector) : null;
     }
 
     return null;
   }
 
   /**
-   * Walk up the DOM tree to find a draggable parent element.
+   * Walk up the DOM tree to find a draggable parent element. The walk continues from a shadow
+   * root to its host.
    *
    * @param element - Starting element
    * @returns The draggable parent element, or null if none found
    */
   getDraggableParent(element: HTMLElement): HTMLElement | null {
     const selector = `[${this.#DRAGGABLE_ID_ATTR}]:not([${this.#DRAGGABLE_ID_ATTR}=""])`;
-    const draggable = element.closest<HTMLElement>(selector);
+    const draggable = closestAcrossShadow<HTMLElement>(element, selector);
     return draggable && !isPageRoot(draggable) ? draggable : null;
   }
 
