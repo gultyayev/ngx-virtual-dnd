@@ -1156,6 +1156,35 @@ describe('VirtualScrollContainerComponent', () => {
         expect(virtualScrollEl.scrollTop).toBe(1120 - 300);
       });
 
+      it("should reveal a row moved within the list with dynamic heights by the list's own height for it", async () => {
+        // This list measures its own rows: item-5 moved to index 19 is [950, 1000) here, partly
+        // cut off in the viewport [680, 980), whatever height the drag reported
+        await runDrag({
+          scrollTop: 680,
+          dynamicItemHeight: true,
+          height: 120,
+          draggedId: 'item-5',
+          sourceDroppableId: 'list',
+          sourceIndex: 5,
+          placeholderIndex: 20,
+          applyDrop: (items) => {
+            const [moved] = items.splice(5, 1);
+            items.splice(19, 0, moved);
+            return items;
+          },
+        });
+
+        expect(virtualScrollEl.scrollTop).toBe(1000 - 300);
+      });
+
+      it('should leave the list alone when a row taller than the viewport lands far outside it', async () => {
+        // A 1000px row at [1000, 2000) starts 700px below the viewport [0, 300): more than the
+        // viewport's height away, however tall the row
+        await dropFromOtherListAt(20, { scrollTop: 0, dynamicItemHeight: true, height: 1000 });
+
+        expect(virtualScrollEl.scrollTop).toBe(0);
+      });
+
       it('should find a row dropped below its source in the same list one index before the placeholder', async () => {
         // item-5 dropped at the end: placeholder index 20, destination index 19 at [950, 1000),
         // which shows only its top 30px in the viewport [680, 980)

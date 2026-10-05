@@ -1245,7 +1245,9 @@ export class VirtualScrollContainerComponent<T>
           const bottom = top + rowHeight;
           const element = this.#elementRef.nativeElement;
           const scrollTop = element.scrollTop;
-          if (top > scrollTop + height + rowHeight || bottom < scrollTop - rowHeight) return;
+          // Near: within a row's height of the view, but no more than the view's own height
+          const margin = Math.min(rowHeight, height);
+          if (top > scrollTop + height + margin || bottom < scrollTop - margin) return;
           let target: number;
           if (top < scrollTop) {
             target = top;
