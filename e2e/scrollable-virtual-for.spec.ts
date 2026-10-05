@@ -82,6 +82,51 @@ test.describe('Virtual for in a scrollable', () => {
   });
 });
 
+/**
+ * With no overscan, the rows rendered for a scroll position past an incoming placeholder must be
+ * the ones its gap pushes into view.
+ */
+test.describe('Virtual for in a scrollable without overscan', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/virtual-for-scrollable?overscan=0', { waitUntil: 'domcontentloaded' });
+    await expect(row(page, 's-1')).toBeVisible();
+    await expect(row(page, 'b-1')).toBeVisible();
+  });
+
+  test('renders the rows in view when scrolled past an incoming placeholder', async ({ page }) => {
+    // Pick Backlog item 1 up with the keyboard and move it into Tasks: its placeholder opens a
+    // 50px gap at index 0
+    await row(page, 'b-1').focus();
+    await page.keyboard.press('Space');
+    await expect(preview(page), 'The keyboard drag should start').toBeVisible();
+    await page.keyboard.press('ArrowLeft');
+    await waitForActiveDroppable(page, 'scrollable');
+    await expect(
+      scroller(page, 'scrollable').locator('.vdnd-drag-placeholder-visible'),
+    ).toBeAttached();
+
+    // Scrolled 500px, the gap puts Task 10 (index 9) at the top edge
+    await scrollListTo(page, 'scrollable', 500);
+
+    await expect(async () => {
+      const top = await scroller(page, 'scrollable').evaluate((list) => {
+        const edge = list.getBoundingClientRect().top;
+        const covering = Array.from(list.querySelectorAll<HTMLElement>('[data-draggable-id]')).find(
+          (element) => {
+            const rect = element.getBoundingClientRect();
+            return rect.top <= edge + 1 && rect.bottom > edge + 1;
+          },
+        );
+        return covering?.getAttribute('data-draggable-id') ?? null;
+      });
+      expect(top, 'A row should cover the top edge (no blank strip)').toBe('s-10');
+    }).toPass({ timeout: 2000 });
+
+    await page.keyboard.press('Escape');
+    await expect(preview(page)).toBeHidden();
+  });
+});
+
 function scroller(page: Page, id: ListId) {
   return page.locator(`[data-droppable-id="${id}"]`);
 }

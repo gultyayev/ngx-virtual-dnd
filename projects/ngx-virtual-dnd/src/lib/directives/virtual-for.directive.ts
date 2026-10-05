@@ -258,8 +258,36 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     const strategy = this.#strategy();
     // Read version to subscribe to dynamic height changes
     strategy.version();
-    return strategy.getFirstVisibleIndex(this.#rowsScrollTop());
+    return strategy.getFirstVisibleIndex(this.#toStrategyOffset(this.#rowsScrollTop()));
   });
+
+  /**
+   * Without a viewport, the gap the placeholder opens among the absolutely positioned rows: the
+   * rows at or after `index` move down by `height` from their strategy offsets, the gap starting at
+   * `offset`. Null with a viewport (the placeholder pushes the rows in the flow) or no placeholder.
+   */
+  readonly #gap = computed(() => {
+    if (this.#useViewportPositioning) return null;
+    const index = this.#placeholderIndex();
+    if (index < 0) return null;
+    const strategy = this.#strategy();
+    strategy.version();
+    return {
+      index,
+      offset: strategy.getOffsetForIndex(index),
+      height: this.#placeholderHeight(strategy, index),
+    };
+  });
+
+  /**
+   * Map a position among the rendered rows to the strategy's offsets, which leave out the gap:
+   * past the gap, subtract its height; inside it, the gap's start (the row after it comes next).
+   */
+  #toStrategyOffset(position: number): number {
+    const gap = this.#gap();
+    if (!gap || position <= gap.offset) return position;
+    return Math.max(gap.offset, position - gap.height);
+  }
 
   /**
    * How far the rows are scrolled. A vdnd-virtual-viewport's rows start contentOffset px down its
@@ -710,10 +738,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
     // 2. Reconcile views with the DOM. Without a viewport, the rows at or after the placeholder
     // move down by its height (with a viewport, the placeholder pushes them in the flow).
-    const gap =
-      showPlaceholder && placeholderIndex >= 0 && !this.#useViewportPositioning
-        ? { index: placeholderIndex, height: this.#placeholderHeight(strategy, placeholderIndex) }
-        : null;
+    const gap = this.#gap();
     const placeholderDomPosition = this.#reconcileViews(
       itemsToRender,
       showPlaceholder,

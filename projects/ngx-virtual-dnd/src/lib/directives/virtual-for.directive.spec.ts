@@ -1383,7 +1383,8 @@ describe('VirtualForDirective (change detection scope)', () => {
           let item of items();
           itemHeight: 50;
           trackBy: trackByFn;
-          droppableId: 'list'
+          droppableId: 'list';
+          overscan: overscan()
         "
       >
         <div class="item" [attr.data-id]="item.key">{{ item.key }}</div>
@@ -1396,6 +1397,7 @@ class StandaloneScrollableHostComponent {
   readonly items = signal(Array.from({ length: 30 }, (_, i) => ({ key: `k${i}` })));
   readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
   readonly scrollerPosition = signal<string | null>(null);
+  readonly overscan = signal(3);
 }
 
 describe('VirtualForDirective (standalone in vdndScrollable)', () => {
@@ -1417,13 +1419,13 @@ describe('VirtualForDirective (standalone in vdndScrollable)', () => {
   const rowTop = (key: string): string =>
     (fixture.nativeElement.querySelector(`[data-id="${key}"]`) as HTMLElement).style.top;
 
-  const startDrag = (sourceDroppableId: string, placeholderIndex: number): void => {
+  const startDrag = (sourceDroppableId: string, placeholderIndex: number, height = 50): void => {
     dragState.startDrag(
       {
         draggableId: sourceDroppableId === 'list' ? 'k0' : 'other-item',
         droppableId: sourceDroppableId,
         element: document.createElement('div'),
-        height: 50,
+        height,
         width: 100,
       },
       { x: 0, y: 0 },
@@ -1506,6 +1508,51 @@ describe('VirtualForDirective (standalone in vdndScrollable)', () => {
       expect(placeholder()).toBeNull();
       expect(['k1', 'k2', 'k3'].map(rowTop)).toEqual(['50px', '100px', '150px']);
       expect(spacer().style.height).toBe('1500px');
+    });
+  });
+
+  describe('rendered range', () => {
+    const renderedKeys = (): string[] =>
+      Array.from(fixture.nativeElement.querySelectorAll('.item') as NodeListOf<HTMLElement>).map(
+        (el) => el.getAttribute('data-id') ?? '',
+      );
+
+    /** Scrolled 500px down: jsdom has no layout, so the scroller reports that scroll position */
+    const renderScrolledTo500 = (): void => {
+      jest.spyOn(HTMLElement.prototype, 'scrollTop', 'get').mockReturnValue(500);
+      render();
+    };
+
+    it('renders the row the gap of an incoming placeholder above pushes into view', () => {
+      host.overscan.set(0);
+      renderScrolledTo500();
+
+      // A 50px gap at index 0 puts k9 at 500-550px, at the top edge
+      startDrag('other', 0);
+
+      expect(renderedKeys()).toEqual(['k9', 'k10', 'k11', 'k12', 'k13']);
+      expect(rowTop('k9')).toBe('500px');
+    });
+
+    it('renders the rows a gap taller than the overscan pushes into view', () => {
+      renderScrolledTo500();
+
+      // A 250px gap at index 0 puts k5 at 500-550px and k6 below it
+      startDrag('other', 0, 250);
+
+      expect(renderedKeys()).toEqual(expect.arrayContaining(['k5', 'k6', 'k7', 'k8']));
+      expect(rowTop('k5')).toBe('500px');
+    });
+
+    it('renders from the gap when the scroll position is inside it', () => {
+      host.overscan.set(0);
+      renderScrolledTo500();
+
+      // A 250px gap at index 8 spans 400-650px: k8 comes next, at 650px
+      startDrag('other', 8, 250);
+
+      expect(renderedKeys()).toEqual(['k8', 'k9', 'k10', 'k11', 'k12']);
+      expect(rowTop('k8')).toBe('650px');
     });
   });
 

@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import {
   DraggableDirective,
   DragPreviewComponent,
@@ -19,6 +20,7 @@ interface Row {
 /**
  * E2E fixture: two `*vdndVirtualFor` lists, each directly in a `vdndScrollable` droppable, with
  * no viewport component. The scroll containers set no `position`, as in the documented example.
+ * `?overscan=` sets the Tasks list's overscan (3 by default).
  */
 @Component({
   selector: 'app-scrollable-virtual-for-demo',
@@ -57,7 +59,14 @@ interface Row {
             vdndDroppable="scrollable"
             (drop)="onDrop($event)"
           >
-            <ng-container *vdndVirtualFor="let row of tasks(); itemHeight: 50; trackBy: trackById">
+            <ng-container
+              *vdndVirtualFor="
+                let row of tasks();
+                itemHeight: 50;
+                trackBy: trackById;
+                overscan: tasksOverscan
+              "
+            >
               <div class="item" [vdndDraggable]="row.id" [vdndDraggableData]="row">
                 <div class="item-inner">
                   <span class="item-text">{{ row.name }}</span>
@@ -137,6 +146,11 @@ interface Row {
   `,
 })
 export class ScrollableVirtualForDemoComponent {
+  /** Rows the Tasks list renders above and below the visible ones (`?overscan=0` for none). */
+  readonly tasksOverscan = Number(
+    inject(ActivatedRoute).snapshot.queryParamMap.get('overscan') ?? 3,
+  );
+
   readonly tasks = signal<Row[]>(
     Array.from({ length: 30 }, (_, i) => ({ id: `s-${i + 1}`, name: `Task ${i + 1}` })),
   );
