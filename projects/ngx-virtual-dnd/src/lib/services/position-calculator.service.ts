@@ -4,6 +4,7 @@ import {
   closestAcrossShadow,
   elementFromPointAcrossShadow,
   parentAcrossShadow,
+  shadowRootsAround,
 } from '../utils/composed-dom';
 
 /**
@@ -28,6 +29,11 @@ interface DragSessionSnapshot {
   candidatesStale: boolean;
   /** Bound scroll/resize listener used to mark rects dirty. */
   onViewportChange: () => void;
+  /**
+   * The shadow roots the candidates are in, each with the scroll listener. A scroll inside a
+   * shadow root never reaches the window: scroll events don't cross the shadow boundary.
+   */
+  shadowRoots: Set<ShadowRoot>;
   /**
    * ResizeObserver watching the candidate droppables so a container-only layout
    * change (which fires no window scroll/resize) still invalidates cached rects.
@@ -105,12 +111,14 @@ export class PositionCalculatorService {
       dirty: false,
       candidatesStale: false,
       onViewportChange,
+      shadowRoots: new Set(),
       resizeObserver: this.#createResizeObserver(),
     };
 
     // A container-only reflow (an element resize that fires no window scroll/resize)
     // would otherwise leave stale rects — observe the candidates so it marks them dirty.
     this.#observeCandidates(this.#session);
+    this.#watchShadowRoots(this.#session);
 
     // Capture-phase scroll catches scrolling on any ancestor scroller (scroll does
     // not bubble); resize covers viewport changes. Both only mark rects dirty —
@@ -134,6 +142,10 @@ export class PositionCalculatorService {
     }
     this.#session = null;
     session.resizeObserver?.disconnect();
+    for (const root of session.shadowRoots) {
+      root.removeEventListener('scroll', session.onViewportChange, { capture: true });
+    }
+    session.shadowRoots.clear();
     if (typeof window !== 'undefined') {
       window.removeEventListener('scroll', session.onViewportChange, { capture: true });
       window.removeEventListener('resize', session.onViewportChange);
@@ -170,6 +182,7 @@ export class PositionCalculatorService {
     session.dirty = false;
     session.candidatesStale = false;
     this.#observeCandidates(session);
+    this.#watchShadowRoots(session);
   }
 
   /**
@@ -334,6 +347,36 @@ export class PositionCalculatorService {
         observer.observe(candidate);
       }
     });
+  }
+
+  /**
+   * Listen for scroll (capture phase, like the window listener) on each shadow root a candidate
+   * is in, and stop listening on those that no longer hold one. A scroller inside a shadow root
+   * moves its lists without resizing them, and its scroll event stops at the shadow root.
+   */
+  #watchShadowRoots(session: DragSessionSnapshot): void {
+    const roots = new Set<ShadowRoot>();
+    for (const candidate of session.candidates) {
+      for (const root of shadowRootsAround(candidate)) {
+        roots.add(root);
+      }
+    }
+    this.#ngZone.runOutsideAngular(() => {
+      for (const root of session.shadowRoots) {
+        if (!roots.has(root)) {
+          root.removeEventListener('scroll', session.onViewportChange, { capture: true });
+        }
+      }
+      for (const root of roots) {
+        if (!session.shadowRoots.has(root)) {
+          root.addEventListener('scroll', session.onViewportChange, {
+            capture: true,
+            passive: true,
+          });
+        }
+      }
+    });
+    session.shadowRoots = roots;
   }
 
   /**

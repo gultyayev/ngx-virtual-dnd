@@ -114,4 +114,42 @@ test.describe('Lists inside an open shadow root', () => {
     await page.mouse.up();
     await expect(preview(page)).not.toBeVisible();
   });
+
+  test('hit-tests the lists where they are after their scroller in the shadow root scrolls mid-drag', async ({
+    page,
+  }) => {
+    const stack = page.getByTestId('shadow-stack-scroller');
+    await stack.scrollIntoViewIfNeeded();
+    const movedId = await items(page, 'stack-a').first().getAttribute('data-draggable-id');
+
+    await startDrag(page, items(page, 'stack-a').first());
+    const box = await stack.boundingBox();
+    if (!box) throw new Error('The stack scroller has no bounding box');
+    // Away from the edges, so nothing autoscrolls
+    const x = box.x + box.width / 2;
+    const y = box.y + 100;
+    await page.mouse.move(x, y, { steps: 5 });
+    await settleDragPosition(page, x, y);
+    await waitForActiveDroppable(page, 'stack-a');
+
+    // Wheel the scroller by one list: Stack B (same size, not resized) is now under the pointer.
+    // Its scroll event stays inside the shadow root.
+    await expect(async () => {
+      const scrolled = await stack.evaluate(
+        (el) => el.scrollTop >= el.scrollHeight - el.clientHeight - 1,
+      );
+      if (!scrolled) {
+        await page.mouse.wheel(0, 240);
+      }
+      expect(scrolled).toBe(true);
+    }).toPass({ timeout: 5000 });
+
+    await settleDragPosition(page, x, y);
+    await waitForActiveDroppable(page, 'stack-b');
+    await page.mouse.up();
+
+    await expect(page.getByTestId('stack-a-count')).toHaveText('2');
+    await expect(page.getByTestId('stack-b-count')).toHaveText('4');
+    await expect(list(page, 'stack-b').locator(`[data-draggable-id="${movedId}"]`)).toHaveCount(1);
+  });
 });

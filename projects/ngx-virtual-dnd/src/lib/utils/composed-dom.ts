@@ -31,6 +31,17 @@ export function closestAcrossShadow<T extends Element = Element>(
   return null;
 }
 
+/** The shadow roots `node` is nested in, innermost first (none for a node in the page). */
+export function shadowRootsAround(node: Node): ShadowRoot[] {
+  const roots: ShadowRoot[] = [];
+  let root = node.getRootNode();
+  while (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) {
+    roots.push(root);
+    root = root.host.getRootNode();
+  }
+  return roots;
+}
+
 /** The parent element of `element`, or its shadow host when it is at the top of a shadow tree. */
 export function parentAcrossShadow(element: Element): Element | null {
   return element.parentElement ?? shadowHostOf(element);

@@ -1145,6 +1145,78 @@ describe('PositionCalculatorService', () => {
       expect(service.findDroppableAtPoint(200, 200, dragged, 'g')).toBe(list);
     });
 
+    /**
+     * A list with a moving rect (`top`) inside a scroller in an open shadow root, nested in a
+     * second open shadow root. Scrolling the scroller moves the list without resizing it.
+     */
+    function listInNestedShadowScroller(id: string): {
+      list: HTMLElement;
+      scroller: HTMLElement;
+      roots: ShadowRoot[];
+      moveTo: (top: number) => void;
+    } {
+      const outer = shadowHost();
+      const inner = shadowHost(outer.root as unknown as HTMLElement);
+      const scroller = document.createElement('div');
+      inner.root.appendChild(scroller);
+      const list = droppableEl(id);
+      scroller.appendChild(list);
+      let top = 0;
+      list.getBoundingClientRect = () =>
+        ({ top, left: 0, right: 100, bottom: top + 100, width: 100, height: 100 }) as DOMRect;
+      registerDroppable(list);
+      return { list, scroller, roots: [outer.root, inner.root], moveTo: (t) => (top = t) };
+    }
+
+    it('re-reads the rects after a scroll inside a shadow root during a drag', () => {
+      const dragged = document.createElement('div');
+      const { list, scroller, moveTo } = listInNestedShadowScroller('list');
+      service.beginDragSession('g');
+      expect(service.findDroppableAtPoint(50, 50, dragged, 'g')).toBe(list);
+
+      // Scroll events don't cross the shadow boundary, so no window listener sees this one
+      moveTo(-200);
+      scroller.dispatchEvent(new Event('scroll'));
+
+      expect(service.findDroppableAtPoint(50, 50, dragged, 'g')).toBeNull();
+    });
+
+    it('re-reads the rects after a scroll inside the shadow root of a list added mid-drag', () => {
+      const dragged = document.createElement('div');
+      service.beginDragSession('g');
+      const { list, scroller, moveTo } = listInNestedShadowScroller('late');
+      expect(service.findDroppableAtPoint(50, 50, dragged, 'g')).toBe(list);
+
+      moveTo(-200);
+      scroller.dispatchEvent(new Event('scroll'));
+
+      expect(service.findDroppableAtPoint(50, 50, dragged, 'g')).toBeNull();
+    });
+
+    it('listens for scroll on each shadow root of the candidates once, and stops at session end', () => {
+      const first = listInNestedShadowScroller('first');
+      // A second list in the same shadow roots
+      const second = droppableEl('second');
+      first.scroller.appendChild(second);
+      registerDroppable(second);
+      const added = first.roots.map((root) => jest.spyOn(root, 'addEventListener'));
+      const removed = first.roots.map((root) => jest.spyOn(root, 'removeEventListener'));
+
+      service.beginDragSession('g');
+      for (const spy of added) {
+        const scrollCalls = spy.mock.calls.filter(([type]) => type === 'scroll');
+        expect(scrollCalls).toEqual([
+          ['scroll', expect.any(Function), { capture: true, passive: true }],
+        ]);
+      }
+
+      service.endDragSession();
+      first.roots.forEach((_, i) => {
+        const listener = added[i].mock.calls.find(([type]) => type === 'scroll')![1];
+        expect(removed[i]).toHaveBeenCalledWith('scroll', listener, { capture: true });
+      });
+    });
+
     it('hit-tests a droppable nested in a shadow root inside another droppable as the inner one', () => {
       const dragged = document.createElement('div');
       const outer = droppableEl('outer');

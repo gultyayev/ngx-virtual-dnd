@@ -3,6 +3,7 @@ import {
   DraggableDirective,
   DragPreviewComponent,
   DropEvent,
+  DroppableDirective,
   DroppableGroupDirective,
   moveItem,
   VirtualSortableListComponent,
@@ -23,6 +24,8 @@ const createTasks = (prefix: string, label: string, count: number): Task[] =>
 /**
  * Two sortable lists and the drag preview, rendered inside the component's open shadow root
  * (`ViewEncapsulation.ShadowDom`). Page styles don't reach into it, so it styles its own rows.
+ * Below them, two fixed-height lists stacked in a scroller of the shadow root: scrolling it moves
+ * the lists without resizing them.
  */
 @Component({
   selector: 'app-shadow-board',
@@ -30,6 +33,7 @@ const createTasks = (prefix: string, label: string, count: number): Task[] =>
   encapsulation: ViewEncapsulation.ShadowDom,
   imports: [
     VirtualSortableListComponent,
+    DroppableDirective,
     DroppableGroupDirective,
     DraggableDirective,
     DragPreviewComponent,
@@ -73,6 +77,24 @@ const createTasks = (prefix: string, label: string, count: number): Task[] =>
           (drop)="onDrop($event)"
         />
       </section>
+    </div>
+
+    <div class="stack" data-testid="shadow-stack-scroller" vdndGroup="shadow-stack">
+      @for (stack of stacks; track stack.id) {
+        <section class="stack-list" [vdndDroppable]="stack.id" (drop)="onStackDrop($event)">
+          <h2>
+            {{ stack.title }}
+            <span class="badge" [attr.data-testid]="stack.id + '-count'">{{
+              stack.items().length
+            }}</span>
+          </h2>
+          @for (task of stack.items(); track task.id) {
+            <div class="row" [vdndDraggable]="task.id" [vdndDraggableData]="task">
+              <span class="row-inner">{{ task.title }}</span>
+            </div>
+          }
+        </section>
+      }
     </div>
 
     <vdnd-drag-preview />
@@ -129,6 +151,26 @@ const createTasks = (prefix: string, label: string, count: number): Task[] =>
       box-shadow: inset 0 0 0 1.5px var(--accent-soft-bd);
     }
 
+    .stack {
+      height: 240px;
+      margin-top: 20px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: var(--surface);
+    }
+
+    .stack-list {
+      height: 240px;
+      box-sizing: border-box;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-sunk);
+    }
+
+    .stack-list.vdnd-droppable-active {
+      background: var(--accent-soft);
+    }
+
     .row {
       height: 48px;
       box-sizing: border-box;
@@ -159,10 +201,19 @@ export class ShadowBoardComponent {
   readonly todo = signal<Task[]>(createTasks('shadow-todo', 'Task', 50));
   readonly done = signal<Task[]>(createTasks('shadow-done', 'Done', 50));
 
+  readonly stacks = [
+    { id: 'stack-a', title: 'Stack A', items: signal<Task[]>(createTasks('stack-a', 'A', 3)) },
+    { id: 'stack-b', title: 'Stack B', items: signal<Task[]>(createTasks('stack-b', 'B', 3)) },
+  ];
+
   readonly taskId = (task: Task): string => task.id;
 
   onDrop(event: DropEvent): void {
     moveItem(event, { 'shadow-todo': this.todo, 'shadow-done': this.done });
+  }
+
+  onStackDrop(event: DropEvent): void {
+    moveItem(event, { 'stack-a': this.stacks[0].items, 'stack-b': this.stacks[1].items });
   }
 }
 
