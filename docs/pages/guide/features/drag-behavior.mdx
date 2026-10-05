@@ -25,21 +25,21 @@ Make the handle a non-interactive element such as a `<span>`. Presses inside a b
 
 Controls inside rows keep working: pressing them never starts a drag. What starts a drag depends on where the pointer press lands, or on which element has focus when <kbd>Space</kbd> is pressed:
 
-| Element                                                                                                | Pointer press starts a drag               | <kbd>Space</kbd> while it has focus picks the row up |
-| ------------------------------------------------------------------------------------------------------ | ----------------------------------------- | ---------------------------------------------------- |
-| The row itself, even when the draggable element is a button (`<button vdndDraggable>`)                 | Yes                                       | Yes                                                  |
-| The row, when the draggable element is an `input`, `textarea`, `select` or `[contenteditable]` element | No: it focuses, opens or places the caret | Yes                                                  |
-| A row inside a control, such as the blocks of a `[contenteditable]` editor                             | Yes                                       | Yes                                                  |
-| The row outside the handle, when `dragHandle` is set                                                   | No                                        | Yes                                                  |
-| A non-interactive [drag handle](#drag-handles), such as a `<span>`                                     | Yes                                       | It cannot take focus; the row can                    |
-| A drag handle that is a `button`                                                                       | No                                        | Yes                                                  |
-| A `button`, `input`, `textarea`, `select` or `[contenteditable]` element inside the row                | No                                        | No: it types or clicks instead                       |
-| An element with the `no-drag` class, and everything inside it                                          | No                                        | No                                                   |
-| The row, with `no-drag` on the draggable element itself                                                | No                                        | Yes                                                  |
+| Element                                                                                                     | Pointer press starts a drag               | <kbd>Space</kbd> while it has focus picks the row up |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| The row itself, even when the draggable element is a button, such as `<button vdndDraggable>`               | Yes                                       | Yes                                                  |
+| The row, when the draggable element is another control, such as an `input` or a `[contenteditable]` element | No, except from a drag handle (see below) | Yes                                                  |
+| A row inside a control, such as the blocks of a `[contenteditable]` editor                                  | Yes                                       | Not in Chromium (see below)                          |
+| The row outside the handle, when `dragHandle` is set                                                        | No                                        | Yes                                                  |
+| A non-interactive [drag handle](#drag-handles), such as a `<span>`                                          | Yes                                       | It cannot take focus; the row can                    |
+| A drag handle that is a `button`                                                                            | No                                        | Yes                                                  |
+| A `button`, `input`, `textarea`, `select` or `[contenteditable]` element inside the row                     | No                                        | No: it types or clicks instead                       |
+| An element with the `no-drag` class, and everything inside it                                               | No                                        | No                                                   |
+| The row, with `no-drag` on the draggable element itself                                                     | No                                        | Yes                                                  |
 
-Only controls inside the row count: a control around the list doesn't stop a drag, and neither does a draggable element that is a button. An element with `contenteditable="false"` is not editable, so it doesn't count either.
+Only controls inside the row count: a control around the list doesn't stop a drag, and neither does a draggable element that is a button (a `button`, or an `input` of type `button`, `submit`, `reset` or `image`). A draggable element that is another control, such as a text field, a checkbox, a `select` or a `[contenteditable]` element, keeps its own press: it focuses, opens, toggles or places the caret. An element with `contenteditable="false"` is not editable, so it doesn't count either.
 
-Rows inside a `[contenteditable]` editor drag like any other row, so pressing one starts a drag instead of placing the caret. To keep their text editable with the mouse, give them a [drag handle](#drag-handles).
+Rows inside a `[contenteditable]` editor drag like any other row, so pressing one starts a drag instead of placing the caret. To keep their text editable with the mouse, give them a [drag handle](#drag-handles). The same goes for blocks that are their own editing host (`<div contenteditable vdndDraggable>`): give them a handle with `contenteditable="false"`, such as a grip icon, and presses on it start a drag while the rest of the block stays editable. In Chromium, <kbd>Space</kbd> on a row inside an editor goes to the editor instead of picking the row up; Firefox and Safari pick it up.
 
 Only the primary mouse button starts a drag. To turn dragging off completely, use [`disabled`](#disabling).
 

@@ -1,16 +1,22 @@
 /**
- * Controls that take text or a choice from a press: it focuses them, opens them or places the
- * caret. `contenteditable="false"` (in any letter case) marks an element as not editable, so it
- * doesn't count.
+ * Editable elements. `contenteditable="false"` (in any letter case) marks an element as not
+ * editable, so it doesn't count.
  */
-const TEXT_ENTRY_SELECTOR =
-  'input, textarea, select, [contenteditable]:not([contenteditable="false" i])';
+const EDITABLE_SELECTOR = '[contenteditable]:not([contenteditable="false" i])';
 
 /**
  * Elements inside a draggable that keep their own interaction: pressing one never starts a
  * pointer drag, and Space pressed on one never starts a keyboard drag.
  */
-export const INTERACTIVE_ELEMENT_SELECTOR = `button, ${TEXT_ENTRY_SELECTOR}`;
+export const INTERACTIVE_ELEMENT_SELECTOR = `button, input, textarea, select, ${EDITABLE_SELECTOR}`;
+
+/**
+ * Controls that a press focuses, opens, toggles or places the caret in: every control above but
+ * buttons and the inputs that are buttons.
+ */
+const TEXT_ENTRY_SELECTOR =
+  'input:not([type="button" i], [type="submit" i], [type="reset" i], [type="image" i]), ' +
+  `textarea, select, ${EDITABLE_SELECTOR}`;
 
 /** Class that excludes the element carrying it, and everything inside it, from starting a drag. */
 export const NO_DRAG_CLASS = 'no-drag';
@@ -26,8 +32,9 @@ export function findNoDragElement(target: Element, draggable: Element): Element 
 
 /**
  * Whether a press on `draggable` must keep its default action instead of starting a pointer drag
- * because the draggable itself is a text field, a select or an editable element (a press focuses
- * it, opens it or places the caret). A `<button vdndDraggable>` is not one: it drags.
+ * because the draggable itself is a text field, a select, a checkbox or an editable element (a
+ * press focuses it, opens it, toggles it or places the caret). A `<button vdndDraggable>` or an
+ * `<input type="button">` is not one: it drags.
  */
 export function isTextEntryControl(draggable: Element): boolean {
   return draggable.matches(TEXT_ENTRY_SELECTOR);

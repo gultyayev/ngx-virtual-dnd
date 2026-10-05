@@ -138,16 +138,19 @@ export class PointerDragHandler {
     const target = event.target as HTMLElement;
 
     // Check if click is on drag handle (if specified). Only a handle inside the draggable counts.
-    if (ctx.dragHandle && findDragHandle(target, ctx.element, ctx.dragHandle) === null) {
+    const handle = ctx.dragHandle ? findDragHandle(target, ctx.element, ctx.dragHandle) : null;
+    if (ctx.dragHandle && handle === null) {
       return;
     }
 
     // Check for elements that should not trigger drag: controls nested inside the draggable (not
     // controls around it), a draggable that is itself a text field, select or editable element
-    // (a press focuses it or places the caret; a button draggable drags), and no-drag elements
+    // (a press focuses it or places the caret; a button draggable drags) unless the press is on
+    // a handle inside it, such as the grip of an editable block, and no-drag elements
+    const pressedInnerHandle = handle !== null && handle !== ctx.element;
     if (
       findNestedControl(target, ctx.element) !== null ||
-      isTextEntryControl(ctx.element) ||
+      (!pressedInnerHandle && isTextEntryControl(ctx.element)) ||
       findNoDragElement(target, ctx.element) !== null
     ) {
       return;

@@ -230,11 +230,31 @@ class PressOverridingHostComponent {}
       <div contenteditable="true" vdndDraggable="editable-item" vdndDraggableGroup="test-group">
         <span class="text">Editable item</span>
       </div>
+      <!-- A block that is its own editing host, with a non-editable grip -->
+      <div
+        contenteditable="true"
+        vdndDraggable="editable-handle-item"
+        vdndDraggableGroup="test-group"
+        dragHandle=".grip"
+      >
+        <span class="grip" contenteditable="false">::</span>
+        <span class="text">Editable block</span>
+      </div>
+      @for (type of buttonLikeInputTypes; track type) {
+        <input
+          [type]="type"
+          [vdndDraggable]="type + '-input-item'"
+          vdndDraggableGroup="test-group"
+        />
+      }
+      <input type="checkbox" vdndDraggable="checkbox-item" vdndDraggableGroup="test-group" />
     </div>
   `,
   imports: [DraggableDirective, DroppableDirective],
 })
-class ControlDraggablesHostComponent {}
+class ControlDraggablesHostComponent {
+  readonly buttonLikeInputTypes = ['button', 'submit', 'reset', 'image'];
+}
 
 // A draggable rendered with a drag delay from the start, as lists that scroll by touch are
 @Component({
@@ -480,7 +500,7 @@ describe('DraggableDirective', () => {
 
       // A press on a text field, a select or an editable element focuses it, opens it or places
       // the caret: it keeps doing that instead of starting a drag
-      it.each(['input-item', 'textarea-item', 'select-item', 'editable-item'])(
+      it.each(['input-item', 'textarea-item', 'select-item', 'editable-item', 'checkbox-item'])(
         'should not start a pointer drag or prevent the press on %s',
         (id) => {
           const mousedown = new MouseEvent('mousedown', {
@@ -502,6 +522,40 @@ describe('DraggableDirective', () => {
         attemptPointerDrag(item('editable-item').querySelector('.text')!);
 
         expect(dragStateService.isDragging()).toBe(false);
+      });
+
+      it.each(['button', 'submit', 'reset', 'image'])(
+        'should start a pointer drag on an input of type %s, like a button',
+        (type) => {
+          attemptPointerDrag(item(`${type}-input-item`));
+
+          expect(dragStateService.isDragging()).toBe(true);
+          expect(dragStateService.draggedItemId()).toBe(`${type}-input-item`);
+        },
+      );
+
+      describe('on an editable draggable with a drag handle', () => {
+        it('should start a pointer drag from the handle', () => {
+          attemptPointerDrag(item('editable-handle-item').querySelector('.grip')!);
+
+          expect(dragStateService.isDragging()).toBe(true);
+          expect(dragStateService.draggedItemId()).toBe('editable-handle-item');
+        });
+
+        it('should keep the press on its text for the caret', () => {
+          const mousedown = new MouseEvent('mousedown', {
+            clientX: 100,
+            clientY: 100,
+            button: 0,
+            bubbles: true,
+            cancelable: true,
+          });
+          item('editable-handle-item').querySelector('.text')!.dispatchEvent(mousedown);
+          document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 120 }));
+
+          expect(mousedown.defaultPrevented).toBe(false);
+          expect(dragStateService.isDragging()).toBe(false);
+        });
       });
 
       it('should start a pointer drag when pressing the button', () => {
