@@ -31,13 +31,23 @@ export function findNoDragElement(target: Element, draggable: Element): Element 
 }
 
 /**
- * Whether a press on `draggable` must keep its default action instead of starting a pointer drag
- * because the draggable itself is a text field, a select, a checkbox or an editable element (a
- * press focuses it, opens it, toggles it or places the caret). A `<button vdndDraggable>` or an
- * `<input type="button">` is not one: it drags.
+ * Whether a press or Space on `target` must keep its default action instead of starting a drag
+ * because `draggable` is itself a text field, a select, a checkbox or an editable element (a
+ * press focuses it, opens it, toggles it or places the caret; Space types, toggles or opens it).
+ * A drag handle inside such a draggable, such as a `contenteditable="false"` grip, still starts
+ * a drag; the draggable matching `handleSelector` itself does not count as one. A
+ * `<button vdndDraggable>` or an `<input type="button">` is not such a control: it drags.
  */
-export function isTextEntryControl(draggable: Element): boolean {
-  return draggable.matches(TEXT_ENTRY_SELECTOR);
+export function isInTextEntryDraggable(
+  target: Element,
+  draggable: Element,
+  handleSelector: string | undefined,
+): boolean {
+  if (!draggable.matches(TEXT_ENTRY_SELECTOR)) {
+    return false;
+  }
+  const handle = handleSelector ? findDragHandle(target, draggable, handleSelector) : null;
+  return handle === null || handle === draggable;
 }
 
 /**

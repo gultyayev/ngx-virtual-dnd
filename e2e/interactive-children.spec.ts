@@ -42,8 +42,8 @@ async function dragFirstRowToEnd(page: Page, listId: string, ids: string[]): Pro
  * start a drag, and the default drag preview (a clone of the row) must not change the controls'
  * state. Only controls inside a row count: a row inside a contenteditable region or a row that
  * is a button itself drags. Fixture: /interactive-children, a plain list whose rows hold a text
- * field, a radio group, a `no-drag` tag and a button, a list inside a contenteditable region and
- * a list of button rows.
+ * field, a radio group, a `no-drag` tag and a button, a list inside a contenteditable region, a
+ * list of button rows and a list of rows that are their own editing host, dragged by a grip.
  */
 test.describe('Interactive children', () => {
   test.beforeEach(async ({ page }) => {
@@ -134,6 +134,67 @@ test.describe('Interactive children', () => {
 
     await expect(async () => {
       expect(await rowIds(page, 'buttons')).toEqual(['button-2', 'button-3', 'button-1']);
+    }).toPass();
+  });
+
+  test('Space typed into an editable row goes into its text', async ({ page }) => {
+    const row = page.locator('[data-draggable-id="editable-block-1"]');
+    const text = row.getByTestId('block-text');
+    await row.scrollIntoViewIfNeeded();
+
+    // The press places the caret instead of starting a drag
+    await text.click();
+    await page.keyboard.press('End');
+    await page.keyboard.type('x y');
+
+    await expect(text).toContainText('x y');
+    await expect(row).toHaveAttribute('aria-grabbed', 'false');
+    await expect(page.getByTestId('vdnd-drag-preview')).toBeHidden();
+  });
+
+  test('Space on the grip of an editable row picks the row up', async ({ page }) => {
+    const row = page.locator('[data-draggable-id="editable-block-1"]');
+
+    await row.getByTestId('block-grip').focus();
+    await page.keyboard.press('Space');
+
+    await expect(page.getByTestId('vdnd-drag-preview')).toBeVisible();
+    await expect(row).toHaveAttribute('aria-grabbed', 'true');
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('vdnd-drag-preview')).toBeHidden();
+  });
+
+  test('an editable row drags with the pointer by its grip', async ({ page }) => {
+    const list = page.locator('[data-droppable-id="editable-blocks"]');
+    await list.scrollIntoViewIfNeeded();
+    const grip = await list
+      .locator('[data-draggable-id="editable-block-1"]')
+      .getByTestId('block-grip')
+      .boundingBox();
+    if (!grip) throw new Error('Could not get grip bounding box');
+    const x = grip.x + grip.width / 2;
+    const y = grip.y + grip.height / 2;
+
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y + 10, { steps: 2 });
+    await expect(page.getByTestId('vdnd-drag-preview')).toBeVisible();
+
+    // Dropped below the last row, measured once the dragged row is hidden
+    const target = await list.locator('[data-draggable-id="editable-block-3"]').boundingBox();
+    if (!target) throw new Error('Could not get target row bounding box');
+    const targetY = target.y + target.height * 0.75;
+    await page.mouse.move(x, targetY, { steps: 10 });
+    await settleDragPosition(page, x, targetY);
+    await waitForActiveDroppable(page, 'editable-blocks');
+    await page.mouse.up();
+
+    await expect(async () => {
+      expect(await rowIds(page, 'editable-blocks')).toEqual([
+        'editable-block-2',
+        'editable-block-3',
+        'editable-block-1',
+      ]);
     }).toPass();
   });
 

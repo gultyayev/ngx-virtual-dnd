@@ -237,8 +237,18 @@ class PressOverridingHostComponent {}
         vdndDraggableGroup="test-group"
         dragHandle=".grip"
       >
-        <span class="grip" contenteditable="false">::</span>
+        <span class="grip" contenteditable="false" tabindex="0">::</span>
         <span class="text">Editable block</span>
+      </div>
+      <!-- An editable block whose handle selector matches the block itself -->
+      <div
+        contenteditable="true"
+        class="blk"
+        vdndDraggable="self-handle-item"
+        vdndDraggableGroup="test-group"
+        dragHandle=".blk"
+      >
+        <span class="text">Self-handle block</span>
       </div>
       @for (type of buttonLikeInputTypes; track type) {
         <input
@@ -533,6 +543,80 @@ describe('DraggableDirective', () => {
           expect(dragStateService.draggedItemId()).toBe(`${type}-input-item`);
         },
       );
+
+      it('should keep the press on an editable draggable whose handle selector matches itself', () => {
+        // The draggable is not a handle inside itself: its text stays editable with the mouse
+        const mousedown = new MouseEvent('mousedown', {
+          clientX: 100,
+          clientY: 100,
+          button: 0,
+          bubbles: true,
+          cancelable: true,
+        });
+        item('self-handle-item').querySelector('.text')!.dispatchEvent(mousedown);
+        document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 120 }));
+
+        expect(mousedown.defaultPrevented).toBe(false);
+        expect(dragStateService.isDragging()).toBe(false);
+      });
+
+      describe('with Space', () => {
+        const pressSpace = (target: Element): KeyboardEvent => {
+          const space = new KeyboardEvent('keydown', {
+            key: ' ',
+            code: 'Space',
+            bubbles: true,
+            cancelable: true,
+          });
+          target.dispatchEvent(space);
+          return space;
+        };
+
+        // Space types a space (or toggles, or opens) in a draggable that takes text or a choice
+        it.each(['input-item', 'textarea-item', 'select-item', 'editable-item', 'checkbox-item'])(
+          'should let Space reach %s instead of starting a keyboard drag',
+          (id) => {
+            const space = pressSpace(item(id));
+
+            expect(space.defaultPrevented).toBe(false);
+            expect(TestBed.inject(KeyboardDragService).isActive()).toBe(false);
+            expect(dragStateService.isDragging()).toBe(false);
+          },
+        );
+
+        it('should let Space reach the text of an editable draggable with a drag handle', () => {
+          const space = pressSpace(item('editable-handle-item').querySelector('.text')!);
+
+          expect(space.defaultPrevented).toBe(false);
+          expect(TestBed.inject(KeyboardDragService).isActive()).toBe(false);
+        });
+
+        it('should let Space reach an editable draggable whose handle selector matches itself', () => {
+          const space = pressSpace(item('self-handle-item'));
+
+          expect(space.defaultPrevented).toBe(false);
+          expect(TestBed.inject(KeyboardDragService).isActive()).toBe(false);
+        });
+
+        it('should pick an editable draggable up with Space on its focusable drag handle', () => {
+          const space = pressSpace(item('editable-handle-item').querySelector('.grip')!);
+
+          expect(space.defaultPrevented).toBe(true);
+          expect(TestBed.inject(KeyboardDragService).isActive()).toBe(true);
+          expect(dragStateService.draggedItemId()).toBe('editable-handle-item');
+        });
+
+        it.each(['button-item', 'button-input-item', 'submit-input-item'])(
+          'should pick %s up with Space',
+          (id) => {
+            const space = pressSpace(item(id));
+
+            expect(space.defaultPrevented).toBe(true);
+            expect(TestBed.inject(KeyboardDragService).isActive()).toBe(true);
+            expect(dragStateService.draggedItemId()).toBe(id);
+          },
+        );
+      });
 
       describe('on an editable draggable with a drag handle', () => {
         it('should start a pointer drag from the handle', () => {
