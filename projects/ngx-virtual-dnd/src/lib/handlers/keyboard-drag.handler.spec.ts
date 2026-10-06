@@ -521,6 +521,32 @@ describe('KeyboardDragHandler', () => {
       destination.remove();
     });
 
+    it('restores focus to the dropped item inside an open shadow root', () => {
+      mockDragState.activeDroppableId.mockReturnValue('list-2');
+      mockContext.draggableId = 'shadow-item';
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const list = document.createElement('div');
+      list.setAttribute('data-droppable-id', 'list-2');
+      droppablesById.set('list-2', list);
+      host.attachShadow({ mode: 'open' }).appendChild(list);
+      const first = document.createElement('button');
+      first.setAttribute('data-draggable-id', 'first');
+      const dropped = document.createElement('button');
+      dropped.setAttribute('data-draggable-id', 'shadow-item');
+      list.append(first, dropped);
+      const firstFocus = jest.spyOn(first, 'focus');
+      const droppedFocus = jest.spyOn(dropped, 'focus');
+
+      handler.complete();
+      const callback = afterNextRenderMock.mock.calls.at(-1)?.[0] as () => void;
+      callback();
+
+      expect(droppedFocus).toHaveBeenCalled();
+      expect(firstFocus).not.toHaveBeenCalled();
+      host.remove();
+    });
+
     it('focuses the first destination draggable when the dropped item is not rendered', () => {
       // Dropped into list-2; the drop clears the drag state before the focus callback runs
       mockDragState.activeDroppableId.mockReturnValue('list-2');

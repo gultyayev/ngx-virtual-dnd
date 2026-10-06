@@ -6,6 +6,7 @@ import {
   NgZone,
   OnInit,
   signal,
+  ViewEncapsulation,
 } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
@@ -276,6 +277,29 @@ class ControlDraggablesHostComponent {
   imports: [DraggableDirective],
 })
 class DelayedHostComponent {}
+
+// A constrained list inside an open shadow root, scrolled by a `.vdnd-scrollable` outside it
+@Component({
+  selector: 'vdnd-test-shadow-list',
+  encapsulation: ViewEncapsulation.ShadowDom,
+  template: `
+    <div vdndDroppable="shadow-list" vdndDroppableGroup="test-group" [constrainToContainer]="true">
+      <div
+        vdndDraggable="shadow-item"
+        vdndDraggableGroup="test-group"
+        style="height: 50px; width: 200px;"
+      ></div>
+    </div>
+  `,
+  imports: [DraggableDirective, DroppableDirective],
+})
+class ShadowListComponent {}
+
+@Component({
+  template: `<div class="vdnd-scrollable"><vdnd-test-shadow-list /></div>`,
+  imports: [ShadowListComponent],
+})
+class ShadowListHostComponent {}
 
 // A draggable an `@if` inside its list removes, while the list itself stays
 @Component({
@@ -2080,6 +2104,35 @@ describe('DraggableDirective', () => {
       const unrendered = TestBed.createComponent(BoundIdHostComponent);
 
       expect(() => unrendered.destroy()).not.toThrow();
+    });
+  });
+
+  describe('inside an open shadow root', () => {
+    /** A rect at the top left of the page */
+    const rect = (right: number, bottom: number): DOMRect =>
+      ({ top: 0, left: 0, right, bottom, width: right, height: bottom, x: 0, y: 0 }) as DOMRect;
+
+    it('should constrain the drag to a scrollable container outside the shadow root', () => {
+      const shadowFixture = TestBed.createComponent(ShadowListHostComponent);
+      shadowFixture.detectChanges();
+      const host: HTMLElement = shadowFixture.nativeElement;
+      const scrollable = host.querySelector<HTMLElement>('.vdnd-scrollable')!;
+      const shadowRoot = host.querySelector('vdnd-test-shadow-list')!.shadowRoot!;
+      const list = shadowRoot.querySelector<HTMLElement>('[data-droppable-id]')!;
+      const item = shadowRoot.querySelector<HTMLElement>('[data-draggable-id]')!;
+      // The list is taller than the scrollable viewport that shows it
+      scrollable.getBoundingClientRect = () => rect(300, 300);
+      list.getBoundingClientRect = () => rect(300, 2000);
+      const cursorOverride = jest.spyOn(TestBed.inject(AutoScrollService), 'setCursorOverride');
+
+      attemptPointerDrag(item);
+      expect(dragStateService.isDragging()).toBe(true);
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 1000 }));
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 100, clientY: 1000 }));
+
+      // Clamped to the scrollable's bottom (300), not the list's (2000)
+      expect(cursorOverride).toHaveBeenLastCalledWith({ x: 100, y: 300 });
+      shadowFixture.destroy();
     });
   });
 

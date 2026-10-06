@@ -43,6 +43,11 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'shadow-dom',
+    loadComponent: () =>
+      import('./shadow-dom-demo/shadow-dom-demo').then((m) => m.ShadowDomDemoComponent),
+  },
+  {
     path: 'virtual-for-scrollable',
     loadComponent: () =>
       import('./scrollable-virtual-for-demo/scrollable-virtual-for-demo').then(

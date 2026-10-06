@@ -817,6 +817,49 @@ describe('DragIndexCalculatorService', () => {
     });
   });
 
+  it('reads the scroll offset of a vdndScrollable ancestor outside the shadow root of a vdnd-virtual-content list', () => {
+    const scrollable = document.createElement('div');
+    scrollable.className = 'vdnd-scrollable';
+    scrollable.scrollTop = 200;
+    const host = document.createElement('div');
+    scrollable.appendChild(host);
+    const content = document.createElement('vdnd-virtual-content');
+    content.setAttribute('data-droppable-id', 'shadow-content');
+    content.setAttribute('data-droppable-group', 'test-group');
+    host.attachShadow({ mode: 'open' }).appendChild(content);
+    document.body.appendChild(scrollable);
+
+    try {
+      expect(service.getScrollGeometry(content, 50).scrollTop).toBe(200);
+    } finally {
+      scrollable.remove();
+    }
+  });
+
+  it('finds the vdnd-virtual-content around a droppable inside a shadow root', () => {
+    const scrollable = document.createElement('div');
+    scrollable.className = 'vdnd-scrollable';
+    scrollable.scrollTop = 200;
+    const content = document.createElement('vdnd-virtual-content');
+    scrollable.appendChild(content);
+    const host = document.createElement('div');
+    content.appendChild(host);
+    const droppable = document.createElement('div');
+    droppable.setAttribute('data-droppable-id', 'shadow-list');
+    droppable.setAttribute('data-droppable-group', 'test-group');
+    host.attachShadow({ mode: 'open' }).appendChild(droppable);
+    document.body.appendChild(scrollable);
+
+    try {
+      // Measured as page-level content scrolled by the vdndScrollable, not as a plain list
+      expect(service.getScrollGeometry(droppable, 50)).toEqual(
+        expect.objectContaining({ scrollTop: 200, isVirtual: true }),
+      );
+    } finally {
+      scrollable.remove();
+    }
+  });
+
   it('uses registered strategy item count for direct virtualized lists', () => {
     const droppable = createDroppable('list-direct', 3);
     const strategy = new MockStrategy([0, 50, 100, 150], (offset) => Math.floor(offset / 50), 100);

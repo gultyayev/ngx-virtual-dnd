@@ -1,5 +1,11 @@
 import { DestroyRef, inject, Injectable, NgZone } from '@angular/core';
 import { DroppableRegistryService } from './droppable-registry.service';
+import {
+  closestAcrossShadow,
+  elementFromPointAcrossShadow,
+  parentAcrossShadow,
+  shadowRootsAround,
+} from '../utils/composed-dom';
 
 /**
  * Snapshot of the candidate droppables for an active drag session.
@@ -23,6 +29,12 @@ interface DragSessionSnapshot {
   candidatesStale: boolean;
   /** Bound scroll/resize listener used to mark rects dirty. */
   onViewportChange: () => void;
+  /**
+   * The shadow roots the candidates render inside (nested in or slotted into), each with the
+   * scroll listener. A scroll inside a shadow root never reaches the window: scroll events don't
+   * cross the shadow boundary.
+   */
+  shadowRoots: Set<ShadowRoot>;
   /**
    * ResizeObserver watching the candidate droppables so a container-only layout
    * change (which fires no window scroll/resize) still invalidates cached rects.
@@ -100,12 +112,14 @@ export class PositionCalculatorService {
       dirty: false,
       candidatesStale: false,
       onViewportChange,
+      shadowRoots: new Set(),
       resizeObserver: this.#createResizeObserver(),
     };
 
     // A container-only reflow (an element resize that fires no window scroll/resize)
     // would otherwise leave stale rects — observe the candidates so it marks them dirty.
     this.#observeCandidates(this.#session);
+    this.#watchShadowRoots(this.#session);
 
     // Capture-phase scroll catches scrolling on any ancestor scroller (scroll does
     // not bubble); resize covers viewport changes. Both only mark rects dirty —
@@ -129,6 +143,10 @@ export class PositionCalculatorService {
     }
     this.#session = null;
     session.resizeObserver?.disconnect();
+    for (const root of session.shadowRoots) {
+      root.removeEventListener('scroll', session.onViewportChange, { capture: true });
+    }
+    session.shadowRoots.clear();
     if (typeof window !== 'undefined') {
       window.removeEventListener('scroll', session.onViewportChange, { capture: true });
       window.removeEventListener('resize', session.onViewportChange);
@@ -165,6 +183,7 @@ export class PositionCalculatorService {
     session.dirty = false;
     session.candidatesStale = false;
     this.#observeCandidates(session);
+    this.#watchShadowRoots(session);
   }
 
   /**
@@ -255,12 +274,12 @@ export class PositionCalculatorService {
 
   /**
    * The ancestor that clips a candidate's hit-test rect: its nearest `.vdnd-scrollable`
-   * ancestor, or null when it has none or is one itself. Without clipping a droppable scrolled
+   * ancestor (looking past shadow roots), or null when it has none or is one itself. Without clipping a droppable scrolled
    * mostly out of a clipping container still hit-tests over its full unclipped rect (issue #23
    * case 3).
    */
   #clipOf(el: HTMLElement): Element | null {
-    const scrollable = el.closest('.vdnd-scrollable');
+    const scrollable = closestAcrossShadow(el, '.vdnd-scrollable');
     return scrollable === el ? null : scrollable;
   }
 
@@ -332,6 +351,37 @@ export class PositionCalculatorService {
   }
 
   /**
+   * Listen for scroll (capture phase, like the window listener) on each shadow root a candidate
+   * renders inside (nested in or slotted into), and stop listening on those that no longer hold
+   * one. A scroller inside a shadow root moves its lists without resizing them, and its scroll
+   * event stops at the shadow root.
+   */
+  #watchShadowRoots(session: DragSessionSnapshot): void {
+    const roots = new Set<ShadowRoot>();
+    for (const candidate of session.candidates) {
+      for (const root of shadowRootsAround(candidate)) {
+        roots.add(root);
+      }
+    }
+    this.#ngZone.runOutsideAngular(() => {
+      for (const root of session.shadowRoots) {
+        if (!roots.has(root)) {
+          root.removeEventListener('scroll', session.onViewportChange, { capture: true });
+        }
+      }
+      for (const root of roots) {
+        if (!session.shadowRoots.has(root)) {
+          root.addEventListener('scroll', session.onViewportChange, {
+            capture: true,
+            passive: true,
+          });
+        }
+      }
+    });
+    session.shadowRoots = roots;
+  }
+
+  /**
    * Whether a droppable element is currently disabled (reflected via the
    * `data-droppable-disabled` attribute by `DroppableDirective`). Read live on each
    * hit-test / navigation step so disabled↔enabled transitions during an active drag
@@ -368,7 +418,7 @@ export class PositionCalculatorService {
   }
 
   /**
-   * Find the draggable element at a given point.
+   * Find the draggable element at a given point, including one inside an open shadow root.
    *
    * @param x - Cursor X coordinate
    * @param y - Cursor Y coordinate
@@ -385,7 +435,7 @@ export class PositionCalculatorService {
     }
 
     try {
-      const elementAtPoint = document.elementFromPoint(x, y);
+      const elementAtPoint = elementFromPointAcrossShadow(x, y);
       if (!elementAtPoint) {
         return null;
       }
@@ -399,7 +449,8 @@ export class PositionCalculatorService {
   }
 
   /**
-   * Walk up the DOM tree to find a droppable parent element.
+   * Walk up the DOM tree to find a droppable parent element. The walk continues from a shadow
+   * root to its host.
    *
    * @param element - Starting element
    * @param groupName - The drag-and-drop group name to filter by
@@ -414,26 +465,28 @@ export class PositionCalculatorService {
     // Match on the attribute's presence and compare the value here, so the group name needs no
     // selector escaping. Nearer droppables of other groups are skipped.
     const selector = `[${this.#DROPPABLE_GROUP_ATTR}]`;
-    let current = element.closest<HTMLElement>(selector);
+    let current = closestAcrossShadow<HTMLElement>(element, selector);
     while (current && !isPageRoot(current)) {
       if (current.getAttribute(this.#DROPPABLE_GROUP_ATTR) === groupName) {
         return current;
       }
-      current = current.parentElement?.closest<HTMLElement>(selector) ?? null;
+      const parent = parentAcrossShadow(current);
+      current = parent ? closestAcrossShadow<HTMLElement>(parent, selector) : null;
     }
 
     return null;
   }
 
   /**
-   * Walk up the DOM tree to find a draggable parent element.
+   * Walk up the DOM tree to find a draggable parent element. The walk continues from a shadow
+   * root to its host.
    *
    * @param element - Starting element
    * @returns The draggable parent element, or null if none found
    */
   getDraggableParent(element: HTMLElement): HTMLElement | null {
     const selector = `[${this.#DRAGGABLE_ID_ATTR}]:not([${this.#DRAGGABLE_ID_ATTR}=""])`;
-    const draggable = element.closest<HTMLElement>(selector);
+    const draggable = closestAcrossShadow<HTMLElement>(element, selector);
     return draggable && !isPageRoot(draggable) ? draggable : null;
   }
 

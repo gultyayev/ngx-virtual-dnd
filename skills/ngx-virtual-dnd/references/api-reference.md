@@ -477,14 +477,14 @@ Controls edge auto-scrolling during drag operations. Usually configured via comp
 
 **Injectable:** `providedIn: 'root'` (singleton)
 
-Internal service for DOM hit-testing and drop position calculation. Exported for advanced customization. Its droppable lookups (`findDroppableAtPoint`, `getDroppableById`, `findAdjacentDroppable`) only see droppables rendered with `vdndDroppable`, which register themselves; an element that merely carries `data-droppable-*` attributes is ignored.
+Internal service for DOM hit-testing and drop position calculation. Exported for advanced customization. Its droppable lookups (`findDroppableAtPoint`, `getDroppableById`, `findAdjacentDroppable`) only see droppables rendered with `vdndDroppable`, which register themselves; an element that merely carries `data-droppable-*` attributes is ignored. Droppables and draggables inside open shadow roots are found too: the lookups that walk up from an element continue from a shadow root to its host.
 
 **Key Methods:**
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `findDroppableAtPoint` | `(x, y, draggedElement, groupName) => HTMLElement \| null` | Find droppable element at cursor position |
-| `findDraggableAtPoint` | `(x, y, draggedElement) => HTMLElement \| null` | Find draggable element at cursor position |
+| `findDraggableAtPoint` | `(x, y, draggedElement) => HTMLElement \| null` | Find draggable element at cursor position, including one inside an open shadow root |
 | `getDroppableId` | `(element) => string \| null` | Get droppable ID from element's data attribute |
 | `calculateDropIndex` | `(scrollTop, cursorY, containerTop, itemHeight, totalItems) => number` | Fixed-height index math: `floor((cursorY - containerTop + scrollTop) / itemHeight)`, clamped to `[0, totalItems]` |
 | `refreshCandidates` | `() => void` | Re-read the active drag's candidate droppables (picks up droppables added/removed mid-drag). Runs automatically when a droppable registers or unregisters; exposed as a manual escape hatch |
