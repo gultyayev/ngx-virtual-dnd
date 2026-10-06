@@ -28,7 +28,7 @@ Uses `Math.floor(relativeY / itemHeight)` directly (no refinement needed since a
 
 ### Constrained Mode
 
-`constrainToContainer` uses the same capped center probe and midpoint refinement as unconstrained mode. Edge snapping overrides the index to 0 or totalItems when the preview bounds are within 2px of the droppable container edges (needed because clamping prevents the probe from reaching the first/last slot for tall items).
+`constrainToContainer` uses the same capped center probe and midpoint refinement as unconstrained mode. Edge snapping overrides the index to 0 or totalItems when the preview bounds are within 2px of the droppable container edges (needed because clamping prevents the probe from reaching the first/last slot for tall items) — but only when the scroll container can't scroll further that way (`scrollTop` within 1px of 0 for the top, of `scrollHeight - clientHeight` for the bottom). The preview is pinned at an edge whenever the pointer goes past it, which is how a constrained drag autoscrolls, and the 2px tolerance also catches a card grabbed far from its top outside the autoscroll band. Snapping there regardless of scroll dropped the item at the start/end of a list scrolled far from it (#112); instead the probe's index (the visible edge row) stays until the list reaches that end. Page-scroll content (`vdnd-virtual-content`) skips the scroll check: its droppable rect spans all of its rows.
 
 ## Same-List Adjustment
 

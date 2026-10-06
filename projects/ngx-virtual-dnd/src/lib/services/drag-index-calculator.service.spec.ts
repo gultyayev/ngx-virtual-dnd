@@ -267,6 +267,186 @@ describe('DragIndexCalculatorService', () => {
     expect(index).toBe(0);
   });
 
+  describe('constrained edge snap on a scrollable list', () => {
+    // 50 rows of 50px in a 400px list: max scrollTop = 2500 - 400 = 2100.
+    const ROW = 50;
+    const ROWS = 50;
+    const LIST_HEIGHT = 400;
+    const MAX_SCROLL = ROWS * ROW - LIST_HEIGHT;
+
+    function mockRect(element: HTMLElement): void {
+      jest.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 300,
+        height: LIST_HEIGHT,
+        top: 0,
+        right: 300,
+        bottom: LIST_HEIGHT,
+        left: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+    }
+
+    function mockScroll(element: HTMLElement, scrollTop: number): void {
+      Object.defineProperty(element, 'scrollTop', { value: scrollTop, configurable: true });
+      Object.defineProperty(element, 'clientHeight', { value: LIST_HEIGHT, configurable: true });
+      Object.defineProperty(element, 'scrollHeight', { value: ROWS * ROW, configurable: true });
+    }
+
+    /** A constrained droppable whose rows scroll in its own element or an inner virtual scroll. */
+    function createScrolledDroppable(
+      container: 'viewport' | 'virtualScroll',
+      scrollTop: number,
+      firstRowHeight = ROW,
+    ): HTMLElement {
+      const droppable = document.createElement('div');
+      droppable.setAttribute('data-droppable-id', 'scrolled');
+      droppable.setAttribute('data-droppable-group', 'test-group');
+      droppable.setAttribute('data-constrain-to-container', '');
+      mockRect(droppable);
+
+      if (container === 'viewport') {
+        droppable.setAttribute('data-virtual-viewport', '');
+        mockScroll(droppable, scrollTop);
+      } else {
+        const virtualScroll = document.createElement('vdnd-virtual-scroll');
+        virtualScroll.setAttribute('data-item-height', String(ROW));
+        virtualScroll.setAttribute('data-total-items', String(ROWS));
+        mockRect(virtualScroll);
+        mockScroll(virtualScroll, scrollTop);
+        droppable.appendChild(virtualScroll);
+      }
+
+      const offsets = Array.from({ length: ROWS + 1 }, (_, i) =>
+        i === 0 ? 0 : firstRowHeight + (i - 1) * ROW,
+      );
+      service.registerStrategy(
+        'scrolled',
+        new MockStrategy(offsets, (offset) =>
+          offset < firstRowHeight
+            ? 0
+            : Math.min(ROWS - 1, 1 + Math.floor((offset - firstRowHeight) / ROW)),
+        ),
+      );
+      return droppable;
+    }
+
+    function indexFor(args: {
+      container: 'viewport' | 'virtualScroll';
+      scrollTop: number;
+      previewTop: number;
+      previewHeight?: number;
+      firstRowHeight?: number;
+    }): number {
+      const previewHeight = args.previewHeight ?? ROW;
+      const grabOffset = { x: 20, y: previewHeight / 2 };
+      return service.calculatePlaceholderIndex({
+        droppableElement: createScrolledDroppable(
+          args.container,
+          args.scrollTop,
+          args.firstRowHeight,
+        ),
+        position: { x: 20, y: args.previewTop + grabOffset.y },
+        previousPosition: null,
+        grabOffset,
+        draggedItemHeight: previewHeight,
+        sourceDroppableId: null,
+        sourceIndex: null,
+      }).index;
+    }
+
+    it('snaps page-scroll content to the first slot whatever its scroll parent scrollTop', () => {
+      // vdnd-virtual-content in a vdndScrollable parent scrolled by 900px of content above the
+      // list: the droppable rect spans all rows, so a preview at its top is at the first row.
+      const scrollable = document.createElement('div');
+      scrollable.classList.add('vdnd-scrollable');
+      mockRect(scrollable);
+      mockScroll(scrollable, 900);
+      const content = document.createElement('vdnd-virtual-content');
+      content.setAttribute('data-content-offset', '900');
+      const droppable = document.createElement('div');
+      droppable.setAttribute('data-droppable-id', 'page-list');
+      droppable.setAttribute('data-droppable-group', 'test-group');
+      droppable.setAttribute('data-constrain-to-container', '');
+      jest.spyOn(droppable, 'getBoundingClientRect').mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 300,
+        height: ROWS * ROW,
+        top: 0,
+        right: 300,
+        bottom: ROWS * ROW,
+        left: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+      content.appendChild(droppable);
+      scrollable.appendChild(content);
+      const offsets = Array.from({ length: ROWS + 1 }, (_, i) => i * ROW);
+      service.registerStrategy(
+        'page-list',
+        new MockStrategy(offsets, (offset) =>
+          Math.max(0, Math.min(ROWS - 1, Math.floor(offset / ROW))),
+        ),
+      );
+
+      // A 240px preview 1px below the top: its probe reaches row 2, the snap gives 0
+      const index = service.calculatePlaceholderIndex({
+        droppableElement: droppable,
+        position: { x: 20, y: 121 },
+        previousPosition: null,
+        grabOffset: { x: 20, y: 120 },
+        draggedItemHeight: 240,
+        sourceDroppableId: null,
+        sourceIndex: null,
+      }).index;
+      expect(index).toBe(0);
+    });
+
+    describe.each(['viewport', 'virtualScroll'] as const)('in a %s', (container) => {
+      it('keeps the visible top row when the preview is pinned at the top of a scrolled list', () => {
+        // Preview top 1px below the list top at scrollTop 900: the capped probe is at
+        // 26 + 900 = 926 → row 18, the first visible row. Snapping to 0 would drop the item
+        // 18 rows above anything the user can see.
+        expect(indexFor({ container, scrollTop: 900, previewTop: 1 })).toBe(18);
+        expect(indexFor({ container, scrollTop: 900, previewTop: 2 })).toBe(18);
+      });
+
+      it('keeps the visible bottom row when the preview is pinned at the bottom of a scrolled list', () => {
+        // Preview bottom 1px above the list bottom at scrollTop 900: probe 374 + 900 = 1274 → row 25.
+        expect(indexFor({ container, scrollTop: 900, previewTop: LIST_HEIGHT - ROW - 1 })).toBe(25);
+        expect(indexFor({ container, scrollTop: 900, previewTop: LIST_HEIGHT - ROW - 2 })).toBe(25);
+      });
+
+      it('still snaps to the first slot once the list is scrolled to its top', () => {
+        // A 20px first row: the probe (at least 25px below the preview top) lands in row 1 or
+        // further, so only the snap reaches slot 0.
+        const top = { container, previewTop: 1, previewHeight: 240, firstRowHeight: 20 };
+        expect(indexFor({ ...top, scrollTop: 0 })).toBe(0);
+        // Fractional scrollTop (zoom/DPR) still counts as the top
+        expect(indexFor({ ...top, scrollTop: 0.5 })).toBe(0);
+        // Scrolled down a little: no snap, the probe's row
+        expect(indexFor({ ...top, scrollTop: 10 })).toBeGreaterThan(0);
+      });
+
+      it('still snaps to the end once the list is scrolled to its bottom', () => {
+        // A 240px preview pinned at the bottom: its probe reaches row 45 only, the snap gives 50.
+        const previewTop = LIST_HEIGHT - 240 - 1;
+        expect(indexFor({ container, scrollTop: MAX_SCROLL, previewTop, previewHeight: 240 })).toBe(
+          ROWS,
+        );
+        // Fractional scrollTop just short of the integer max still counts as the bottom
+        expect(
+          indexFor({ container, scrollTop: MAX_SCROLL - 0.5, previewTop, previewHeight: 240 }),
+        ).toBe(ROWS);
+        // 100px short of the bottom: no snap, the visible bottom row (probe 374 + 2000 → row 47)
+        expect(
+          indexFor({ container, scrollTop: MAX_SCROLL - 100, previewTop: LIST_HEIGHT - ROW - 1 }),
+        ).toBe(47);
+      });
+    });
+  });
+
   it('uses center probe for dynamic heights regardless of direction', () => {
     const itemHeight = 65;
     const offsets = [0, 65, 130, 195, 260, 325];

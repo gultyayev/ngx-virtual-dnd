@@ -56,7 +56,8 @@ export class ElementCloneService {
     const clone = source.cloneNode(true) as HTMLElement;
 
     // Apply computed styles as inline styles
-    this.#applyComputedStyles(source, clone);
+    const rootComputed = this.#applyComputedStyles(source, clone);
+    this.#resetRootPlacement(rootComputed, clone);
 
     // Handle special elements (canvas, video, etc.)
     this.#handleSpecialElements(source, clone);
@@ -69,9 +70,9 @@ export class ElementCloneService {
 
   /**
    * Apply computed styles from source to target element.
-   * Recursively applies to all child elements.
+   * Recursively applies to all child elements. Returns the source's computed style.
    */
-  #applyComputedStyles(source: HTMLElement, target: HTMLElement): void {
+  #applyComputedStyles(source: HTMLElement, target: HTMLElement): CSSStyleDeclaration {
     const computed = window.getComputedStyle(source);
 
     // Copy essential visual properties (keys are already kebab-case)
@@ -112,6 +113,50 @@ export class ElementCloneService {
         this.#applyComputedStyles(sourceChild, targetChild);
       }
     }
+
+    return computed;
+  }
+
+  /**
+   * Strip what placed the source row on the page from the clone root. The preview box is the
+   * row's border box (getBoundingClientRect(), so already moved by all of these), and the clone
+   * fills it from its origin: a margin, an offset or a translation would push the clone away
+   * from the grab point and past the box's clipped edge. Descendants keep theirs: they lay out
+   * the row's content. Set inline, as the clone keeps the row's classes and their rules.
+   */
+  #resetRootPlacement(computed: CSSStyleDeclaration, clone: HTMLElement): void {
+    const style = clone.style;
+    style.margin = '0';
+    style.top = style.right = style.bottom = style.left = 'auto';
+    // In flow at the box's origin. Relative still lays out absolutely positioned descendants
+    // against the row, as absolute, fixed and sticky did (a standalone `*vdndVirtualFor` row
+    // carries an inline `position: absolute; top`).
+    const position = computed.getPropertyValue('position');
+    if (position === 'absolute' || position === 'fixed' || position === 'sticky') {
+      style.position = 'relative';
+    }
+    // A rotation or scale is how the row looks, a translation where it is: keep the linear part
+    style.translate = 'none';
+    style.transform = this.#withoutTranslation(style.transform);
+  }
+
+  /** A computed transform (`none`, `matrix(…)` or `matrix3d(…)`) with its translation zeroed */
+  #withoutTranslation(transform: string): string {
+    const match = /^(matrix(?:3d)?)\((.*)\)$/.exec(transform.trim());
+    if (!match) {
+      return transform;
+    }
+    const [, fn, args] = match;
+    const values = args.split(',').map((value) => value.trim());
+    // matrix(a, b, c, d, tx, ty); matrix3d(…12 values, tx, ty, tz, w)
+    const [count, translation] = fn === 'matrix' ? [6, [4, 5]] : [16, [12, 13, 14]];
+    if (values.length !== count) {
+      return transform;
+    }
+    for (const index of translation) {
+      values[index] = '0';
+    }
+    return `${fn}(${values.join(', ')})`;
   }
 
   /**

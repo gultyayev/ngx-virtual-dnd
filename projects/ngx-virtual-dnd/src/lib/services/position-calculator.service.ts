@@ -580,10 +580,10 @@ export class PositionCalculatorService {
     direction: 'left' | 'right',
     groupName: string,
   ): { element: HTMLElement; id: string } | null {
-    // Include disabled droppables when establishing left-to-right order and locating the
-    // current container — otherwise a container disabled mid-drag (its own index becomes
-    // -1) would trap the drag with no reachable neighbour. Disabled droppables are skipped
-    // as *targets* during the outward scan below instead.
+    // Include disabled and hidden droppables when establishing left-to-right order and
+    // locating the current container — otherwise a container disabled or hidden mid-drag
+    // (its own index becomes -1) would trap the drag with no reachable neighbour. Disabled
+    // and hidden droppables are skipped as *targets* during the outward scan below instead.
     const allDroppables = this.#registry.getGroup(groupName);
 
     if (allDroppables.length <= 1) {
@@ -615,12 +615,12 @@ export class PositionCalculatorService {
       return null;
     }
 
-    // Scan outward in the requested direction, skipping disabled droppables, until the
-    // first enabled neighbour (or run off the end of the list).
+    // Scan outward in the requested direction, skipping disabled and hidden droppables,
+    // until the first enabled, visible neighbour (or run off the end of the list).
     const step = direction === 'left' ? -1 : 1;
     for (let i = currentIndex + step; i >= 0 && i < droppableInfos.length; i += step) {
       const target = droppableInfos[i];
-      if (target.disabled) {
+      if (target.disabled || !this.#isDroppableVisible(target.element, target.rect)) {
         continue;
       }
       return {
@@ -630,6 +630,26 @@ export class PositionCalculatorService {
     }
 
     return null;
+  }
+
+  /**
+   * Whether a droppable is on screen, so keyboard navigation can move a drag into it. A
+   * mounted droppable that is `display: none` (itself or an ancestor), collapsed to zero
+   * size, or `visibility: hidden` is not: the user can't see it, and the dropped item's row
+   * could not take focus there. (The pointer can't reach a `display: none` or zero-size
+   * droppable either; pointer hit-testing doesn't check `visibility`.)
+   */
+  #isDroppableVisible(el: HTMLElement, rect: DOMRect): boolean {
+    // display: none (all-zero rect) or a collapsed container
+    if (rect.right <= rect.left || rect.bottom <= rect.top) {
+      return false;
+    }
+    if (typeof el.checkVisibility === 'function') {
+      return el.checkVisibility({ visibilityProperty: true });
+    }
+    // Fallback where checkVisibility() is unavailable (older browsers, jsdom)
+    const visibility = getComputedStyle(el).visibility;
+    return visibility !== 'hidden' && visibility !== 'collapse';
   }
 
   /**

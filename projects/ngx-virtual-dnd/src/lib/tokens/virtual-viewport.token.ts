@@ -7,7 +7,13 @@ import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
  * GPU-accelerated transform positioning for efficient virtual scrolling.
  */
 export interface VdndVirtualViewport {
-  /** Current scroll position */
+  /**
+   * The rendered scroll position (reactive). Committed once per animation frame, after a move of
+   * 5px or more, so it can lag the scrolling element: read that element's scrollTop to compute
+   * from. vdnd-virtual-content's host does not scroll and its scrollTop() is relative to where its
+   * list starts: its parent scroll container's element scrollTop minus its content offset, clamped
+   * at 0.
+   */
   scrollTop(): number;
 
   /** Height of the viewport container */

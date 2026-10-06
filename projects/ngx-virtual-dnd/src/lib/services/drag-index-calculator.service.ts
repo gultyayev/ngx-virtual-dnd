@@ -266,7 +266,9 @@ export class DragIndexCalculatorService {
 
     // When the preview is constrained to the container bounds, large dragged items can
     // cover the first/last slots while their center never reaches them. Snap to edges
-    // using preview bounds so top/bottom drops remain reachable.
+    // using preview bounds so top/bottom drops remain reachable — but only once the list
+    // is scrolled to that end. A preview pinned at the edge of a scrolled list (which is
+    // how a constrained drag autoscrolls) keeps the probe's index, the visible edge row.
     if (isConstrainedToContainer) {
       const droppableRect = droppableElement.getBoundingClientRect();
       const edgeTolerance = 2;
@@ -274,9 +276,13 @@ export class DragIndexCalculatorService {
       const distanceToBottom = Math.abs(droppableRect.bottom - previewBottomY);
 
       if (distanceToTop <= edgeTolerance && distanceToTop <= distanceToBottom) {
-        placeholderIndex = 0;
+        if (this.#isScrolledToEnd(cache, 'start')) {
+          placeholderIndex = 0;
+        }
       } else if (distanceToBottom <= edgeTolerance) {
-        placeholderIndex = totalItems;
+        if (this.#isScrolledToEnd(cache, 'end')) {
+          placeholderIndex = totalItems;
+        }
       }
     }
 
@@ -311,6 +317,26 @@ export class DragIndexCalculatorService {
       default:
         return { rect, scrollTop: scrollContainer.scrollTop, isVirtual };
     }
+  }
+
+  /**
+   * Whether a droppable's rows can't scroll further towards `edge`. Page-scroll content
+   * (`vdnd-virtual-content`) always can't: its droppable rect spans all of its rows, so a preview
+   * at that rect's edge is at the first/last row however the page is scrolled.
+   */
+  #isScrolledToEnd(cache: DroppableCache, edge: 'start' | 'end'): boolean {
+    if (cache.containerType === 'virtualContent') {
+      return true;
+    }
+    // scrollTop is fractional on WebKit and at non-integer zoom/DPR while scrollHeight and
+    // clientHeight are rounded integers, so "at the end" allows a pixel of slack.
+    const tolerance = 1;
+    const { scrollContainer } = cache;
+    if (edge === 'start') {
+      return scrollContainer.scrollTop <= tolerance;
+    }
+    const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+    return scrollContainer.scrollTop >= maxScrollTop - tolerance;
   }
 
   /** The `data-content-offset` (px reserved above the rows) of a virtual container, or 0. */

@@ -810,7 +810,13 @@ describe('PositionCalculatorService', () => {
   describe('findAdjacentDroppable', () => {
     const createdAdjacent: HTMLElement[] = [];
 
-    function makeAdjacentDroppable(id: string, group: string, left: number): HTMLElement {
+    function makeAdjacentDroppable(
+      id: string,
+      group: string,
+      left: number,
+      size: { width: number; height: number } = { width: 100, height: 100 },
+      parent: HTMLElement = document.body,
+    ): HTMLElement {
       const el = document.createElement('div');
       el.setAttribute('data-droppable-id', id);
       el.setAttribute('data-droppable-group', group);
@@ -818,17 +824,24 @@ describe('PositionCalculatorService', () => {
         ({
           top: 0,
           left,
-          right: left + 100,
-          bottom: 100,
-          width: 100,
-          height: 100,
+          right: left + size.width,
+          bottom: size.height,
+          width: size.width,
+          height: size.height,
           x: left,
           y: 0,
           toJSON: () => ({}),
         }) as DOMRect;
       registerDroppable(el);
-      document.body.appendChild(el);
+      parent.appendChild(el);
       createdAdjacent.push(el);
+      return el;
+    }
+
+    /** A droppable that is mounted but `display: none`: browsers report an all-zero rect. */
+    function makeDisplayNoneDroppable(id: string, group: string): HTMLElement {
+      const el = makeAdjacentDroppable(id, group, 0, { width: 0, height: 0 });
+      el.style.display = 'none';
       return el;
     }
 
@@ -870,6 +883,88 @@ describe('PositionCalculatorService', () => {
 
       expect(() => service.findAdjacentDroppable('left', 'right', group)).not.toThrow();
       expect(service.findAdjacentDroppable('left', 'right', group)?.element).toBe(right);
+    });
+
+    describe('hidden droppables', () => {
+      it('skips a display: none droppable in both directions', () => {
+        const left = makeAdjacentDroppable('left', 'g', 100);
+        // Sorts at x = 0 (all-zero rect), so it would be the left neighbour of `left`
+        makeDisplayNoneDroppable('hidden', 'g');
+        const right = makeAdjacentDroppable('right', 'g', 300);
+
+        expect(service.findAdjacentDroppable('left', 'left', 'g')).toBeNull();
+        expect(service.findAdjacentDroppable('right', 'left', 'g')?.element).toBe(left);
+        expect(service.findAdjacentDroppable('left', 'right', 'g')?.element).toBe(right);
+      });
+
+      it('skips a visibility: hidden droppable in both directions', () => {
+        const left = makeAdjacentDroppable('left', 'g', 0);
+        const hidden = makeAdjacentDroppable('hidden', 'g', 200);
+        hidden.style.visibility = 'hidden';
+        const right = makeAdjacentDroppable('right', 'g', 400);
+
+        expect(service.findAdjacentDroppable('left', 'right', 'g')?.element).toBe(right);
+        expect(service.findAdjacentDroppable('right', 'left', 'g')?.element).toBe(left);
+      });
+
+      it('skips a droppable inside a visibility: hidden ancestor', () => {
+        makeAdjacentDroppable('left', 'g', 0);
+        const panel = document.createElement('div');
+        panel.style.visibility = 'hidden';
+        document.body.appendChild(panel);
+        createdAdjacent.push(panel);
+        makeAdjacentDroppable('hidden', 'g', 200, { width: 100, height: 100 }, panel);
+        const right = makeAdjacentDroppable('right', 'g', 400);
+
+        expect(service.findAdjacentDroppable('left', 'right', 'g')?.element).toBe(right);
+      });
+
+      it('skips a droppable that checkVisibility() reports as not visible', () => {
+        makeAdjacentDroppable('left', 'g', 0);
+        const hidden = makeAdjacentDroppable('hidden', 'g', 200);
+        // jsdom lacks checkVisibility(); browsers have it (content-visibility, ancestors, ...)
+        const checkVisibility = jest.fn(() => false);
+        Object.assign(hidden, { checkVisibility });
+        const right = makeAdjacentDroppable('right', 'g', 400);
+
+        expect(service.findAdjacentDroppable('left', 'right', 'g')?.element).toBe(right);
+        expect(checkVisibility).toHaveBeenCalledWith({ visibilityProperty: true });
+      });
+
+      it('skips a collapsed (zero-size) droppable', () => {
+        makeAdjacentDroppable('left', 'g', 0);
+        makeAdjacentDroppable('collapsed-width', 'g', 200, { width: 0, height: 100 });
+        makeAdjacentDroppable('collapsed-height', 'g', 300, { width: 100, height: 0 });
+        const right = makeAdjacentDroppable('right', 'g', 500);
+
+        expect(service.findAdjacentDroppable('left', 'right', 'g')?.element).toBe(right);
+      });
+
+      it('returns null when the only neighbour is hidden', () => {
+        makeAdjacentDroppable('left', 'g', 0);
+        const hidden = makeAdjacentDroppable('hidden', 'g', 200);
+        hidden.style.visibility = 'hidden';
+
+        expect(service.findAdjacentDroppable('left', 'right', 'g')).toBeNull();
+      });
+
+      it('still reaches the neighbours of a hidden current droppable', () => {
+        // The drag's current list became hidden mid-drag: the drag must be able to leave it.
+        const left = makeAdjacentDroppable('left', 'g', 0);
+        const current = makeAdjacentDroppable('current', 'g', 200);
+        current.style.visibility = 'hidden';
+        const right = makeAdjacentDroppable('right', 'g', 400);
+
+        expect(service.findAdjacentDroppable('current', 'left', 'g')?.element).toBe(left);
+        expect(service.findAdjacentDroppable('current', 'right', 'g')?.element).toBe(right);
+      });
+
+      it('still reaches a neighbour of a display: none current droppable', () => {
+        makeDisplayNoneDroppable('current', 'g');
+        const right = makeAdjacentDroppable('right', 'g', 200);
+
+        expect(service.findAdjacentDroppable('current', 'right', 'g')?.element).toBe(right);
+      });
     });
   });
 

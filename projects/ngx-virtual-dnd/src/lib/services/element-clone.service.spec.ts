@@ -250,6 +250,111 @@ describe('ElementCloneService', () => {
       expect(clone.classList.contains('vdnd-draggable-disabled')).toBe(false);
     });
 
+    describe("the root's placement", () => {
+      // The preview box is the row's border box (getBoundingClientRect()), so whatever placed
+      // the row on the page would offset its clone inside that box.
+
+      it('should not carry the margins of the root, while a child keeps its own', () => {
+        addStyles(
+          '.card { margin: 6px 20px; height: 38px; border: 2px solid; }' +
+            '.card .label { margin: 4px 8px; }',
+        );
+        const source = attach(document.createElement('div'));
+        source.className = 'card';
+        source.innerHTML = '<span class="label">Label</span>';
+
+        const clone = service.cloneElement(source);
+
+        expect(clone.style.marginTop).toBe('0px');
+        expect(clone.style.marginRight).toBe('0px');
+        expect(clone.style.marginBottom).toBe('0px');
+        expect(clone.style.marginLeft).toBe('0px');
+        expect((clone.querySelector('.label') as HTMLElement).style.margin).toBe('4px 8px');
+      });
+
+      it('should not carry the inline position and offsets of the root, while a child keeps its own', () => {
+        // A standalone *vdndVirtualFor row is placed this way
+        const source = attach(document.createElement('div'));
+        source.style.position = 'absolute';
+        source.style.top = '1200px';
+        source.style.left = '10px';
+        source.style.right = '0px';
+        source.innerHTML = '<span style="position: absolute; top: 5px; left: 3px">Badge</span>';
+
+        const clone = service.cloneElement(source);
+
+        expect(clone.style.position).toBe('relative');
+        expect(clone.style.top).toBe('auto');
+        expect(clone.style.left).toBe('auto');
+        expect(clone.style.right).toBe('auto');
+        expect(clone.style.bottom).toBe('auto');
+        const badge = clone.querySelector('span') as HTMLElement;
+        expect(badge.style.position).toBe('absolute');
+        expect(badge.style.top).toBe('5px');
+        expect(badge.style.left).toBe('3px');
+      });
+
+      it('should neutralize a position and offsets the root gets from a stylesheet', () => {
+        // The clone keeps the row's classes, so their rules still apply to it
+        addStyles('.row { position: fixed; top: 300px; left: 40px; }');
+        const source = attach(document.createElement('div'));
+        source.className = 'row';
+
+        const clone = service.cloneElement(source);
+
+        expect(clone.style.position).toBe('relative');
+        expect(clone.style.top).toBe('auto');
+        expect(clone.style.left).toBe('auto');
+      });
+
+      it('should keep a relatively positioned root a containing block', () => {
+        addStyles('.row { position: relative; }');
+        const source = attach(document.createElement('div'));
+        source.className = 'row';
+
+        const clone = attach(service.cloneElement(source));
+
+        // Left to the class rule, which the clone keeps
+        expect(clone.style.position).toBe('');
+        expect(window.getComputedStyle(clone).position).toBe('relative');
+      });
+
+      it("should drop the translation of the root's transform but keep its rotation and scale", () => {
+        fakeComputedStyles({ transform: 'matrix(0.96, 0.28, -0.28, 0.96, 12, 30)' });
+        const source = attach(document.createElement('div'));
+
+        const clone = service.cloneElement(source);
+
+        expect(clone.style.transform).toBe('matrix(0.96, 0.28, -0.28, 0.96, 0, 0)');
+      });
+
+      it("should drop the translation of the root's 3D transform", () => {
+        fakeComputedStyles({
+          transform: 'matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 120, 4, 1)',
+        });
+        const source = attach(document.createElement('div'));
+
+        const clone = service.cloneElement(source);
+
+        expect(clone.style.transform).toBe(
+          'matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)',
+        );
+      });
+
+      it("should keep a child's translation", () => {
+        addStyles('.card .label { transform: translateX(4px); }');
+        const source = attach(document.createElement('div'));
+        source.className = 'card';
+        source.innerHTML = '<span class="label">Label</span>';
+
+        const clone = service.cloneElement(source);
+
+        expect((clone.querySelector('.label') as HTMLElement).style.transform).toBe(
+          'translateX(4px)',
+        );
+      });
+    });
+
     it('should handle elements with no children', () => {
       addStyles('.chip { padding: 10px; }');
       const source = attach(document.createElement('span'));

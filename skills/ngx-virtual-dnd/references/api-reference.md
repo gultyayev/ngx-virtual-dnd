@@ -378,7 +378,7 @@ interface DragEndEvent {
 }
 ```
 
-`droppableId` is the source droppable. `destinationIndex` is `null` when there is no valid drop target — a cancelled drag (Escape, Tab during a keyboard drag, or the window losing focus / the page being hidden / a system `touchcancel` during a pointer drag) or a release over a disabled droppable / outside every droppable. A non-`null` value pairs with a `drop` event on the destination. `cancelled` is `true` only for cancelled drags (Escape, Tab, focus loss, page hidden, `touchcancel`).
+`droppableId` is the source droppable. `destinationIndex` is `null` when there is no valid drop target — a cancelled drag (Escape, Tab during a keyboard drag, the window losing focus / the page being hidden / a system `touchcancel` during a pointer drag, or the dragged draggable being destroyed) or a release over a disabled droppable / outside every droppable. A non-`null` value pairs with a `drop` event on the destination. `cancelled` is `true` only for cancelled drags (Escape, Tab, focus loss, page hidden, `touchcancel`, dragged draggable destroyed).
 
 ### PlaceholderMoveEvent
 
@@ -499,7 +499,7 @@ Internal service for cloning DOM elements for drag previews. Exported for advanc
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `cloneElement` | `(source: HTMLElement) => HTMLElement` | Deep-clone an element with its computed styles inlined, for use as drag preview |
+| `cloneElement` | `(source: HTMLElement) => HTMLElement` | Deep-clone an element with its computed styles inlined, for use as drag preview. The clone root drops its own placement (margin, `top`/`right`/`bottom`/`left`, translation; `absolute`/`fixed`/`sticky` becomes `relative`) so it fills the preview box from its origin |
 
 ### KeyboardDragService
 
@@ -680,6 +680,8 @@ interface VdndScrollContainer {
 ```
 
 Provided by: `VirtualViewportComponent`, `VirtualContentComponent`, `ScrollableDirective`
+
+`scrollTop()` is the rendered scroll position (reactive): the built-in containers commit it once per animation frame, after a move of 5px or more, so it can lag the scrolling element. Read that element's `scrollTop` for a position to compute from: `nativeElement` for `VirtualViewportComponent` and `ScrollableDirective`. `VirtualContentComponent`'s host does not scroll and its `scrollTop()` is relative to where its list starts: use the parent scroll container's element `scrollTop` minus the content offset, clamped at 0. The same holds for `VdndVirtualViewport.scrollTop()`.
 
 ### VDND_VIRTUAL_VIEWPORT
 
