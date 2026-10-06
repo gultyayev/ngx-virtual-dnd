@@ -105,27 +105,57 @@ test.describe('Virtual for in a scrollable without overscan', () => {
       scroller(page, 'scrollable').locator('.vdnd-drag-placeholder-visible'),
     ).toBeAttached();
 
-    // Scrolled 500px, the gap puts Task 10 (index 9) at the top edge
+    // Scrolled 500px, the gap puts Task 10 (index 9) at the top edge and Task 15 at the bottom
     await scrollListTo(page, 'scrollable', 500);
 
-    await expect(async () => {
-      const top = await scroller(page, 'scrollable').evaluate((list) => {
-        const edge = list.getBoundingClientRect().top;
-        const covering = Array.from(list.querySelectorAll<HTMLElement>('[data-draggable-id]')).find(
-          (element) => {
-            const rect = element.getBoundingClientRect();
-            return rect.top <= edge + 1 && rect.bottom > edge + 1;
-          },
-        );
-        return covering?.getAttribute('data-draggable-id') ?? null;
-      });
-      expect(top, 'A row should cover the top edge (no blank strip)').toBe('s-10');
-    }).toPass({ timeout: 2000 });
+    await expectEdgeRows(page, { top: 's-10', bottom: 's-15' });
+
+    await page.keyboard.press('Escape');
+    await expect(preview(page)).toBeHidden();
+  });
+
+  test('renders the rows in view when scrolled past the dragged row and its placeholder', async ({
+    page,
+  }) => {
+    // Pick Task 1 up with the keyboard: it is hidden, its placeholder fills its slot
+    await row(page, 's-1').focus();
+    await page.keyboard.press('Space');
+    await expect(preview(page), 'The keyboard drag should start').toBeVisible();
+    await expect(
+      scroller(page, 'scrollable').locator('.vdnd-drag-placeholder-visible'),
+    ).toBeAttached();
+
+    // Scrolled 525px: Task 11 (500-550px) to Task 17 (800-850px) are in view
+    await scrollListTo(page, 'scrollable', 525);
+
+    await expectEdgeRows(page, { top: 's-11', bottom: 's-17' });
 
     await page.keyboard.press('Escape');
     await expect(preview(page)).toBeHidden();
   });
 });
+
+/**
+ * The rows covering the top and bottom edges of the Tasks list: with no row there, the list shows
+ * a blank strip. Retried until the render after the scroll has landed.
+ */
+async function expectEdgeRows(page: Page, expected: { top: string; bottom: string }) {
+  await expect(async () => {
+    const edges = await scroller(page, 'scrollable').evaluate((list) => {
+      const box = list.getBoundingClientRect();
+      const rows = Array.from(list.querySelectorAll<HTMLElement>('[data-draggable-id]'));
+      const rowAt = (y: number) =>
+        rows
+          .find((element) => {
+            const rect = element.getBoundingClientRect();
+            return rect.top <= y && rect.bottom > y;
+          })
+          ?.getAttribute('data-draggable-id') ?? null;
+      return { top: rowAt(box.top + 1), bottom: rowAt(box.top + list.clientHeight - 1) };
+    });
+    expect(edges, 'Rows should cover both edges (no blank strip)').toEqual(expected);
+  }).toPass({ timeout: 2000 });
+}
 
 function scroller(page: Page, id: ListId) {
   return page.locator(`[data-droppable-id="${id}"]`);

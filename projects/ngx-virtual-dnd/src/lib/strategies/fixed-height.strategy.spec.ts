@@ -20,6 +20,36 @@ describe('FixedHeightStrategy', () => {
     expect(strategy.getTotalHeight(10)).toBe(500);
   });
 
+  describe('getFirstVisibleIndex', () => {
+    it('should skip the excluded index at and after its visual slot', () => {
+      strategy.setItemCount(10);
+      strategy.setExcludedIndex(2);
+
+      expect(strategy.getFirstVisibleIndex(0)).toBe(0);
+      expect(strategy.getFirstVisibleIndex(60)).toBe(1);
+      // Visual slot 2 is now occupied by logical item 3
+      expect(strategy.getFirstVisibleIndex(100)).toBe(3);
+      expect(strategy.getFirstVisibleIndex(125)).toBe(3);
+      expect(strategy.getFirstVisibleIndex(400)).toBe(9);
+    });
+
+    it('should not go past the last item while an item is excluded', () => {
+      strategy.setItemCount(10);
+      strategy.setExcludedIndex(2);
+
+      expect(strategy.getFirstVisibleIndex(450)).toBe(9);
+    });
+
+    it('should agree with the offsets of the items after the excluded one', () => {
+      strategy.setItemCount(10);
+      strategy.setExcludedIndex(0);
+
+      for (let index = 1; index < 10; index++) {
+        expect(strategy.getFirstVisibleIndex(strategy.getOffsetForIndex(index))).toBe(index);
+      }
+    });
+  });
+
   describe('getOffsetForIndex', () => {
     it('should place items at index * itemHeight', () => {
       expect(strategy.getOffsetForIndex(0)).toBe(0);

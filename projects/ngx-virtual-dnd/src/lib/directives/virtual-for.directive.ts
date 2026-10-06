@@ -303,24 +303,30 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     return Math.max(0, scrollTop - viewport.contentOffset());
   }
 
-  /** Number of visible items */
-  readonly #visibleCount = computed(() => {
-    const height = this.#scrollContainer.containerHeight();
+  /**
+   * Last visible item index: the item at the bottom edge, so a dragged item's closed-up slot in
+   * view leaves no row unrendered. The bottom edge moves by the gap only as far as the top edge
+   * does: a gap in view then renders the rows it pushes out of view too, which keeps the range
+   * (and every row) as it is while the placeholder moves within view.
+   */
+  readonly #lastVisibleIndex = computed(() => {
     const strategy = this.#strategy();
     strategy.version();
-    const startIndex = this.#firstVisibleIndex();
-    return strategy.getVisibleCount(startIndex, height);
+    const top = this.#rowsScrollTop();
+    const gapAbove = top - this.#toStrategyOffset(top);
+    const bottom = top + this.#scrollContainer.containerHeight();
+    return strategy.getFirstVisibleIndex(bottom - gapAbove);
   });
 
   /** Range of items to render */
   readonly #renderRange = computed(() => {
     const first = this.#firstVisibleIndex();
-    const visible = this.#visibleCount();
+    const last = this.#lastVisibleIndex();
     const overscan = this.vdndVirtualForOverscan();
     const total = this.vdndVirtualForOf().length;
 
     const start = Math.max(0, first - overscan);
-    const end = Math.min(total - 1, first + visible + overscan);
+    const end = Math.min(total - 1, Math.max(first, last) + overscan);
 
     return { start, end };
   });

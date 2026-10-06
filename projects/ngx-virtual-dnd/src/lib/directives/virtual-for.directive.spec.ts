@@ -1544,6 +1544,79 @@ describe('VirtualForDirective (standalone in vdndScrollable)', () => {
       expect(rowTop('k5')).toBe('500px');
     });
 
+    /** Drag a row of this list while the pointer is over another list: no placeholder here */
+    const startDragToOtherList = (index: number): void => {
+      dragState.startDrag(
+        {
+          draggableId: `k${index}`,
+          droppableId: 'list',
+          element: document.createElement('div'),
+          height: 50,
+          width: 100,
+        },
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+        null,
+        'other',
+        END_OF_LIST,
+        0,
+        index,
+      );
+      render();
+    };
+
+    const renderedExcept = (dragged: string): string[] =>
+      renderedKeys().filter((key) => key !== dragged);
+
+    it('renders the rows in view when scrolled past the dragged item and its placeholder', () => {
+      host.overscan.set(0);
+      jest.spyOn(HTMLElement.prototype, 'scrollTop', 'get').mockReturnValue(525);
+      render();
+
+      // k0 is dragged, its placeholder fills its slot: k10 to k14 cover 500-750px
+      startDrag('list', 1);
+
+      expect(renderedExcept('k0')).toEqual(['k10', 'k11', 'k12', 'k13', 'k14']);
+      expect(rowTop('k14')).toBe('700px');
+    });
+
+    it('renders the rows in view when scrolled past a dragged item with no placeholder', () => {
+      host.overscan.set(0);
+      jest.spyOn(HTMLElement.prototype, 'scrollTop', 'get').mockReturnValue(525);
+      render();
+
+      // k0's slot closes up: k11 to k15 cover 500-750px
+      startDragToOtherList(0);
+
+      expect(renderedExcept('k0')).toEqual(['k11', 'k12', 'k13', 'k14', 'k15']);
+      expect(rowTop('k15')).toBe('700px');
+    });
+
+    it('renders the row the slot of a dragged item in view pulls up into view', () => {
+      host.overscan.set(0);
+      jest.spyOn(HTMLElement.prototype, 'scrollTop', 'get').mockReturnValue(25);
+      render();
+
+      // k2's slot closes up: k0, k1, k3, k4 and k5 cover 0-250px, in view from 25 to 225px
+      startDragToOtherList(2);
+
+      expect(renderedExcept('k2')).toEqual(['k0', 'k1', 'k3', 'k4', 'k5']);
+      expect(rowTop('k5')).toBe('200px');
+    });
+
+    it('renders the rows a tall gap in view pushes out of view, as before it opened', () => {
+      host.overscan.set(0);
+      render();
+      const before = renderedKeys();
+
+      // A 250px gap at index 2 spans 100-350px: k2 and k3 move out of view, and stay rendered
+      // so that a placeholder move within view leaves every row as it is
+      startDrag('other', 2, 250);
+
+      expect(before).toEqual(['k0', 'k1', 'k2', 'k3', 'k4']);
+      expect(renderedKeys()).toEqual(before);
+    });
+
     it('renders from the gap when the scroll position is inside it', () => {
       host.overscan.set(0);
       renderScrolledTo500();

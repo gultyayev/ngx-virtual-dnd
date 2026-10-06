@@ -17,6 +17,12 @@ interface Row {
   name: string;
 }
 
+/** A non-negative whole number of rows from the query parameter, else the default 3. */
+function parseOverscan(value: string | null): number {
+  const overscan = Number(value ?? undefined);
+  return Number.isInteger(overscan) && overscan >= 0 ? overscan : 3;
+}
+
 /**
  * E2E fixture: two `*vdndVirtualFor` lists, each directly in a `vdndScrollable` droppable, with
  * no viewport component. The scroll containers set no `position`, as in the documented example.
@@ -147,8 +153,8 @@ interface Row {
 })
 export class ScrollableVirtualForDemoComponent {
   /** Rows the Tasks list renders above and below the visible ones (`?overscan=0` for none). */
-  readonly tasksOverscan = Number(
-    inject(ActivatedRoute).snapshot.queryParamMap.get('overscan') ?? 3,
+  readonly tasksOverscan = parseOverscan(
+    inject(ActivatedRoute).snapshot.queryParamMap.get('overscan'),
   );
 
   readonly tasks = signal<Row[]>(
