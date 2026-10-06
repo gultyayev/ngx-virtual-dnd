@@ -492,6 +492,28 @@ describe('VirtualScrollContainerComponent', () => {
 
         expect(virtualScrollComponent.getScrollTop()).toBe(maxScroll);
       });
+
+      it('should start from a scroll smaller than the scroll signal threshold', async () => {
+        await scrollContainerTo(3);
+
+        expect(virtualScrollComponent.getScrollTop()).toBe(3);
+
+        virtualScrollComponent.scrollBy(50);
+
+        expect(virtualScrollEl.scrollTop).toBe(53);
+        expect(virtualScrollComponent.getScrollTop()).toBe(53);
+      });
+
+      it('should start from a scroll the signal has not committed yet', () => {
+        virtualScrollEl.scrollTop = 400;
+        virtualScrollEl.dispatchEvent(new Event('scroll'));
+
+        expect(virtualScrollComponent.getScrollTop()).toBe(400);
+
+        virtualScrollComponent.scrollBy(100);
+
+        expect(virtualScrollEl.scrollTop).toBe(500);
+      });
     });
   });
 

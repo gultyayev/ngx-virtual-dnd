@@ -242,7 +242,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
   /**
    * How far the rows are scrolled. A vdnd-virtual-viewport's rows start contentOffset px down its
-   * scroll area, but its scrollTop() is the raw position (scrollBy() relies on it), so subtract the
+   * scroll area, but its scrollTop() is the raw position, so subtract the
    * offset here. vdnd-virtual-content's scrollTop() already excludes its offset.
    */
   #rowsScrollTop(): number {
