@@ -277,6 +277,28 @@ class ControlDraggablesHostComponent {
 })
 class DelayedHostComponent {}
 
+// A draggable an `@if` inside its list removes, while the list itself stays
+@Component({
+  template: `
+    <div vdndDroppable="surviving-list" vdndDroppableGroup="test-group">
+      @if (show()) {
+        <div
+          vdndDraggable="conditional-item"
+          vdndDraggableGroup="test-group"
+          (dragStart)="dragStartEvents.push($event)"
+          (dragEnd)="dragEndEvents.push($event)"
+        ></div>
+      }
+    </div>
+  `,
+  imports: [DraggableDirective, DroppableDirective],
+})
+class ConditionalDraggableHostComponent {
+  show = signal(true);
+  dragStartEvents: DragStartEvent[] = [];
+  dragEndEvents: DragEndEvent[] = [];
+}
+
 /** Whether `addEventListener` options make the listener passive */
 function isPassive(options: boolean | AddEventListenerOptions | undefined): boolean {
   return typeof options === 'object' && options.passive === true;
@@ -1994,6 +2016,58 @@ describe('DraggableDirective', () => {
       expect(dragStateService.isDragging()).toBe(false);
       expect(dragStateService.wasCancelled()).toBe(true);
       expect(component.dragEndEvents.at(-1)?.cancelled).toBe(true);
+    });
+
+    it('should report the source list as droppableId when only the dragged item is destroyed mid-drag', () => {
+      const conditional = TestBed.createComponent(ConditionalDraggableHostComponent);
+      conditional.detectChanges();
+      const item = conditional.nativeElement.querySelector(
+        '[data-draggable-id="conditional-item"]',
+      ) as HTMLElement;
+
+      attemptPointerDrag(item);
+      expect(dragStateService.sourceDroppableId()).toBe('surviving-list');
+
+      conditional.componentInstance.show.set(false);
+      conditional.detectChanges();
+
+      const ends = conditional.componentInstance.dragEndEvents;
+      expect(dragStateService.isDragging()).toBe(false);
+      expect(ends.length).toBe(1);
+      expect(ends[0].cancelled).toBe(true);
+      expect(ends[0].droppableId).toBe('surviving-list');
+      expect(ends[0].droppableId).toBe(
+        conditional.componentInstance.dragStartEvents[0].droppableId,
+      );
+
+      conditional.destroy();
+    });
+
+    it('should report the source list as droppableId when only the keyboard-dragged item is destroyed', () => {
+      const conditional = TestBed.createComponent(ConditionalDraggableHostComponent);
+      conditional.detectChanges();
+      const item = conditional.nativeElement.querySelector(
+        '[data-draggable-id="conditional-item"]',
+      ) as HTMLElement;
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+
+      item.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      expect(keyboardDrag.isActive()).toBe(true);
+      expect(dragStateService.sourceDroppableId()).toBe('surviving-list');
+
+      conditional.componentInstance.show.set(false);
+      conditional.detectChanges();
+
+      const ends = conditional.componentInstance.dragEndEvents;
+      expect(dragStateService.isDragging()).toBe(false);
+      expect(keyboardDrag.isActive()).toBe(false);
+      expect(ends.length).toBe(1);
+      expect(ends[0].cancelled).toBe(true);
+      expect(ends[0].droppableId).toBe('surviving-list');
+
+      conditional.destroy();
     });
 
     it('should destroy cleanly before its first change detection', () => {

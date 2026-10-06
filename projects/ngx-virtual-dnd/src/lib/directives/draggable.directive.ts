@@ -887,7 +887,9 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
 
     const event: DragEndEvent = {
       draggableId: this.vdndDraggable(),
-      droppableId: this.#getParentDroppableId() ?? '',
+      // The source list as the drag started from it. Not a DOM lookup first: a draggable
+      // destroyed mid-drag (its row removed) is already detached from the list here.
+      droppableId: this.#dragState.sourceDroppableId() || this.#getParentDroppableId() || '',
       cancelled,
       data: this.vdndDraggableData(),
       sourceIndex,

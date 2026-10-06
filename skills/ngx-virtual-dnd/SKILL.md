@@ -428,7 +428,7 @@ Useful signals: `isDragging`, `draggedItem`, `draggedItemId`, `sourceDroppableId
 | `Space`              | Picks up the focused item         | Drops                                                       |
 | `Enter`              | —                                 | Drops                                                       |
 | `ArrowUp`/`ArrowDown`| —                                 | Moves the target position                                   |
-| `ArrowLeft`/`ArrowRight` | —                             | Moves to the neighbouring droppable of the same group, by on-screen x position (disabled ones skipped) |
+| `ArrowLeft`/`ArrowRight` | —                             | Moves to the neighbouring droppable of the same group, by on-screen x position (disabled ones, and hidden ones — `display: none`, `visibility: hidden` or zero size — skipped) |
 | `Escape`             | —                                 | Cancels (also cancels pointer drags)                        |
 
 Managed automatically: `tabindex` (`0`, or `-1` when disabled) on draggables, and focus returns to the moved item after a keyboard drag. The library also sets `aria-grabbed` on draggables and `aria-dropeffect="move"` on droppables, but both are deprecated since ARIA 1.1 and most screen readers ignore them: add instructions and announcements yourself.
@@ -511,7 +511,7 @@ export class TasksComponent {
 
 On release, `(dragEnd)` fires first, then `(drop)` on the destination, both before the next render.
 
-`DragEndEvent.destinationIndex` is `null` when nothing was dropped: Escape/Tab cancel, a pointer drag cancelled because the window lost focus, the page was hidden or the system cancelled the touch, release outside every droppable, or release over a disabled droppable. Branch on `destinationIndex === null` to detect "no drop"; `cancelled` is `true` only when the drag was cancelled (Escape, Tab, focus loss, page hidden, `touchcancel`), so it misses the other cases.
+`DragEndEvent.destinationIndex` is `null` when nothing was dropped: Escape/Tab cancel, a pointer drag cancelled because the window lost focus, the page was hidden or the system cancelled the touch, a drag cancelled because the dragged draggable was destroyed, release outside every droppable, or release over a disabled droppable. Branch on `destinationIndex === null` to detect "no drop"; `cancelled` is `true` only when the drag was cancelled (Escape, Tab, focus loss, page hidden, `touchcancel`, dragged draggable destroyed), so it misses the other cases.
 
 ## CSS classes
 

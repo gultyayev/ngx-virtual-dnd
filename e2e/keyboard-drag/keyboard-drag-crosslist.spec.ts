@@ -128,4 +128,41 @@ test.describe('Keyboard Drag - Cross-List Movement', () => {
     await expect(demoPage.countBadge('list2')).toHaveText('50');
     expect(await demoPage.getItemId('list1', 0)).toBe(draggedId);
   });
+
+  // A list that is mounted but not on screen (inactive tab kept in the DOM, column hidden by a
+  // media query) stays registered in the group: ArrowLeft/ArrowRight must skip it, since the
+  // user can't see it. `key` points at the hidden list: a display: none list
+  // reports a rect at x = 0, so it sorts left of every visible list.
+  for (const { hide, hidden, from, key } of [
+    { hide: 'display: none', hidden: 'list2', from: 'list1', key: 'ArrowLeft' },
+    { hide: 'visibility: hidden', hidden: 'list2', from: 'list1', key: 'ArrowRight' },
+    { hide: 'display: none', hidden: 'list1', from: 'list2', key: 'ArrowLeft' },
+    { hide: 'visibility: hidden', hidden: 'list1', from: 'list2', key: 'ArrowLeft' },
+  ] as const) {
+    test(`should not move into a ${hide} ${hidden} with ${key}`, async ({ page }) => {
+      const [property, value] = hide.split(': ');
+      const card = page.getByTestId(hidden === 'list1' ? 'list-1-card' : 'list-2-card');
+      await card.evaluate((el, [name, val]) => el.style.setProperty(name, val), [
+        property,
+        value,
+      ] as const);
+      await expect(card).toBeHidden();
+      const draggedId = await demoPage.getItemId(from, 0);
+
+      await demoPage.startKeyboardDrag(from, 0);
+      await expect(demoPage.dragPreview).toBeVisible();
+      await page.keyboard.press(key);
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('Space');
+      await expect(demoPage.dragPreview).not.toBeVisible();
+
+      // Dropped one slot down in its own list: the sideways press was ignored
+      await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '1');
+      await expect(demoPage.countBadge('list1')).toHaveText('50');
+      await expect(demoPage.countBadge('list2')).toHaveText('50');
+      expect(await demoPage.getItemId(from, 1)).toBe(draggedId);
+      // Focus returns to the dropped row (not lost to <body> in a hidden list)
+      await expect(page.locator(':focus')).toHaveAttribute('data-draggable-id', draggedId!);
+    });
+  }
 });
