@@ -511,7 +511,7 @@ export class TasksComponent {
 
 On release, `(dragEnd)` fires first, then `(drop)` on the destination, both before the next render.
 
-`DragEndEvent.destinationIndex` is `null` when nothing was dropped: Escape/Tab cancel, a pointer drag cancelled because the window lost focus, the page was hidden or the system cancelled the touch, release outside every droppable, or release over a disabled droppable. Branch on `destinationIndex === null` to detect "no drop"; `cancelled` is `true` only when the drag was cancelled (Escape, Tab, focus loss, page hidden, `touchcancel`), so it misses the other cases.
+`DragEndEvent.destinationIndex` is `null` when nothing was dropped: Escape/Tab cancel, a pointer drag cancelled because the window lost focus, the page was hidden or the system cancelled the touch, a drag cancelled because the dragged draggable was destroyed, release outside every droppable, or release over a disabled droppable. Branch on `destinationIndex === null` to detect "no drop"; `cancelled` is `true` only when the drag was cancelled (Escape, Tab, focus loss, page hidden, `touchcancel`, dragged draggable destroyed), so it misses the other cases.
 
 ## CSS classes
 
