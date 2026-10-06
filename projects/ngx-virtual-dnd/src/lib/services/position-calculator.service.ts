@@ -30,8 +30,9 @@ interface DragSessionSnapshot {
   /** Bound scroll/resize listener used to mark rects dirty. */
   onViewportChange: () => void;
   /**
-   * The shadow roots the candidates are in, each with the scroll listener. A scroll inside a
-   * shadow root never reaches the window: scroll events don't cross the shadow boundary.
+   * The shadow roots the candidates render inside (nested in or slotted into), each with the
+   * scroll listener. A scroll inside a shadow root never reaches the window: scroll events don't
+   * cross the shadow boundary.
    */
   shadowRoots: Set<ShadowRoot>;
   /**
@@ -351,8 +352,9 @@ export class PositionCalculatorService {
 
   /**
    * Listen for scroll (capture phase, like the window listener) on each shadow root a candidate
-   * is in, and stop listening on those that no longer hold one. A scroller inside a shadow root
-   * moves its lists without resizing them, and its scroll event stops at the shadow root.
+   * renders inside (nested in or slotted into), and stop listening on those that no longer hold
+   * one. A scroller inside a shadow root moves its lists without resizing them, and its scroll
+   * event stops at the shadow root.
    */
   #watchShadowRoots(session: DragSessionSnapshot): void {
     const roots = new Set<ShadowRoot>();

@@ -31,13 +31,30 @@ export function closestAcrossShadow<T extends Element = Element>(
   return null;
 }
 
-/** The shadow roots `node` is nested in, innermost first (none for a node in the page). */
+/**
+ * The shadow roots `node` renders inside, innermost first: those it is nested in and those it is
+ * slotted into (none for a node rendered in the page itself).
+ */
 export function shadowRootsAround(node: Node): ShadowRoot[] {
   const roots: ShadowRoot[] = [];
-  let root = node.getRootNode();
-  while (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) {
-    roots.push(root);
-    root = root.host.getRootNode();
+  if (typeof ShadowRoot === 'undefined') {
+    return roots;
+  }
+  // Walk the flat tree (the rendered one): a node slotted into a shadow root renders inside it,
+  // so a scroller there (a "scroll area" web component with a <slot>) moves it too
+  let current: Node | null = node;
+  while (current) {
+    const slot: HTMLSlotElement | null =
+      'assignedSlot' in current ? (current as Element).assignedSlot : null;
+    const next: Node | null = slot ?? current.parentNode;
+    if (next instanceof ShadowRoot) {
+      if (!roots.includes(next)) {
+        roots.push(next);
+      }
+      current = next.host;
+    } else {
+      current = next;
+    }
   }
   return roots;
 }

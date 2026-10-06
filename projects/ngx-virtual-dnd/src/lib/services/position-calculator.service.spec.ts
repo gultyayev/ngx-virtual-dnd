@@ -1193,6 +1193,30 @@ describe('PositionCalculatorService', () => {
       expect(service.findDroppableAtPoint(50, 50, dragged, 'g')).toBeNull();
     });
 
+    it('re-reads the rects after a scroll in a shadow-root scroller the list is slotted into', () => {
+      const dragged = document.createElement('div');
+      // A "scroll area" web component: its scroller lives in its shadow root, the list is slotted
+      const { host, root } = shadowHost();
+      const scroller = document.createElement('div');
+      scroller.appendChild(document.createElement('slot'));
+      root.appendChild(scroller);
+      const list = droppableEl('slotted');
+      host.appendChild(list);
+      let top = 0;
+      list.getBoundingClientRect = () =>
+        ({ top, left: 0, right: 100, bottom: top + 100, width: 100, height: 100 }) as DOMRect;
+      registerDroppable(list);
+      expect(list.assignedSlot).not.toBeNull();
+
+      service.beginDragSession('g');
+      expect(service.findDroppableAtPoint(50, 50, dragged, 'g')).toBe(list);
+
+      top = -200;
+      scroller.dispatchEvent(new Event('scroll'));
+
+      expect(service.findDroppableAtPoint(50, 50, dragged, 'g')).toBeNull();
+    });
+
     it('listens for scroll on each shadow root of the candidates once, and stops at session end', () => {
       const first = listInNestedShadowScroller('first');
       // A second list in the same shadow roots

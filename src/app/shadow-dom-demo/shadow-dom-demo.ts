@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, signal, ViewEncapsulation } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  CUSTOM_ELEMENTS_SCHEMA,
+  inject,
+  signal,
+  ViewEncapsulation,
+} from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
 import {
   DraggableDirective,
   DragPreviewComponent,
@@ -22,16 +31,46 @@ const createTasks = (prefix: string, label: string, count: number): Task[] =>
   }));
 
 /**
+ * A "scroll area" web component, as design systems ship them: it scrolls its slotted content with
+ * an element inside its own shadow root.
+ */
+class DemoScrollAreaElement extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' }).innerHTML = `
+      <style>
+        :host { display: block; }
+        .scroller {
+          height: 240px;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          border: 1px solid var(--border);
+          border-radius: 15px;
+          background: var(--surface);
+        }
+      </style>
+      <div class="scroller" data-testid="shadow-stack-scroller"><slot></slot></div>
+    `;
+  }
+}
+if (typeof customElements !== 'undefined' && !customElements.get('demo-scroll-area')) {
+  customElements.define('demo-scroll-area', DemoScrollAreaElement);
+}
+
+/**
  * Two sortable lists and the drag preview, rendered inside the component's open shadow root
  * (`ViewEncapsulation.ShadowDom`). Page styles don't reach into it, so it styles its own rows.
  * Below them, two fixed-height lists stacked in a scroller of the shadow root: scrolling it moves
- * the lists without resizing them.
+ * the lists without resizing them. With `?stack=slotted` the scroller is inside the shadow root of
+ * a `demo-scroll-area` web component instead, and the lists are slotted into it.
  */
 @Component({
   selector: 'app-shadow-board',
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.ShadowDom,
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
   imports: [
+    NgTemplateOutlet,
     VirtualSortableListComponent,
     DroppableDirective,
     DroppableGroupDirective,
@@ -79,21 +118,33 @@ const createTasks = (prefix: string, label: string, count: number): Task[] =>
       </section>
     </div>
 
-    <div class="stack" data-testid="shadow-stack-scroller" vdndGroup="shadow-stack">
-      @for (stack of stacks; track stack.id) {
-        <section class="stack-list" [vdndDroppable]="stack.id" (drop)="onStackDrop($event)">
-          <h2>
-            {{ stack.title }}
-            <span class="badge" [attr.data-testid]="stack.id + '-count'">{{
-              stack.items().length
-            }}</span>
-          </h2>
-          @for (task of stack.items(); track task.id) {
-            <div class="row" [vdndDraggable]="task.id" [vdndDraggableData]="task">
-              <span class="row-inner">{{ task.title }}</span>
-            </div>
-          }
-        </section>
+    <div class="stack-group" vdndGroup="shadow-stack">
+      <ng-template #stackLists>
+        @for (stack of stacks; track stack.id) {
+          <section class="stack-list" [vdndDroppable]="stack.id" (drop)="onStackDrop($event)">
+            <h2>
+              {{ stack.title }}
+              <span class="badge" [attr.data-testid]="stack.id + '-count'">{{
+                stack.items().length
+              }}</span>
+            </h2>
+            @for (task of stack.items(); track task.id) {
+              <div class="row" [vdndDraggable]="task.id" [vdndDraggableData]="task">
+                <span class="row-inner">{{ task.title }}</span>
+              </div>
+            }
+          </section>
+        }
+      </ng-template>
+
+      @if (slottedStack) {
+        <demo-scroll-area>
+          <ng-container [ngTemplateOutlet]="stackLists" />
+        </demo-scroll-area>
+      } @else {
+        <div class="stack" data-testid="shadow-stack-scroller">
+          <ng-container [ngTemplateOutlet]="stackLists" />
+        </div>
       }
     </div>
 
@@ -151,10 +202,15 @@ const createTasks = (prefix: string, label: string, count: number): Task[] =>
       box-shadow: inset 0 0 0 1.5px var(--accent-soft-bd);
     }
 
+    .stack-group {
+      display: block;
+      margin-top: 20px;
+    }
+
     .stack {
       height: 240px;
-      margin-top: 20px;
       overflow-y: auto;
+      overscroll-behavior: contain;
       border: 1px solid var(--border);
       border-radius: 15px;
       background: var(--surface);
@@ -198,6 +254,9 @@ const createTasks = (prefix: string, label: string, count: number): Task[] =>
   `,
 })
 export class ShadowBoardComponent {
+  /** Whether the stacked lists are slotted into a `demo-scroll-area` (`?stack=slotted`) */
+  readonly slottedStack = inject(ActivatedRoute).snapshot.queryParamMap.get('stack') === 'slotted';
+
   readonly todo = signal<Task[]>(createTasks('shadow-todo', 'Task', 50));
   readonly done = signal<Task[]>(createTasks('shadow-done', 'Done', 50));
 
