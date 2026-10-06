@@ -18,7 +18,10 @@ interface Row {
  * E2E fixture: rows that contain form controls and a `no-drag` tag. The controls keep their own
  * mouse and keyboard behavior (Space types a space, clicks the button), presses anywhere in the
  * tag never start a drag, and the default drag preview, a clone of the row, must not change the
- * controls' state.
+ * controls' state. Two more lists hold rows inside a contenteditable region and rows that are
+ * buttons themselves: a control around the row, or the row itself, doesn't block a drag. The
+ * last list holds rows that are their own editing host: their text takes presses and Space, and
+ * their non-editable grip drags them.
  */
 @Component({
   selector: 'app-interactive-children-demo',
@@ -36,7 +39,8 @@ interface Row {
       <p class="icd-hint">
         Each row holds a text field, a radio group, a <code>no-drag</code> tag and a button. They
         work as usual, pressing the tag never starts a drag, and dragging a row leaves them
-        unchanged.
+        unchanged. Rows inside an editable region and rows that are buttons drag as usual. Editable
+        blocks stay editable and drag by their grip.
       </p>
 
       <div class="listcard" vdndGroup="interactive">
@@ -95,6 +99,80 @@ interface Row {
           }
         </div>
       </div>
+
+      <div class="listcard icd-card" vdndGroup="editor">
+        <div class="list-hd">
+          <span class="list-title">Blocks in an editor</span>
+        </div>
+        <div contenteditable="true" data-testid="editor">
+          <div class="list icd-list" vdndDroppable="blocks" (drop)="onBlockDrop($event)">
+            @for (block of blocks(); track block.id) {
+              <div class="item" [vdndDraggable]="block.id">
+                <div class="item-inner">
+                  <span class="item-text">{{ block.name }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="listcard icd-card" vdndGroup="buttons">
+        <div class="list-hd">
+          <span class="list-title">Button rows</span>
+        </div>
+        <div class="list icd-list" vdndDroppable="buttons" (drop)="onButtonDrop($event)">
+          @for (button of buttons(); track button.id) {
+            <button type="button" class="item icd-button-row" [vdndDraggable]="button.id">
+              <span class="item-inner">
+                <span class="item-text">{{ button.name }}</span>
+              </span>
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="listcard icd-card" vdndGroup="editable-blocks">
+        <div class="list-hd">
+          <span class="list-title">Editable blocks</span>
+        </div>
+        <div
+          class="list icd-list"
+          vdndDroppable="editable-blocks"
+          (drop)="onEditableBlockDrop($event)"
+        >
+          @for (block of editableBlocks(); track block.id) {
+            <div
+              class="item use-handle"
+              contenteditable="true"
+              dragHandle=".item-handle"
+              [vdndDraggable]="block.id"
+            >
+              <div class="item-inner">
+                <span
+                  class="item-handle"
+                  contenteditable="false"
+                  tabindex="0"
+                  role="button"
+                  aria-roledescription="drag handle"
+                  data-testid="block-grip"
+                  [attr.aria-label]="'Drag ' + block.name"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <circle cx="9" cy="5" r="1.6" />
+                    <circle cx="15" cy="5" r="1.6" />
+                    <circle cx="9" cy="12" r="1.6" />
+                    <circle cx="15" cy="12" r="1.6" />
+                    <circle cx="9" cy="19" r="1.6" />
+                    <circle cx="15" cy="19" r="1.6" />
+                  </svg>
+                </span>
+                <span class="item-text" data-testid="block-text">{{ block.name }}</span>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
     </main>
 
     <vdnd-drag-preview />
@@ -123,6 +201,20 @@ interface Row {
 
     .icd-list {
       padding: 8px 0;
+    }
+
+    .icd-card {
+      margin-top: 24px;
+    }
+
+    .icd-button-row {
+      display: block;
+      width: 100%;
+      border: 0;
+      background: none;
+      font: inherit;
+      color: inherit;
+      text-align: start;
     }
 
     .icd-name {
@@ -166,6 +258,27 @@ export class InteractiveChildrenDemoComponent {
     { id: 'row-3', name: 'Row 3' },
   ]);
 
+  /** Rows inside a contenteditable region, like the blocks of a rich-text editor. */
+  readonly blocks = signal<Row[]>([
+    { id: 'block-1', name: 'Block 1' },
+    { id: 'block-2', name: 'Block 2' },
+    { id: 'block-3', name: 'Block 3' },
+  ]);
+
+  /** Rows that are themselves buttons. */
+  readonly buttons = signal<Row[]>([
+    { id: 'button-1', name: 'Button 1' },
+    { id: 'button-2', name: 'Button 2' },
+    { id: 'button-3', name: 'Button 3' },
+  ]);
+
+  /** Rows that are their own editing host, dragged by a non-editable grip. */
+  readonly editableBlocks = signal<Row[]>([
+    { id: 'editable-block-1', name: 'Editable block 1' },
+    { id: 'editable-block-2', name: 'Editable block 2' },
+    { id: 'editable-block-3', name: 'Editable block 3' },
+  ]);
+
   /** Button clicks per row (rows not clicked yet are missing). */
   readonly clicks = signal<Partial<Record<string, number>>>({});
 
@@ -175,5 +288,17 @@ export class InteractiveChildrenDemoComponent {
 
   onDrop(event: DropEvent): void {
     reorderItems(event, this.rows);
+  }
+
+  onBlockDrop(event: DropEvent): void {
+    reorderItems(event, this.blocks);
+  }
+
+  onButtonDrop(event: DropEvent): void {
+    reorderItems(event, this.buttons);
+  }
+
+  onEditableBlockDrop(event: DropEvent): void {
+    reorderItems(event, this.editableBlocks);
   }
 }

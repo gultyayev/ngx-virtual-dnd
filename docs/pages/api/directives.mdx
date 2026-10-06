@@ -17,7 +17,7 @@ Makes an element draggable with mouse, touch and keyboard. See [Drag behavior](/
 | `vdndDraggableGroup` | `string`             | —            | Group name. Required unless a `vdndGroup` is in scope where the template is declared       |
 | `vdndDraggableData`  | `unknown`            | —            | Arbitrary data, delivered in drag events, `DropEvent.source.data` and the preview template |
 | `disabled`           | `boolean`            | `false`      | Prevent dragging                                                                           |
-| `dragHandle`         | `string`             | —            | CSS selector; only presses inside a match start a drag                                     |
+| `dragHandle`         | `string`             | —            | CSS selector; only presses inside a match within the item start a drag                     |
 | `dragThreshold`      | `number`             | `5`          | Distance in px before a drag starts                                                        |
 | `dragDelay`          | `number`             | `0`          | Hold time in ms before a drag can start                                                    |
 | `lockAxis`           | `'x' \| 'y' \| null` | `null`       | Axis to freeze: `'x'` moves vertically only, `'y'` horizontally only                       |

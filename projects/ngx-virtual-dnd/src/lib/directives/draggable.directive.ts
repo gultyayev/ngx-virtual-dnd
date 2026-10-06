@@ -32,7 +32,11 @@ import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
-import { findNoDragElement, INTERACTIVE_ELEMENT_SELECTOR } from '../utils/interactive-elements';
+import {
+  findNestedControl,
+  findNoDragElement,
+  isInTextEntryDraggable,
+} from '../utils/interactive-elements';
 
 /** Key names as Angular's `keydown.<key>` bindings spell them, for the `event.key` values that differ */
 const KEY_NAMES: Record<string, string> = {
@@ -396,6 +400,13 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       return;
     }
 
+    // Space in a draggable that is itself a text field, select or editable element types into
+    // it (or toggles or opens it); such an item picks up with Space on a drag handle inside it.
+    // While this item's keyboard drag runs, Space still drops it.
+    if (!this.#keyboardHandler.isActive() && this.#isInTextEntryHost(event)) {
+      return;
+    }
+
     // Space on a control inside the item types into it or clicks it, just as a press on
     // one never starts a pointer drag.
     if (this.#isFromNestedControl(event)) {
@@ -422,6 +433,15 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     this.#keyboardHandler.activate();
   }
 
+  /** Whether the event goes to this draggable being a text-entry control (see isInTextEntryDraggable) */
+  #isInTextEntryHost(event: Event): boolean {
+    const target = event.target;
+    return (
+      target instanceof Element &&
+      isInTextEntryDraggable(target, this.#elementRef.nativeElement, this.dragHandle())
+    );
+  }
+
   /**
    * Whether the event comes from a control (or from inside a `no-drag` element) nested inside this
    * draggable. Neither the draggable itself nor a control around it counts, so a
@@ -439,8 +459,8 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       return true;
     }
 
-    const control = target.closest(INTERACTIVE_ELEMENT_SELECTOR);
-    if (control === null || control === host || !host.contains(control)) {
+    const control = findNestedControl(target, host);
+    if (control === null) {
       return false;
     }
 
