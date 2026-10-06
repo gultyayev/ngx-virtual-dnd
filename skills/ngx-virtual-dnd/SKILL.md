@@ -271,7 +271,7 @@ export class PageComponent {
 
   Give `.ion-content-scroll-host` `height: 100%; overflow-y: auto;`.
 - `vdndContentHeader` marks a projected header; its height is measured automatically and used as the list's offset. If the header lives outside the component, pass its height via `[contentOffset]` instead.
-- Inside `vdnd-virtual-content` / `vdnd-virtual-viewport`, `*vdndVirtualFor` inherits `itemHeight` and `dynamicItemHeight` from the parent component and `droppableId` from the enclosing `vdndDroppable` — only `trackBy` is required. Used directly inside a `vdndScrollable`, it also needs `itemHeight`.
+- Inside `vdnd-virtual-content` / `vdnd-virtual-viewport`, `*vdndVirtualFor` inherits `itemHeight` and `dynamicItemHeight` from the parent component and `droppableId` from the enclosing `vdndDroppable` — only `trackBy` is required. Used directly inside a `vdndScrollable`, it also needs `itemHeight`; it positions its rows absolutely and sets `position: relative` on that element when nothing between it and the rows is positioned.
 
 ## Dynamic item heights
 

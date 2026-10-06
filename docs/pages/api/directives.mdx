@@ -62,7 +62,7 @@ Provides a group name to every draggable and droppable inside it. Declare item t
 
 **Selector:** `[vdndScrollable]`
 
-Marks the element that scrolls for `<vdnd-virtual-content>` or `*vdndVirtualFor`. The element needs `overflow: auto` (or `scroll`) and a height. Adds the `vdnd-scrollable` class and `overflow-anchor: none`.
+Marks the element that scrolls for `<vdnd-virtual-content>` or `*vdndVirtualFor`. The element needs `overflow: auto` (or `scroll`) and a height. Adds the `vdnd-scrollable` class and `overflow-anchor: none`. A `*vdndVirtualFor` used directly inside it sets `position: relative` on it when it is not positioned (see [VirtualForDirective](#virtualfordirective)).
 
 | Input               | Type                        | Default | Description                         |
 | ------------------- | --------------------------- | ------- | ----------------------------------- |
@@ -96,6 +96,16 @@ Structural directive that renders only the visible items. Use it inside `<vdnd-v
 Template context (`VirtualForContext<T>`): `$implicit`, `index`, `first`, `last`, `count`.
 
 It always recycles rows: the view of a row that scrolls out renders a row that scrolls in. See [Row recycling](/guide/features/performance#row-recycling).
+
+Used directly in a `vdndScrollable` element (no viewport component), it positions each row absolutely at its offset and opens a gap for the drag placeholder by moving the rows after it down. The rows scroll with the element only if it is their containing block, so when neither the element nor an element between it and the rows is positioned, the directive sets `position: relative` on it.
+
+```angular-html
+<div vdndScrollable vdndDroppable="tasks" (drop)="onDrop($event)" style="overflow: auto; height: 400px">
+  <ng-container *vdndVirtualFor="let task of tasks(); itemHeight: 48; trackBy: trackById">
+    <div [vdndDraggable]="task.id">{{ task.title }}</div>
+  </ng-container>
+</div>
+```
 
 ## ContentHeaderDirective
 

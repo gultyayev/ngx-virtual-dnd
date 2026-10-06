@@ -31,7 +31,13 @@ export class FixedHeightStrategy implements VirtualScrollStrategy {
 
   getFirstVisibleIndex(scrollTop: number): number {
     if (this.#itemHeight <= 0) return 0;
-    return Math.floor(scrollTop / this.#itemHeight);
+    const index = Math.floor(scrollTop / this.#itemHeight);
+    // The items after the excluded one close up its slot (see getOffsetForIndex), so the item
+    // at a visual slot at or past it is the next one, as long as there is a next one
+    if (this.#excludedIndex >= 0 && index >= this.#excludedIndex) {
+      return Math.min(index + 1, Math.max(index, this.#itemCount - 1));
+    }
+    return index;
   }
 
   getVisibleCount(_startIndex: number, containerHeight: number): number {

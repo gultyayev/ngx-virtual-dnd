@@ -45,4 +45,4 @@ The same input exists on every virtual container:
 </ng-container>
 ```
 
-Inside `<vdnd-virtual-content>` or `<vdnd-virtual-viewport>`, `*vdndVirtualFor` inherits `itemHeight` and `dynamicItemHeight` from its parent.
+Inside `<vdnd-virtual-content>` or `<vdnd-virtual-viewport>`, `*vdndVirtualFor` inherits `itemHeight` and `dynamicItemHeight` from its parent. Directly inside a `vdndScrollable`, it positions each row absolutely at its measured offset (see [VirtualForDirective](/api/directives#virtualfordirective)).
