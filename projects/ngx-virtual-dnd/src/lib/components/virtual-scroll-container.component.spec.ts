@@ -1091,6 +1091,221 @@ describe('VirtualScrollContainerComponent', () => {
       // Scroll stays at 700px (no height change to compensate for)
       expect(virtualScrollEl.scrollTop).toBe(700);
     });
+
+    describe('scroll position after a drop into this list (#117)', () => {
+      const otherItem: TestItem = { id: 'other-0', name: 'Other 0' };
+
+      interface DragScenario {
+        /** Where the 20-item list (1000px, 300px viewport) is scrolled; its bottom by default */
+        scrollTop?: number;
+        draggedId?: string;
+        sourceDroppableId?: string;
+        sourceIndex?: number;
+        /** The list the drag ends over */
+        targetDroppableId?: string;
+        placeholderIndex: number;
+        /** The dragged item's (and so the placeholder's) height */
+        height?: number;
+        dynamicItemHeight?: boolean;
+        cancel?: boolean;
+        /** The consumer's drop handler, applied synchronously after the drag ends */
+        applyDrop?: (items: TestItem[]) => TestItem[];
+      }
+
+      const runDrag = async ({
+        scrollTop = 700,
+        draggedId = otherItem.id,
+        sourceDroppableId = 'other',
+        sourceIndex = 0,
+        targetDroppableId = 'list',
+        placeholderIndex,
+        height = 50,
+        dynamicItemHeight = false,
+        cancel = false,
+        applyDrop,
+      }: DragScenario): Promise<void> => {
+        component.droppableId.set('list');
+        component.dynamicItemHeight.set(dynamicItemHeight);
+        component.items.set(generateItems(20));
+        fixture.detectChanges();
+        virtualScrollEl.scrollTop = scrollTop;
+        virtualScrollEl.dispatchEvent(new Event('scroll'));
+        await nextAnimationFrame();
+        fixture.detectChanges();
+
+        dragStateService.startDrag(
+          {
+            draggableId: draggedId,
+            droppableId: sourceDroppableId,
+            element: document.createElement('div'),
+            height,
+            width: 200,
+          },
+          { x: 0, y: 0 },
+          { x: 0, y: 0 },
+          null,
+          targetDroppableId,
+          END_OF_LIST,
+          placeholderIndex,
+          sourceIndex,
+          false,
+        );
+        fixture.detectChanges();
+        expect(virtualScrollEl.scrollTop).toBe(scrollTop);
+
+        if (cancel) {
+          dragStateService.cancelDrag();
+        } else {
+          dragStateService.endDrag();
+        }
+        if (applyDrop) {
+          component.items.set(applyDrop([...component.items()]));
+        }
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+      };
+
+      /** Drop `other-0` from another list at `index`, inserted there by the consumer */
+      const dropFromOtherListAt = (
+        index: number,
+        scenario: Partial<DragScenario> = {},
+      ): Promise<void> =>
+        runDrag({
+          placeholderIndex: index,
+          applyDrop: (items) => {
+            items.splice(index, 0, otherItem);
+            return items;
+          },
+          ...scenario,
+        });
+
+      it('should keep the scroll position, so the dropped row renders where the placeholder was', async () => {
+        // Placeholder at index 15: [750, 800), inside the viewport [700, 1000)
+        await dropFromOtherListAt(15);
+
+        expect(virtualScrollEl.scrollTop).toBe(700);
+        const dropped = virtualScrollEl.querySelector<HTMLElement>(
+          `[data-draggable-id="${otherItem.id}"]`,
+        );
+        expect(dropped?.getAttribute('data-index')).toBe('15');
+      });
+
+      it('should scroll just enough to show a row dropped after the last item', async () => {
+        // The dropped row lands at [1000, 1050), below the viewport [700, 1000)
+        await dropFromOtherListAt(20);
+
+        expect(virtualScrollEl.scrollTop).toBe(1050 - 300);
+      });
+
+      it('should show a row dropped after the last item of a list a few pixels short of its bottom', async () => {
+        // The dropped row at [1000, 1050) starts 5px below the viewport [695, 995)
+        await dropFromOtherListAt(20, { scrollTop: 695 });
+
+        expect(virtualScrollEl.scrollTop).toBe(1050 - 300);
+      });
+
+      it('should scroll just enough to show a dropped row that renders partly cut off', async () => {
+        // The dropped row at [950, 1000) shows only its top 30px in the viewport [680, 980)
+        await dropFromOtherListAt(19, { scrollTop: 680 });
+
+        expect(virtualScrollEl.scrollTop).toBe(1000 - 300);
+      });
+
+      it('should leave the list alone when the dropped row renders far outside the visible area', async () => {
+        // The dropped row at [1000, 1050) is nowhere near the viewport [0, 300): the placeholder
+        // was not in view either, so jumping to it would lose the user's place
+        await dropFromOtherListAt(20, { scrollTop: 0 });
+
+        expect(virtualScrollEl.scrollTop).toBe(0);
+      });
+
+      it("should reveal a row dropped from another list with dynamic heights by the dragged item's height", async () => {
+        // The row is not measured in this list yet: it renders as tall as the placeholder
+        // (120px) at [1000, 1120), not the 50px estimate
+        await dropFromOtherListAt(20, { dynamicItemHeight: true, height: 120 });
+
+        expect(virtualScrollEl.scrollTop).toBe(1120 - 300);
+      });
+
+      it("should reveal a row moved within the list with dynamic heights by the list's own height for it", async () => {
+        // This list measures its own rows: item-5 moved to index 19 is [950, 1000) here, partly
+        // cut off in the viewport [680, 980), whatever height the drag reported
+        await runDrag({
+          scrollTop: 680,
+          dynamicItemHeight: true,
+          height: 120,
+          draggedId: 'item-5',
+          sourceDroppableId: 'list',
+          sourceIndex: 5,
+          placeholderIndex: 20,
+          applyDrop: (items) => {
+            const [moved] = items.splice(5, 1);
+            items.splice(19, 0, moved);
+            return items;
+          },
+        });
+
+        expect(virtualScrollEl.scrollTop).toBe(1000 - 300);
+      });
+
+      it('should leave the list alone when a row taller than the viewport lands far outside it', async () => {
+        // A 1000px row at [1000, 2000) starts 700px below the viewport [0, 300): more than the
+        // viewport's height away, however tall the row
+        await dropFromOtherListAt(20, { scrollTop: 0, dynamicItemHeight: true, height: 1000 });
+
+        expect(virtualScrollEl.scrollTop).toBe(0);
+      });
+
+      it('should find a row dropped below its source in the same list one index before the placeholder', async () => {
+        // item-5 dropped at the end: placeholder index 20, destination index 19 at [950, 1000),
+        // which shows only its top 30px in the viewport [680, 980)
+        await runDrag({
+          scrollTop: 680,
+          draggedId: 'item-5',
+          sourceDroppableId: 'list',
+          sourceIndex: 5,
+          placeholderIndex: 20,
+          applyDrop: (items) => {
+            const [moved] = items.splice(5, 1);
+            items.splice(19, 0, moved);
+            return items;
+          },
+        });
+
+        expect(virtualScrollEl.scrollTop).toBe(1000 - 300);
+      });
+
+      it('should not scroll after a cancelled drag', async () => {
+        // item-19 stays at [950, 1000), partly cut off in the viewport [680, 980), but nothing
+        // was dropped
+        await runDrag({
+          scrollTop: 680,
+          draggedId: 'item-19',
+          sourceDroppableId: 'list',
+          sourceIndex: 19,
+          placeholderIndex: 20,
+          cancel: true,
+        });
+
+        expect(virtualScrollEl.scrollTop).toBe(680);
+      });
+
+      it('should not scroll a list the drop did not land in', async () => {
+        // A drop into another list, whose item this list also renders at [950, 1000), partly
+        // cut off in the viewport [680, 980)
+        await runDrag({
+          scrollTop: 680,
+          draggedId: 'item-19',
+          sourceDroppableId: 'list',
+          sourceIndex: 19,
+          targetDroppableId: 'elsewhere',
+          placeholderIndex: 20,
+        });
+
+        expect(virtualScrollEl.scrollTop).toBe(680);
+      });
+    });
   });
 });
 
