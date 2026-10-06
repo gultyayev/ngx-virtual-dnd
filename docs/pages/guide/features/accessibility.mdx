@@ -5,20 +5,25 @@ description: Keyboard dragging, focus handling, screen reader instructions and a
 
 # Accessibility
 
-Every draggable can be moved with the keyboard. There is nothing to enable.
+Every draggable can be moved with the keyboard, with nothing to enable. The exception is an item that is itself a text field, a `select`, a checkbox or an editable element, which needs a focusable drag handle (see below).
 
 ## Keyboard
 
-| Key                       | Not dragging                   | During a keyboard drag                                                                               |
-| ------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| <kbd>Tab</kbd>            | Moves focus between draggables | Cancels the drag                                                                                     |
-| <kbd>Space</kbd>          | Picks up the focused item      | Drops                                                                                                |
-| <kbd>Enter</kbd>          | —                              | Drops                                                                                                |
-| <kbd>↑</kbd> <kbd>↓</kbd> | —                              | Moves the target position                                                                            |
-| <kbd>←</kbd> <kbd>→</kbd> | —                              | Moves to the neighbouring list in the same group, by on-screen position (disabled lists are skipped) |
-| <kbd>Escape</kbd>         | —                              | Cancels. Also cancels pointer drags.                                                                 |
+| Key                       | Not dragging                                                                                                       | During a keyboard drag                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| <kbd>Tab</kbd>            | Moves focus between draggables                                                                                     | Cancels the drag                                                                                     |
+| <kbd>Space</kbd>          | Picks up the focused item (except in an item that is itself a text field, `select` or editable element; see below) | Drops                                                                                                |
+| <kbd>Enter</kbd>          | —                                                                                                                  | Drops                                                                                                |
+| <kbd>↑</kbd> <kbd>↓</kbd> | —                                                                                                                  | Moves the target position                                                                            |
+| <kbd>←</kbd> <kbd>→</kbd> | —                                                                                                                  | Moves to the neighbouring list in the same group, by on-screen position (disabled lists are skipped) |
+| <kbd>Escape</kbd>         | —                                                                                                                  | Cancels. Also cancels pointer drags.                                                                 |
 
-Pressing <kbd>Space</kbd> in a control inside an item, such as a text field or a button, types into or clicks that control and does not pick the item up, unless the control is the drag handle. The same goes for an item that is itself a text field or an editable element: <kbd>Space</kbd> types into it, and a focusable drag handle inside it picks it up (see [Interactive children](/guide/features/drag-behavior#interactive-children)).
+Pressing <kbd>Space</kbd> in a control inside an item, such as a text field or a button, types into or clicks that control and does not pick the item up, unless the control is the drag handle. The same goes for an item that is itself a text field, `textarea`, `select`, checkbox or editable element: <kbd>Space</kbd> types into it, toggles it or opens it, and only <kbd>Space</kbd> on a focusable drag handle inside it picks it up (see [Interactive children](/guide/features/drag-behavior#interactive-children)). So such an item needs one:
+
+- An `input`, `textarea` or `select` can't hold a handle. Make a row element the draggable instead and put the control inside it.
+- A `[contenteditable]` draggable without a focusable handle can't be moved with the keyboard. Give it a handle such as `<span class="grip" contenteditable="false" tabindex="0" role="button" aria-label="Drag block">`.
+
+After a keyboard drop or cancel, focus returns to the draggable element itself. For an editable block that puts the caret in the block; press <kbd>Tab</kbd> to reach a grip inside it again.
 
 In `<vdnd-sortable-list>` and `<vdnd-virtual-scroll>`, moving past the edge of the visible area scrolls the list, so the keyboard reaches every item, not just the rendered ones. `<vdnd-virtual-content>` and `<vdnd-virtual-viewport>` do not scroll to follow the keyboard target.
 

@@ -153,6 +153,8 @@ interface Row {
                   class="item-handle"
                   contenteditable="false"
                   tabindex="0"
+                  role="button"
+                  aria-roledescription="drag handle"
                   data-testid="block-grip"
                   [attr.aria-label]="'Drag ' + block.name"
                 >
