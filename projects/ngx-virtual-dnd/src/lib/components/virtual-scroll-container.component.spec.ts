@@ -1044,10 +1044,10 @@ describe('VirtualScrollContainerComponent', () => {
       fixture.detectChanges();
 
       // 3. Verify content transform
-      // It should be strategy.getOffsetForIndex(start)
-      // Since item-2 is excluded, offset for 'start' should be (start - 1) * 50
+      // item-2's slot closes up, so the first row in view, and the render start with it, move one
+      // on: the content starts at strategy.getOffsetForIndex(start + 1), which skips item-2
       const wrapper = fixture.debugElement.query(By.css('.vdnd-virtual-scroll-content-wrapper'));
-      const expectedOffset = (start - 1) * 50;
+      const expectedOffset = start * 50;
       expect(wrapper.nativeElement.style.transform).toBe(`translateY(${expectedOffset}px)`);
 
       dragStateService.endDrag();
@@ -1485,8 +1485,9 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
     movePlaceholder('list', 3);
     movePlaceholder('list', 5);
 
-    // The placeholder renders before the item at its index
-    expect(renderedOrder()).toEqual([...items(0, 4), 'P', ...items(5, 7)]);
+    // The placeholder renders before the item at its index. item-0's slot closes up, so the
+    // range reaches one row further
+    expect(renderedOrder()).toEqual([...items(0, 4), 'P', ...items(5, 8)]);
     expect(host.hostRenders).toBe(0);
     expect(host.rowRenders).toEqual([]);
   });
@@ -1495,8 +1496,9 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
     // item-0 is dragged over another list
     startDrag('other', 0);
 
+    // item-0's slot closes up, so the range reaches one row further
     movePlaceholder('list', 2);
-    expect(renderedOrder()).toEqual([...items(0, 1), 'P', ...items(2, 7)]);
+    expect(renderedOrder()).toEqual([...items(0, 1), 'P', ...items(2, 8)]);
 
     movePlaceholder('other', 0);
     expect(placeholder()).toBeNull();
@@ -1600,7 +1602,7 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
 
     movePlaceholder('list', 5);
 
-    expect(renderedOrder()).toEqual([...items(0, 4), 'P', ...items(5, 7)]);
+    expect(renderedOrder()).toEqual([...items(0, 4), 'P', ...items(5, 8)]);
     expect(host.rowRenders).toEqual([]);
   });
 
@@ -1665,7 +1667,7 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
     const entries = list['renderedItems']().map((entry) =>
       entry.type === 'placeholder' ? 'P' : (entry.data as TestItem).id,
     );
-    expect(entries).toEqual([...items(0, 2), 'P', ...items(3, 7)]);
+    expect(entries).toEqual([...items(0, 2), 'P', ...items(3, 8)]);
   });
 
   it('renders every item of a duplicated track key and warns once', () => {
@@ -1753,11 +1755,11 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
     startDrag('list', 1);
     const removedRows = watchRemovedRows();
 
-    // First row in view 5: rows 2-12 in range, then item-0
+    // item-0's slot closes up, so the first row in view is 6: rows 3-13 in range, then item-0
     await scrollTo(250);
 
-    expect(renderedOrder()).toEqual([...items(2, 12), 'item-0']);
-    expect(removedRows().sort()).toEqual(['item-0', 'item-1']);
+    expect(renderedOrder()).toEqual([...items(3, 13), 'item-0']);
+    expect(removedRows().sort()).toEqual(['item-0', 'item-1', 'item-2']);
   });
 
   it('keeps the rows when the track function changes', async () => {
@@ -1781,7 +1783,7 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
 
     host.template.set('plain');
     render();
-    expect(renderedOrder()).toEqual([...items(0, 1), 'P', ...items(2, 7)]);
+    expect(renderedOrder()).toEqual([...items(0, 1), 'P', ...items(2, 8)]);
   });
 
   describe('with recycleRows', () => {

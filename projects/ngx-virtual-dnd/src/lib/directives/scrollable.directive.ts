@@ -23,6 +23,10 @@ import { createAutoScrollRegistration } from '../utils/auto-scroll-registration'
  * that contains a `*vdndVirtualFor` directive. The virtual scroll will use this element
  * as its scroll container.
  *
+ * `*vdndVirtualFor` positions its rows absolutely inside this element. When neither the element
+ * nor an element between it and the rows is positioned, `*vdndVirtualFor` gives it
+ * `position: relative` so the rows scroll with it (the directive alone sets no position).
+ *
  * @example
  * Basic usage with a custom scroll container:
  * ```html

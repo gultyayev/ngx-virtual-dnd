@@ -207,7 +207,7 @@ Makes an element draggable via mouse, touch, or keyboard.
 | `vdndDraggableGroup` | `string` | `undefined` | No* | Group name. *Required unless a `vdndGroup` is in scope where the element's template is declared; without a group, drag is disabled (dev-mode warning) |
 | `vdndDraggableData` | `unknown` | `undefined` | No | Custom data (in `DragStartEvent`/`DragEndEvent`/`DropSource` `data` and as the preview template's `$implicit`) |
 | `disabled` | `boolean` | `false` | No | Disable dragging |
-| `dragHandle` | `string` | `undefined` | No | CSS selector restricting drag initiation area. Pointer-downs inside `button`, `input`, `textarea`, `select`, `[contenteditable]`, or inside a `.no-drag` element never start a drag |
+| `dragHandle` | `string` | `undefined` | No | CSS selector restricting drag initiation area (only matches inside the item count). Pointer-downs inside a `button`, `input`, `textarea`, `select`, `[contenteditable]` (not `contenteditable="false"`) or `.no-drag` element inside the item never start a drag; controls around the item and a `<button>` (or button-type `input`) draggable don't count, while another `input`, `textarea`, `select` or `[contenteditable]` draggable only starts a drag (pointer press, or `Space` on a focusable handle) from a handle inside it; `Space` elsewhere in it types, so without a focusable handle (`tabindex="0"`) it can't be moved with the keyboard |
 | `dragThreshold` | `number` | `5` | No | Minimum distance (px) before drag starts |
 | `dragDelay` | `number` | `0` | No | Hold time (ms) before drag can start; moving past `dragThreshold` earlier aborts the attempt |
 | `lockAxis` | `'x' \| 'y' \| null` | `null` | No | Freeze one axis: `'x'` = X frozen (vertical-only), `'y'` = Y frozen (horizontal-only). Opposite of CDK's `cdkDragLockAxis`. |
@@ -268,7 +268,7 @@ Provides the group name (via `VDND_GROUP_TOKEN`) to descendant draggables and dr
 
 **Selector:** `[vdndScrollable]`
 
-Marks a scrollable element (it must have `overflow: auto`/`scroll` and a height) as the scroll container for `vdnd-virtual-content` or `*vdndVirtualFor`. Adds class `vdnd-scrollable` and `overflow-anchor: none`. Provides `VDND_SCROLL_CONTAINER` token.
+Marks a scrollable element (it must have `overflow: auto`/`scroll` and a height) as the scroll container for `vdnd-virtual-content` or `*vdndVirtualFor`. Adds class `vdnd-scrollable` and `overflow-anchor: none`. Provides `VDND_SCROLL_CONTAINER` token. A `*vdndVirtualFor` used directly inside it sets `position: relative` on it when it is not positioned.
 
 **Inputs:**
 
@@ -286,7 +286,7 @@ Marks a scrollable element (it must have `overflow: auto`/`scroll` and a height)
 
 **Selector:** `[vdndVirtualFor][vdndVirtualForOf]` (used as `*vdndVirtualFor`)
 
-Structural directive that renders only the visible items. Must be inside `vdnd-virtual-viewport`, `vdnd-virtual-content`, or a `vdndScrollable` element. Inside a viewport component it inherits `itemHeight`/`dynamicItemHeight`; directly inside `vdndScrollable` it needs `itemHeight` (falls back to 50 with a dev-mode warning). `droppableId` is inherited from an enclosing `vdndDroppable`. The `trackBy` key should equal the item's `vdndDraggable` ID. It always recycles rows: the view of a row that scrolls out renders a row that scrolls in (as `recycleRows` does on `vdnd-virtual-scroll`).
+Structural directive that renders only the visible items. Must be inside `vdnd-virtual-viewport`, `vdnd-virtual-content`, or a `vdndScrollable` element. Inside a viewport component it inherits `itemHeight`/`dynamicItemHeight`; directly inside `vdndScrollable` it needs `itemHeight` (falls back to 50 with a dev-mode warning). `droppableId` is inherited from an enclosing `vdndDroppable`. The `trackBy` key should equal the item's `vdndDraggable` ID. It always recycles rows: the view of a row that scrolls out renders a row that scrolls in (as `recycleRows` does on `vdnd-virtual-scroll`). Directly inside `vdndScrollable` it positions each row and the drag placeholder absolutely (the rows after the placeholder move down by its height), and sets `position: relative` on the `vdndScrollable` element when neither it nor an element between it and the rows is positioned, so the rows scroll with it.
 
 **Microsyntax:**
 

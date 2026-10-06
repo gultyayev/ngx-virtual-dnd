@@ -1,4 +1,5 @@
 import {
+  afterEveryRender,
   computed,
   Directive,
   effect,
@@ -46,6 +47,18 @@ export interface VirtualForContext<T> {
   count: number;
 }
 
+/**
+ * Scroll containers given `position: relative` by a `*vdndVirtualFor`: the directives that rely on
+ * it, and the inline position to restore once the last of them is destroyed.
+ */
+const positionedScrollContainers = new WeakMap<HTMLElement, { users: number; saved: string }>();
+
+/** Whether an element (in the page) is positioned: a containing block for absolute children. */
+function isPositioned(element: HTMLElement): boolean {
+  const position = getComputedStyle(element).position;
+  return position !== '' && position !== 'static';
+}
+
 /** Render-queue key of the placeholder entry */
 const PLACEHOLDER_KEY = '__placeholder__';
 
@@ -65,11 +78,16 @@ interface RenderEntry<T> {
  * Provides maximum flexibility for advanced use cases where the component wrapper
  * is not suitable.
  *
- * The directive must be placed inside a container marked with the `vdndScrollable`
- * directive, which provides the scroll container context via dependency injection.
+ * The directive must be placed inside `<vdnd-virtual-viewport>`, `<vdnd-virtual-content>` or an
+ * element marked with the `vdndScrollable` directive, which provide the scroll container context
+ * via dependency injection.
  *
- * Placeholders are handled automatically by the parent component (vdnd-virtual-scroll
- * or vdnd-virtual-content) - consumers just render their items normally.
+ * The directive renders the drag placeholder itself; consumers just render their items normally.
+ * Inside a viewport component the rows and the placeholder are laid out in the flow. Directly in
+ * a `vdndScrollable` element, each row and the placeholder are positioned absolutely at their
+ * offset (the rows after the placeholder move down by its height), so the scroll container must
+ * be their containing block: when neither it nor an element between it and the rows is
+ * positioned, the directive gives it `position: relative`.
  *
  * @example
  * Inside a viewport component (itemHeight and droppableId inherited automatically):
@@ -141,6 +159,9 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
   /** Whether placeholder is currently in the DOM */
   #placeholderInDom = false;
+
+  /** Whether this directive counts as a user of the position it set on the scroll container */
+  #usesScrollContainerPosition = false;
 
   /** ResizeObserver for dynamic height measurement */
   #resizeObserver: ResizeObserver | null = null;
@@ -237,8 +258,36 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     const strategy = this.#strategy();
     // Read version to subscribe to dynamic height changes
     strategy.version();
-    return strategy.getFirstVisibleIndex(this.#rowsScrollTop());
+    return strategy.getFirstVisibleIndex(this.#toStrategyOffset(this.#rowsScrollTop()));
   });
+
+  /**
+   * Without a viewport, the gap the placeholder opens among the absolutely positioned rows: the
+   * rows at or after `index` move down by `height` from their strategy offsets, the gap starting at
+   * `offset`. Null with a viewport (the placeholder pushes the rows in the flow) or no placeholder.
+   */
+  readonly #gap = computed(() => {
+    if (this.#useViewportPositioning) return null;
+    const index = this.#placeholderIndex();
+    if (index < 0) return null;
+    const strategy = this.#strategy();
+    strategy.version();
+    return {
+      index,
+      offset: strategy.getOffsetForIndex(index),
+      height: this.#placeholderHeight(strategy, index),
+    };
+  });
+
+  /**
+   * Map a position among the rendered rows to the strategy's offsets, which leave out the gap:
+   * past the gap, subtract its height; inside it, the gap's start (the row after it comes next).
+   */
+  #toStrategyOffset(position: number): number {
+    const gap = this.#gap();
+    if (!gap || position <= gap.offset) return position;
+    return Math.max(gap.offset, position - gap.height);
+  }
 
   /**
    * How far the rows are scrolled. A vdnd-virtual-viewport's rows start contentOffset px down its
@@ -254,24 +303,30 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     return Math.max(0, scrollTop - viewport.contentOffset());
   }
 
-  /** Number of visible items */
-  readonly #visibleCount = computed(() => {
-    const height = this.#scrollContainer.containerHeight();
+  /**
+   * Last visible item index: the item at the bottom edge, so a dragged item's closed-up slot in
+   * view leaves no row unrendered. The bottom edge moves by the gap only as far as the top edge
+   * does: a gap in view then renders the rows it pushes out of view too, which keeps the range
+   * (and every row) as it is while the placeholder moves within view.
+   */
+  readonly #lastVisibleIndex = computed(() => {
     const strategy = this.#strategy();
     strategy.version();
-    const startIndex = this.#firstVisibleIndex();
-    return strategy.getVisibleCount(startIndex, height);
+    const top = this.#rowsScrollTop();
+    const gapAbove = top - this.#toStrategyOffset(top);
+    const bottom = top + this.#scrollContainer.containerHeight();
+    return strategy.getFirstVisibleIndex(bottom - gapAbove);
   });
 
   /** Range of items to render */
   readonly #renderRange = computed(() => {
     const first = this.#firstVisibleIndex();
-    const visible = this.#visibleCount();
+    const last = this.#lastVisibleIndex();
     const overscan = this.vdndVirtualForOverscan();
     const total = this.vdndVirtualForOf().length;
 
     const start = Math.max(0, first - overscan);
-    const end = Math.min(total - 1, first + visible + overscan);
+    const end = Math.min(total - 1, Math.max(first, last) + overscan);
 
     return { start, end };
   });
@@ -319,6 +374,19 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     return -1;
   });
 
+  /**
+   * Index of the dragged item while the strategy excludes it (a drag from this list), else -1.
+   * Only the source list looks for the dragged item (in all its keys).
+   */
+  readonly #excludedDraggedIndex = computed(() => {
+    const droppableId = this.#effectiveDroppableId();
+    const isSourceList =
+      this.#dragState.isDragging() &&
+      droppableId !== undefined &&
+      droppableId === this.#dragState.sourceDroppableId();
+    return isSourceList ? this.#draggedItemIndex() : -1;
+  });
+
   constructor() {
     // Keep the strategy's items in sync. A fixed-height strategy needs only their count, which
     // spares computing every item's track key on each items change (each drop).
@@ -341,14 +409,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     // correctly skip the hidden item — not just findIndexAtOffset.
     effect(() => {
       const strategy = this.#strategy();
-      const droppableId = this.#effectiveDroppableId();
-      const sourceDroppableId = this.#dragState.sourceDroppableId();
-      const isDragging = this.#dragState.isDragging();
-
-      const isSourceList =
-        isDragging && droppableId !== undefined && droppableId === sourceDroppableId;
-      // Only the source list looks for the dragged item (in all its keys)
-      const draggedIndex = isSourceList ? this.#draggedItemIndex() : -1;
+      const draggedIndex = this.#excludedDraggedIndex();
 
       if (draggedIndex >= 0) {
         strategy.setExcludedIndex(draggedIndex);
@@ -392,6 +453,16 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     // (viewport provides its own spacer and wrapper positioning)
     if (!this.#useViewportPositioning) {
       this.#updateSpacers();
+      // Once the scroll container is in the page with its styles
+      // (retried on later renders while it is not)
+      const positionRef = afterEveryRender(
+        () => {
+          if (this.#positionScrollContainer()) {
+            positionRef.destroy();
+          }
+        },
+        { injector: this.#injector },
+      );
     }
 
     // Create placeholder element for drag operations
@@ -404,6 +475,8 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
     // Clean up spacer element (only if we created one)
     this.#spacer?.remove();
+
+    this.#releaseScrollContainerPosition();
 
     // Clean up placeholder element
     this.#placeholder?.remove();
@@ -446,7 +519,69 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     const placeholder = document.createElement('div');
     placeholder.className = 'vdnd-drag-placeholder vdnd-drag-placeholder-visible';
     placeholder.style.cssText = 'display: block; pointer-events: none;';
+    // Without a viewport the rows are positioned absolutely, so the placeholder is too
+    if (!this.#useViewportPositioning) {
+      placeholder.style.position = 'absolute';
+      placeholder.style.left = '0';
+      placeholder.style.right = '0';
+    }
     this.#placeholder = placeholder;
+  }
+
+  /** The placeholder's height: the dragged item's, else the strategy's for the index. */
+  #placeholderHeight(strategy: VirtualScrollStrategy, placeholderIndex: number): number {
+    return this.#dragState.draggedItem()?.height ?? strategy.getItemHeight(placeholderIndex);
+  }
+
+  /**
+   * The rows and the spacer are positioned absolutely, so the scroll container (or an element
+   * inside it) must be their containing block, or they would not scroll with it. When neither the
+   * scroll container nor an element between it and the rows is positioned, give the scroll
+   * container `position: relative`. Directives sharing the scroll container share that position:
+   * it is restored when the last of them is destroyed.
+   *
+   * Returns false while the scroll container is not in the page (its computed style is empty).
+   */
+  #positionScrollContainer(): boolean {
+    const scrollElement = this.#scrollContainer.nativeElement;
+    if (!scrollElement.isConnected) return false;
+
+    let element = (this.#elementRef.nativeElement as Comment).parentElement;
+    while (element) {
+      if (element === scrollElement) {
+        const positioned = positionedScrollContainers.get(scrollElement);
+        if (positioned) {
+          positioned.users++;
+          this.#usesScrollContainerPosition = true;
+        } else if (!isPositioned(scrollElement)) {
+          positionedScrollContainers.set(scrollElement, {
+            users: 1,
+            saved: scrollElement.style.position,
+          });
+          scrollElement.style.position = 'relative';
+          this.#usesScrollContainerPosition = true;
+        }
+        return true;
+      }
+      if (isPositioned(element)) return true;
+      element = element.parentElement;
+    }
+    return true;
+  }
+
+  /** Stop using the scroll container's position, restoring it after its last user. */
+  #releaseScrollContainerPosition(): void {
+    if (!this.#usesScrollContainerPosition) return;
+    this.#usesScrollContainerPosition = false;
+
+    const scrollElement = this.#scrollContainer.nativeElement;
+    const positioned = positionedScrollContainers.get(scrollElement);
+    if (!positioned || --positioned.users > 0) return;
+
+    positionedScrollContainers.delete(scrollElement);
+    if (scrollElement.style.position === 'relative') {
+      scrollElement.style.position = positioned.saved;
+    }
   }
 
   /**
@@ -472,9 +607,15 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
         const total = this.vdndVirtualForOf().length;
         const strategy = this.#strategy();
         strategy.version();
+        const placeholderIndex = this.#placeholderIndex();
 
-        // Single spacer with full content height
-        spacer.style.height = `${strategy.getTotalHeight(total)}px`;
+        // Single spacer with full content height. The placeholder adds to it, unless it fills the
+        // slot of the dragged item, which the strategy excludes (a drag within this list).
+        let height = strategy.getTotalHeight(total);
+        if (placeholderIndex >= 0 && this.#excludedDraggedIndex() < 0) {
+          height += this.#placeholderHeight(strategy, placeholderIndex);
+        }
+        spacer.style.height = `${height}px`;
       },
       { injector: this.#injector },
     );
@@ -601,8 +742,15 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
       draggedIndex,
     });
 
-    // 2. Reconcile views with the DOM
-    const placeholderDomPosition = this.#reconcileViews(itemsToRender, showPlaceholder, strategy);
+    // 2. Reconcile views with the DOM. Without a viewport, the rows at or after the placeholder
+    // move down by its height (with a viewport, the placeholder pushes them in the flow).
+    const gap = this.#gap();
+    const placeholderDomPosition = this.#reconcileViews(
+      itemsToRender,
+      showPlaceholder,
+      strategy,
+      gap,
+    );
 
     // 3. Position placeholder in DOM
     this.#positionPlaceholder(showPlaceholder, placeholderDomPosition, strategy, placeholderIndex);
@@ -722,6 +870,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     itemsToRender: RenderEntry<T>[],
     showPlaceholder: boolean,
     strategy: VirtualScrollStrategy,
+    gap: { index: number; height: number } | null,
   ): number {
     // Determine which keys we need
     const neededKeys = new Set(
@@ -777,7 +926,10 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
       // Apply absolute positioning when not using viewport wrapper
       if (!this.#useViewportPositioning) {
-        const offset = strategy.getOffsetForIndex(entry.visualIndex);
+        let offset = strategy.getOffsetForIndex(entry.visualIndex);
+        if (gap && entry.visualIndex >= gap.index) {
+          offset += gap.height;
+        }
         this.#applyAbsolutePositioning(view, offset);
       }
 
@@ -939,14 +1091,21 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     strategy: VirtualScrollStrategy,
     placeholderIndex: number,
   ): void {
-    if (!showPlaceholder || !this.#placeholder || placeholderDomPosition < 0) {
+    if (!showPlaceholder || !this.#placeholder) {
       return;
     }
 
     // Use the dragged item's height if available, otherwise use strategy height
-    const draggedItemHeight = this.#dragState.draggedItem()?.height;
-    const height = draggedItemHeight ?? strategy.getItemHeight(placeholderIndex);
-    this.#placeholder.style.height = `${height}px`;
+    this.#placeholder.style.height = `${this.#placeholderHeight(strategy, placeholderIndex)}px`;
+    // Without a viewport, place it in the gap the rows leave at its index. Also while the index
+    // is outside the rendered range, so a placeholder left in the DOM never covers a row.
+    if (!this.#useViewportPositioning && placeholderIndex >= 0) {
+      this.#placeholder.style.top = `${strategy.getOffsetForIndex(placeholderIndex)}px`;
+    }
+
+    if (placeholderDomPosition < 0) {
+      return;
+    }
 
     const container = this.#viewContainer.element.nativeElement.parentElement;
     if (!container) return;

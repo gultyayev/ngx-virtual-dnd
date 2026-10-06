@@ -48,6 +48,13 @@ export const routes: Routes = [
       import('./shadow-dom-demo/shadow-dom-demo').then((m) => m.ShadowDomDemoComponent),
   },
   {
+    path: 'virtual-for-scrollable',
+    loadComponent: () =>
+      import('./scrollable-virtual-for-demo/scrollable-virtual-for-demo').then(
+        (m) => m.ScrollableVirtualForDemoComponent,
+      ),
+  },
+  {
     path: 'examples',
     loadComponent: () => import('./examples/examples-shell').then((m) => m.ExamplesShellComponent),
     loadChildren: () => import('./examples/examples.routes').then((m) => m.EXAMPLE_ROUTES),
