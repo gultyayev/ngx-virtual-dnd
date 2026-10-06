@@ -499,7 +499,7 @@ Internal service for cloning DOM elements for drag previews. Exported for advanc
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `cloneElement` | `(source: HTMLElement) => HTMLElement` | Deep-clone an element with its computed styles inlined, for use as drag preview |
+| `cloneElement` | `(source: HTMLElement) => HTMLElement` | Deep-clone an element with its computed styles inlined, for use as drag preview. The clone root drops its own placement (margin, `top`/`right`/`bottom`/`left`, translation; `absolute`/`fixed`/`sticky` becomes `relative`) so it fills the preview box from its origin |
 
 ### KeyboardDragService
 
