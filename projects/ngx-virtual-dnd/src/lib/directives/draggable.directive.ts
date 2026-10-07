@@ -33,6 +33,7 @@ import { closestAcrossShadow } from '../utils/composed-dom';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
+import { listDraggables } from '../utils/list-draggables';
 import {
   findNestedControl,
   findNoDragElement,
@@ -669,9 +670,15 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       return Math.round(relativeY / itemHeight);
     }
 
-    // Non-virtual fallback: derive the logical index from preceding draggable siblings.
+    // Non-virtual fallback: derive the logical index from the list's draggables in page order.
     // Geometry-based division is incorrect when the list has padding, gaps, margins,
     // or variable-height items.
+    const index = listDraggables(droppableElement).indexOf(element);
+    if (index !== -1) {
+      return index;
+    }
+
+    // An item in a shadow tree inside the list is not among them: count its preceding siblings
     let sourceIndex = 0;
     let sibling = element.previousElementSibling;
     while (sibling) {

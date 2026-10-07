@@ -135,6 +135,42 @@ class ViewportRowsHostComponent {
   dragStartEvents: DragStartEvent[] = [];
 }
 
+// A plain list whose draggables are each wrapped in a row element, one row holding a nested list
+@Component({
+  template: `
+    <div
+      vdndDroppable="wrapped-list"
+      vdndDroppableGroup="test-group"
+      (drop)="dropEvents.push($event)"
+    >
+      <div>
+        <div vdndDraggable="one" vdndDraggableGroup="test-group">
+          One
+          <div vdndDroppable="nested-list" vdndDroppableGroup="test-group">
+            <div><div vdndDraggable="nested-a" vdndDraggableGroup="test-group"></div></div>
+            <div><div vdndDraggable="nested-b" vdndDraggableGroup="test-group"></div></div>
+          </div>
+        </div>
+      </div>
+      <div><div vdndDraggable="two" vdndDraggableGroup="test-group">Two</div></div>
+      <div>
+        <div
+          vdndDraggable="three"
+          vdndDraggableGroup="test-group"
+          (dragStart)="dragStartEvents.push($event)"
+        >
+          Three
+        </div>
+      </div>
+    </div>
+  `,
+  imports: [DroppableDirective, DraggableDirective],
+})
+class WrappedRowsHostComponent {
+  dragStartEvents: DragStartEvent[] = [];
+  dropEvents: DropEvent[] = [];
+}
+
 // A consumer directive that extends the draggable and runs its own setup after the draggable's
 @Directive({ selector: '[vdndTestExtendedDraggable]' })
 class ExtendedDraggableDirective extends DraggableDirective implements OnInit {
@@ -1459,6 +1495,61 @@ describe('DraggableDirective', () => {
 
       expect(viewportHost.componentInstance.dragStartEvents[0].sourceIndex).toBe(2);
       viewportHost.destroy();
+    });
+
+    describe('with each item wrapped in a row element', () => {
+      let wrappedHost: ComponentFixture<WrappedRowsHostComponent>;
+      let list: HTMLElement;
+      let third: HTMLElement;
+
+      beforeEach(() => {
+        wrappedHost = TestBed.createComponent(WrappedRowsHostComponent);
+        wrappedHost.detectChanges();
+        list = wrappedHost.nativeElement.querySelector('[data-droppable-id="wrapped-list"]');
+        third = wrappedHost.nativeElement.querySelector('[data-draggable-id="three"]');
+      });
+
+      afterEach(() => {
+        wrappedHost.destroy();
+      });
+
+      it('should count the items of the list, not of a nested list, on pointer pickup', () => {
+        mockRect(third, 140, 50);
+        mockRect(list, 0, 400);
+        jest
+          .spyOn(TestBed.inject(PositionCalculatorService), 'findDroppableAtPoint')
+          .mockReturnValue(list);
+
+        startPointerDrag({ x: 100, y: 155 }, third);
+
+        expect(wrappedHost.componentInstance.dragStartEvents[0].sourceIndex).toBe(2);
+      });
+
+      it('should report the logical source and destination on a keyboard drop', () => {
+        third.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: ' ',
+            code: 'Space',
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        wrappedHost.detectChanges();
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }),
+        );
+        wrappedHost.detectChanges();
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+        );
+
+        const { dragStartEvents, dropEvents } = wrappedHost.componentInstance;
+        expect({
+          dragStartSource: dragStartEvents[0]?.sourceIndex,
+          dropSource: dropEvents[0]?.source.index,
+          dropDestination: dropEvents[0]?.destination.index,
+        }).toEqual({ dragStartSource: 2, dropSource: 2, dropDestination: 1 });
+      });
     });
   });
 
