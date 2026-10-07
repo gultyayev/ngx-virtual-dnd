@@ -464,6 +464,25 @@ describe('DragIndexCalculatorService', () => {
         expect(scroller.scrollTop).toBe(600 - 300);
       });
 
+      it('should reveal the slot below a header an ancestor that does not scroll lays over it', () => {
+        // A container (0..400, too short to scroll) whose 40px header covers the top of the inner one
+        const outer = document.createElement('div');
+        outer.setAttribute('data-scroll-inset-top', '40');
+        outer.getBoundingClientRect = () => new DOMRect(0, 0, 300, 400);
+        document.body.appendChild(outer);
+        outer.appendChild(scroller);
+        scroller.scrollTop = 200;
+
+        try {
+          // The slot before row 4: 200..250, at the inner container's top edge, under the header
+          service.revealSlot(list, 4, 50);
+
+          expect(scroller.scrollTop).toBe(200 - 40);
+        } finally {
+          outer.remove();
+        }
+      });
+
       it('should scroll an outer container when the inner one has no room left', () => {
         // The page (0..400) scrolls the 300px container, which sits 600px down in it
         const page = document.createElement('div');

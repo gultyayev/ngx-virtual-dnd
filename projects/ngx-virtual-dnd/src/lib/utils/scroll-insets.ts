@@ -167,8 +167,9 @@ function scrollsVertically(element: Element): boolean {
 /**
  * Scroll the containers around `element` (itself included), nearest first and the page last, so
  * the vertical range `top`..`bottom` (viewport px) shows in the part of each nothing pinned over
- * its edges covers (see `uncoveredRect`). A container whose uncovered part is shorter than the
- * range is left as it is.
+ * its edges covers (see `uncoveredRect`), clipped to the uncovered part of the scroll containers
+ * around it when the range fits there. A container whose uncovered part is shorter than the range
+ * is left as it is.
  */
 export function revealRange(element: Element, top: number, bottom: number): void {
   const page = element.ownerDocument.scrollingElement;
@@ -182,12 +183,16 @@ export function revealRange(element: Element, top: number, bottom: number): void
       continue;
     }
     // The page's rect is its whole content; what shows of it is the viewport
-    const shown = uncoveredRect(
+    const own = uncoveredRect(
       container,
       isPage
         ? new DOMRect(0, 0, container.clientWidth, container.clientHeight)
         : container.getBoundingClientRect(),
     );
+    // Clear of what the scroll containers around it cover too (one that can't scroll would leave
+    // it covered), unless too little of it shows there: those scroll it into view next
+    const clipped = clipToScrollContainers(own, scrollAncestors(container));
+    const shown = clipped && clipped.height >= bottom - top ? clipped : own;
     if (!shown || shown.height < bottom - top) {
       continue;
     }
