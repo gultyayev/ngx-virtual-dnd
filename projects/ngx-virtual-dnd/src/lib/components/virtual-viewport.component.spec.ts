@@ -42,6 +42,8 @@ function emulateScrollableLayout(element: HTMLElement, scrollHeight: number, cli
       [scrollContainerId]="scrollContainerId()"
       [autoScrollEnabled]="autoScrollEnabled()"
       [autoScrollConfig]="autoScrollConfig()"
+      [scrollInsetTop]="scrollInsetTop()"
+      [scrollInsetBottom]="scrollInsetBottom()"
     />
   `,
   imports: [VirtualViewportComponent],
@@ -50,6 +52,8 @@ class TestHostComponent {
   scrollContainerId = signal<string | undefined>('viewport-scroll');
   autoScrollEnabled = signal(false);
   autoScrollConfig = signal<Partial<AutoScrollConfig>>({});
+  scrollInsetTop = signal(0);
+  scrollInsetBottom = signal(0);
 }
 
 describe('VirtualViewportComponent', () => {
@@ -137,6 +141,21 @@ describe('VirtualViewportComponent', () => {
       {},
     );
   });
+  describe('scroll insets', () => {
+    it('should mark its element with the space covered at its edges, while there is any', () => {
+      const element = fixture.debugElement.query(By.directive(VirtualViewportComponent))
+        .nativeElement as HTMLElement;
+      expect(element.hasAttribute('data-scroll-inset-top')).toBe(false);
+
+      hostComponent.scrollInsetTop.set(64);
+      hostComponent.scrollInsetBottom.set(48);
+      fixture.detectChanges();
+
+      expect(element.getAttribute('data-scroll-inset-top')).toBe('64');
+      expect(element.getAttribute('data-scroll-inset-bottom')).toBe('48');
+    });
+  });
+
   describe('scrollBy', () => {
     let element: HTMLElement;
 

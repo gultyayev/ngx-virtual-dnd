@@ -496,6 +496,54 @@ describe('AutoScrollService', () => {
       expect(mockElement.scrollTop).toBeLessThan(200);
     });
 
+    it('should leave a nested container alone while the cursor is over what its outer one covers', () => {
+      // The outer container's sticky header covers 100..200; the inner one (150..450) scrolls
+      // under it
+      mockElement.setAttribute('data-scroll-inset-top', '100');
+      document.body.appendChild(mockElement);
+      const inner = document.createElement('div');
+      Object.defineProperty(inner, 'scrollHeight', { value: 1000 });
+      Object.defineProperty(inner, 'clientHeight', { value: 300 });
+      Object.defineProperty(inner, 'scrollWidth', { value: 200 });
+      Object.defineProperty(inner, 'clientWidth', { value: 200 });
+      inner.scrollTop = 200;
+      inner.getBoundingClientRect = () => new DOMRect(50, 150, 200, 300);
+      mockElement.appendChild(inner);
+      service.registerContainer('inner', inner);
+
+      try {
+        // Over the header, inside the inner container's rect: the outer container scrolls up
+        expect(scrollTopAfterTick({ x: 150, y: 170 })).toBeLessThan(200);
+        expect(inner.scrollTop).toBe(200);
+      } finally {
+        service.unregisterContainer('inner');
+        mockElement.remove();
+      }
+    });
+
+    it("should start a nested container's edge zone at what its outer one leaves uncovered", () => {
+      mockElement.setAttribute('data-scroll-inset-top', '100');
+      document.body.appendChild(mockElement);
+      const inner = document.createElement('div');
+      Object.defineProperty(inner, 'scrollHeight', { value: 1000 });
+      Object.defineProperty(inner, 'clientHeight', { value: 300 });
+      Object.defineProperty(inner, 'scrollWidth', { value: 200 });
+      Object.defineProperty(inner, 'clientWidth', { value: 200 });
+      inner.scrollTop = 200;
+      inner.getBoundingClientRect = () => new DOMRect(50, 150, 200, 300);
+      mockElement.appendChild(inner);
+      service.registerContainer('inner', inner);
+
+      try {
+        // 20px below the outer header (200), 70px below the inner container's own top edge
+        scrollTopAfterTick({ x: 150, y: 220 });
+        expect(inner.scrollTop).toBeLessThan(200);
+      } finally {
+        service.unregisterContainer('inner');
+        mockElement.remove();
+      }
+    });
+
     it('should not scroll from a cursor outside the container', () => {
       mockElement.setAttribute('data-scroll-inset-top', '100');
 

@@ -318,6 +318,82 @@ describe('DragIndexCalculatorService', () => {
     expect(index).toBe(8);
   });
 
+  it('snaps to the top of the part of a constrained sortable list its rows are not covered in', () => {
+    // vdnd-sortable-list: the droppable wraps the vdnd-virtual-scroll, which a header overlaid on
+    // its rows covers 100px of
+    const droppable = createVirtualDroppable('list-1', { itemHeight: 50, totalItems: 12 });
+    droppable.setAttribute('data-constrain-to-container', '');
+    jest.spyOn(droppable, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 500));
+    droppable.querySelector('vdnd-virtual-scroll')!.setAttribute('data-scroll-inset-top', '100');
+    service.registerStrategy(
+      'list-1',
+      new MockStrategy([0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600], (offset) =>
+        Math.floor(offset / 50),
+      ),
+    );
+
+    const index = service.calculatePlaceholderIndex({
+      droppableElement: droppable,
+      // Clamped below the header: preview top 101
+      position: { x: 20, y: 221 },
+      previousPosition: null,
+      grabOffset: { x: 20, y: 120 },
+      draggedItemHeight: 240,
+      sourceDroppableId: null,
+      sourceIndex: null,
+    }).index;
+
+    expect(index).toBe(0);
+  });
+
+  describe('revealSlot', () => {
+    /** A vdnd-virtual-viewport (0..300) whose rows start 80px down, scrolled to `scrollTop` */
+    function createViewport(scrollTop: number): HTMLElement {
+      const viewport = document.createElement('div');
+      viewport.setAttribute('data-droppable-id', 'list-1');
+      viewport.setAttribute('data-virtual-viewport', '');
+      viewport.setAttribute('data-content-offset', '80');
+      viewport.setAttribute('data-scroll-inset-top', '40');
+      viewport.setAttribute('data-scroll-inset-bottom', '30');
+      viewport.getBoundingClientRect = () => new DOMRect(0, 0, 300, 300);
+      viewport.scrollTop = scrollTop;
+      service.registerStrategy(
+        'list-1',
+        new MockStrategy(
+          Array.from({ length: 101 }, (_, i) => i * 50),
+          (offset) => Math.floor(offset / 50),
+        ),
+      );
+      return viewport;
+    }
+
+    it('should scroll a slot above the uncovered part down to its top edge', () => {
+      const viewport = createViewport(1000);
+
+      service.revealSlot(viewport, 10, 50);
+
+      // Row 10 starts 500px into the rows, 580px into the viewport: 40px below its top
+      expect(viewport.scrollTop).toBe(580 - 40);
+    });
+
+    it('should scroll a slot below the uncovered part up to its bottom edge', () => {
+      const viewport = createViewport(0);
+
+      service.revealSlot(viewport, 10, 50);
+
+      // The slot ends 630px into the viewport; 270px show above the 30px covered at the bottom
+      expect(viewport.scrollTop).toBe(630 - 270);
+    });
+
+    it('should leave a slot that shows in full where it is', () => {
+      const viewport = createViewport(500);
+
+      service.revealSlot(viewport, 10, 50);
+
+      expect(viewport.scrollTop).toBe(500);
+    });
+  });
+
   describe('constrained edge snap on a scrollable list', () => {
     // 50 rows of 50px in a 400px list: max scrollTop = 2500 - 400 = 2100.
     const ROW = 50;

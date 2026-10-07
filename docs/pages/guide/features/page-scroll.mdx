@@ -61,10 +61,14 @@ The drag then treats the part of the container between them as the container:
 - With `constrainToContainer`, the preview stays between the header and the footer.
 - Auto-scroll starts at the header's lower edge and the footer's upper edge. A pointer over either scrolls at full speed.
 - The pointer over the header or footer is not over the list, as outside the container. The drop position still follows the preview's top edge, as at any edge of the container, so without `constrainToContainer` a preview pulled over the header can point at a row behind it.
+- A keyboard drag scrolls the list to keep the placeholder between the header and the footer.
+- A list in a scroll container nested inside this one is treated the same way where it scrolls under the header or footer: it is not targeted there, auto-scroll over them scrolls the outer container, and its constrained preview stays clear of them.
 
 When the header collapses or grows while the page scrolls, keep the height you pass up to date: a drag in progress measures again when it changes.
 
-Measure the insets from the container's outer (border) edges: a border on the container adds its width, and a horizontal scrollbar under a `bottom: 0` footer adds its height. The insets apply to the lists whose nearest `vdndScrollable` sets them, so a list in a nested scroll container doesn't get its outer container's insets.
+Measure the insets from the container's outer (border) edges: a border on the container adds its width, and a horizontal scrollbar under a `bottom: 0` footer adds its height.
+
+`<vdnd-sortable-list>`, `<vdnd-virtual-scroll>` and `<vdnd-virtual-viewport>` take the same inputs for content overlaid on their own rows, such as a header positioned over the top of the list.
 
 ## Ionic
 

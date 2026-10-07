@@ -353,6 +353,25 @@ class InsetScrollableHostComponent {
   readonly insetTop = signal(60);
 }
 
+// A constrained list in a column scroller, inside a page scroller whose sticky header covers its top
+@Component({
+  template: `
+    <div vdndScrollable [scrollInsetTop]="60" data-testid="page">
+      <div vdndScrollable data-testid="column">
+        <div
+          vdndDroppable="nested-list"
+          vdndDroppableGroup="test-group"
+          [constrainToContainer]="true"
+        >
+          <div vdndDraggable="nested-item" vdndDraggableGroup="test-group"></div>
+        </div>
+      </div>
+    </div>
+  `,
+  imports: [ScrollableDirective, DroppableDirective, DraggableDirective],
+})
+class NestedInsetScrollableHostComponent {}
+
 // A draggable an `@if` inside its list removes, while the list itself stays
 @Component({
   template: `
@@ -2326,6 +2345,29 @@ describe('DraggableDirective', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { clientX: 150, clientY: -500 }));
 
       expect(updateDragPosition.mock.lastCall?.[0].cursorPosition).toEqual({ x: 150, y: 81 });
+    });
+
+    it("should keep a list in a nested scroller below what its outer scroller's header covers", () => {
+      const nested = TestBed.createComponent(NestedInsetScrollableHostComponent);
+      nested.detectChanges();
+      const host: HTMLElement = nested.nativeElement;
+      for (const id of ['page', 'column']) {
+        host.querySelector<HTMLElement>(`[data-testid="${id}"]`)!.getBoundingClientRect = () =>
+          rect(0, 300, 300);
+      }
+      host.querySelector<HTMLElement>('[data-droppable-id]')!.getBoundingClientRect = () =>
+        rect(0, 300, 2000);
+      const nestedItem = host.querySelector<HTMLElement>('[data-draggable-id]')!;
+      nestedItem.getBoundingClientRect = () => rect(80, 200, 130);
+      const updateDragPosition = jest.spyOn(dragStateService, 'updateDragPosition');
+
+      attemptPointerDrag(nestedItem);
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: -500 }));
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 150, clientY: -500 }));
+
+      // The column is the container, but the page's header covers its top 60px: 60 + 20 + 1
+      expect(updateDragPosition.mock.lastCall?.[0].cursorPosition).toEqual({ x: 150, y: 81 });
+      nested.destroy();
     });
 
     describe('when the covered space changes mid-drag', () => {

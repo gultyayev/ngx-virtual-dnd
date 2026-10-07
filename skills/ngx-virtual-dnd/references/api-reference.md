@@ -41,6 +41,8 @@ High-level component combining droppable, virtual scroll, and placeholder. Defau
 | `recycleRows` | `boolean` | `false` | No | Render rows that scroll in with the views of rows that scroll out. Their components are not re-created (`ngOnInit` runs once) and unbound state carries over, so rows must render only from their item |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling during drag |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
+| `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top of the rows (e.g. an overlaid header); see ScrollableDirective |
+| `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom of the rows |
 | `constrainToContainer` | `boolean` | `false` | No | Clamp drag preview and drop position to container boundaries |
 
 **Outputs:**
@@ -70,6 +72,8 @@ Low-level virtual scroll container. Use with `DroppableDirective` for custom lay
 | `scrollContainerId` | `string` | `undefined` | No | ID for auto-scroll registration |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
+| `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top of the rows (e.g. an overlaid header); see ScrollableDirective |
+| `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom of the rows |
 | `dynamicItemHeight` | `boolean` | `false` | No | Enable auto-measured variable heights |
 | `containerHeight` | `number` | `undefined` | No | Container height in pixels. Without it, give the element a CSS height (measured via ResizeObserver) |
 | `overscan` | `number` | `3` | No | Items to render beyond visible viewport |
@@ -116,6 +120,8 @@ Self-scrolling viewport for `*vdndVirtualFor` content, positioned with a single 
 | `scrollContainerId` | `string` | `undefined` | No | ID for auto-scroll registration |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
+| `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top of the rows (e.g. an overlaid header); see ScrollableDirective |
+| `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom of the rows |
 
 **Outputs:** None
 
@@ -280,7 +286,7 @@ Marks a scrollable element (it must have `overflow: auto`/`scroll` and a height)
 | `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top edge (e.g. a sticky header inside it) |
 | `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom edge (e.g. a sticky footer inside it) |
 
-The consumer measures the insets. During a drag, the element counts as the part between them: `constrainToContainer` clamps the preview there, the auto-scroll edge zones start at its edges (a pointer over the covered space scrolls at full speed), and droppables are hit-tested only there (a pointer over a sticky header is not over the list; the drop position still follows the preview's top edge). Insets are measured from the element's border box, apply to lists whose nearest `vdndScrollable` is this element, and are re-read mid-drag when they change. Adds `data-scroll-inset-top` / `data-scroll-inset-bottom` while non-zero.
+The consumer measures the insets. During a drag, the element counts as the part between them: `constrainToContainer` clamps the preview there, the auto-scroll edge zones start at its edges (a pointer over the covered space scrolls at full speed), and droppables are hit-tested only there (a pointer over a sticky header is not over the list; the drop position still follows the preview's top edge). A keyboard drag scrolls the placeholder clear of them. Lists in scroll containers nested inside get the same treatment where they pass under the covered space. Insets are measured from the element's border box and re-read mid-drag when they change. `vdnd-sortable-list`, `vdnd-virtual-scroll` and `vdnd-virtual-viewport` take the same two inputs for content overlaid on their own rows. Adds `data-scroll-inset-top` / `data-scroll-inset-bottom` while non-zero.
 
 **Outputs:** None
 

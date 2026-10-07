@@ -22,6 +22,7 @@ import {
   bindResizeObserverHeightSignal,
 } from '../utils/dom-signal-bindings';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
+import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
@@ -72,6 +73,8 @@ import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
     // data-content-offset px below the top of the scroll area
     'data-virtual-viewport': '',
     '[attr.data-content-offset]': 'contentOffset()',
+    '[attr.data-scroll-inset-top]': 'scrollInsetTop() || null',
+    '[attr.data-scroll-inset-bottom]': 'scrollInsetBottom() || null',
   },
   styles: `
     :host {
@@ -166,6 +169,18 @@ export class VirtualViewportComponent
   /** Auto-scroll configuration */
   autoScrollConfig = input<Partial<AutoScrollConfig>>({});
 
+  /**
+   * Space (px) at the top of the viewport covered by content pinned over it, such as a header
+   * overlaid on its rows. A drag treats the viewport as starting below it: `constrainToContainer`
+   * keeps the preview under it, the top autoscroll zone starts at its lower edge (the pointer over
+   * it scrolls at full speed), a pointer over it is not over the list, and a keyboard drag keeps
+   * the placeholder below it. Measured from the element's border box.
+   */
+  scrollInsetTop = input<number>(0);
+
+  /** Space (px) at the bottom of the viewport covered by content pinned over it: see `scrollInsetTop`. */
+  scrollInsetBottom = input<number>(0);
+
   // ========== Strategy ==========
 
   /** The virtual scroll strategy, created based on dynamicItemHeight input */
@@ -254,6 +269,7 @@ export class VirtualViewportComponent
       enabled: () => this.autoScrollEnabled(),
       config: () => this.autoScrollConfig(),
     });
+    refreshDragOnScrollInsetChange(this.scrollInsetTop, this.scrollInsetBottom);
   }
 
   ngOnInit(): void {

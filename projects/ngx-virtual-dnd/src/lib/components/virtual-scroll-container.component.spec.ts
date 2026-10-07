@@ -116,6 +116,8 @@ interface TestItem {
       [autoScrollEnabled]="autoScrollEnabled()"
       [autoScrollConfig]="autoScrollConfig()"
       [recycleRows]="recycleRows()"
+      [scrollInsetTop]="scrollInsetTop()"
+      [scrollInsetBottom]="scrollInsetBottom()"
     >
     </vdnd-virtual-scroll>
   `,
@@ -126,6 +128,8 @@ class TestHostComponent {
 
   items = signal<TestItem[]>([]);
   containerHeight = signal<number | undefined>(300);
+  scrollInsetTop = signal(0);
+  scrollInsetBottom = signal(0);
   overscan = signal(3);
   stickyItemIds = signal<string[]>([]);
   scrollContainerId = signal<string | undefined>('test-scroll');
@@ -887,6 +891,38 @@ describe('VirtualScrollContainerComponent', () => {
       fixture.detectChanges();
 
       expect(virtualScrollComponent.getScrollTop()).toBe(500);
+    });
+
+    it('should mark its element with the space covered at its edges', () => {
+      component.scrollInsetTop.set(40);
+      component.scrollInsetBottom.set(30);
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.getAttribute('data-scroll-inset-top')).toBe('40');
+      expect(virtualScrollEl.getAttribute('data-scroll-inset-bottom')).toBe('30');
+    });
+
+    it('should keep the placeholder above the space covered at the bottom', () => {
+      component.scrollInsetBottom.set(30);
+      startSameListKeyboardDrag(0);
+
+      // Placeholder at [500, 550): the 270px left uncovered must end at its bottom edge
+      dragStateService.setKeyboardTargetIndex(10);
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.scrollTop).toBe(550 - 270);
+    });
+
+    it('should keep the placeholder below the space covered at the top', () => {
+      component.scrollInsetTop.set(40);
+      virtualScrollComponent.scrollTo(2000);
+      startSameListKeyboardDrag(50);
+
+      // Placeholder at [500, 550): it must start 40px below the top edge
+      dragStateService.setKeyboardTargetIndex(10);
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.scrollTop).toBe(500 - 40);
     });
 
     it('should scroll on the arrow key itself, before change detection runs', () => {

@@ -1,5 +1,7 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { afterNextRender, computed, inject, Injectable, Injector, signal } from '@angular/core';
 import { DragStateService } from './drag-state.service';
+import { DragIndexCalculatorService } from './drag-index-calculator.service';
+import { DroppableRegistryService } from './droppable-registry.service';
 import { DraggedItem, END_OF_LIST, GrabOffset } from '../models/drag-drop.models';
 
 /**
@@ -11,6 +13,9 @@ import { DraggedItem, END_OF_LIST, GrabOffset } from '../models/drag-drop.models
 })
 export class KeyboardDragService {
   readonly #dragState = inject(DragStateService);
+  readonly #dragIndexCalculator = inject(DragIndexCalculatorService);
+  readonly #registry = inject(DroppableRegistryService);
+  readonly #injector = inject(Injector);
 
   /** Total item count for the current droppable (set by droppable on keyboard drag start) */
   readonly #totalItemCount = signal<number>(0);
@@ -171,8 +176,32 @@ export class KeyboardDragService {
 
   #revealActivePlaceholder(): void {
     const droppableId = this.activeDroppableId();
-    if (droppableId !== null) {
-      this.#revealers.get(droppableId)?.();
+    if (droppableId === null) {
+      return;
+    }
+    const reveal = this.#revealers.get(droppableId);
+    if (reveal) {
+      reveal();
+      return;
+    }
+    // A list without a reveal of its own (vdnd-virtual-content, vdnd-virtual-viewport,
+    // *vdndVirtualFor in a vdndScrollable): scroll it now, so a drop that follows lands in the
+    // rendered range, and once more after the next render, when the content has room for the
+    // placeholder (before, the scroll range can be one placeholder short at the end).
+    this.#revealSlot(droppableId);
+    afterNextRender(() => this.#revealSlot(droppableId), { injector: this.#injector });
+  }
+
+  /** Scroll the placeholder in `droppableId` into view, while the keyboard drag is there. */
+  #revealSlot(droppableId: string): void {
+    if (!this.isActive() || this.activeDroppableId() !== droppableId) {
+      return;
+    }
+    const element = this.#registry.getById(droppableId);
+    const index = this.#dragState.placeholderIndex();
+    const height = this.#dragState.draggedItem()?.height ?? 0;
+    if (element && index !== null && height > 0) {
+      this.#dragIndexCalculator.revealSlot(element, index, height);
     }
   }
 

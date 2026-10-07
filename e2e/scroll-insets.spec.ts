@@ -295,6 +295,48 @@ test.describe('Scroll insets (sticky header and footer)', () => {
     });
   });
 
+  test.describe('keyboard drag', () => {
+    test.beforeEach(async ({ page }) => {
+      await open(page);
+    });
+
+    test('keeps the placeholder between the sticky header and footer', async ({ page }) => {
+      await scrollTo(1500);
+      const layout = await stickyLayout(page);
+      const rows = await waitForUncoveredRows(page);
+      await page.locator(`[data-draggable-id="${rows[0].id}"]`).focus();
+      await page.keyboard.press('Space');
+      await expect(taskDemo.dragPreview).toBeVisible();
+
+      const placeholderEdges = async (): Promise<{ top: number; bottom: number }> => {
+        const box = await taskDemo.visiblePlaceholder.boundingBox();
+        return box ? { top: box.y, bottom: box.y + box.height } : { top: NaN, bottom: NaN };
+      };
+
+      // At an edge, within rounding: the header height the demo measures can be fractional
+      const expectNear = async (actual: () => Promise<number>, expected: number): Promise<void> => {
+        await expect(async () => {
+          expect(Math.abs((await actual()) - expected)).toBeLessThanOrEqual(2);
+        }).toPass({ timeout: 3000 });
+      };
+
+      // Up past the header: the list scrolls the placeholder down to the header's lower edge
+      for (let i = 0; i < 4; i++) {
+        await page.keyboard.press('ArrowUp');
+      }
+      await expectNear(async () => (await placeholderEdges()).top, layout.headerBottom);
+
+      // Down past the footer: the list scrolls the placeholder up to the footer's upper edge
+      for (let i = 0; i < 12; i++) {
+        await page.keyboard.press('ArrowDown');
+      }
+      await expectNear(async () => (await placeholderEdges()).bottom, layout.footerTop);
+
+      await page.keyboard.press('Escape');
+      await expect(taskDemo.dragPreview).toBeHidden();
+    });
+  });
+
   test.describe('without constrainToContainer', () => {
     test.beforeEach(async ({ page }) => {
       await open(page);

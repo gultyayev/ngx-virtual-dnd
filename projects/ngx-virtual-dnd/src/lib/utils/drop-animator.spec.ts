@@ -242,6 +242,23 @@ describe('findDropTarget', () => {
     expect(findDropTarget('below-header', ['list'], getDroppable)?.element).toBe(visible);
   });
 
+  it('returns null when the item is behind content pinned over an outer scroll container', () => {
+    // A page scroller (0..400) whose top 100px a sticky header covers, around a column scroller
+    const page = document.createElement('div');
+    page.className = 'vdnd-scrollable';
+    page.setAttribute('data-scroll-inset-top', '100');
+    page.getBoundingClientRect = () => rect(0, 0, 200, 400);
+    document.body.appendChild(page);
+    const column = document.createElement('div');
+    column.className = 'vdnd-scrollable';
+    column.getBoundingClientRect = () => rect(0, 50, 200, 350);
+    page.appendChild(column);
+    const list = createList('list', rect(0, -500, 200, 2000), column);
+    addItem(list, 'behind-header', rect(0, 50, 200, 40));
+
+    expect(findDropTarget('behind-header', ['list'], getDroppable)).toBeNull();
+  });
+
   it('returns null when the item is scrolled out of the scroll container around its list', () => {
     const scroller = document.createElement('div');
     scroller.className = 'vdnd-scrollable';

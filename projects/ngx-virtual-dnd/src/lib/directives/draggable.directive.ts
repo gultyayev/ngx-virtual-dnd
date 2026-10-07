@@ -34,7 +34,7 @@ import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
 import { listDraggables } from '../utils/list-draggables';
-import { uncoveredRect } from '../utils/scroll-insets';
+import { visibleRect } from '../utils/scroll-insets';
 import {
   findNestedControl,
   findNoDragElement,
@@ -739,15 +739,15 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
 
   /**
    * Clamp cursor position to source container boundaries when constrainToContainer is enabled.
-   * The boundaries are those of the part of the container that content pinned over its edges
-   * (its scroll insets) doesn't cover.
+   * The boundaries are those of the part of the container that shows: content pinned over its
+   * edges (scroll insets) and the scroll containers around it can hide part of it.
    */
   #clampToContainer(position: CursorPosition): CursorPosition {
     if (!this.#constrainToContainer || !this.#constraintElement) {
       return position;
     }
 
-    const containerRect = uncoveredRect(this.#constraintElement);
+    const containerRect = visibleRect(this.#constraintElement);
     const grabOffset = this.#dragState.grabOffset();
     if (!grabOffset) {
       return position;
@@ -800,10 +800,10 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
 
     // Update autoscroll cursor: use raw pointer position clamped to container
     // edges (without grabOffset) so autoscroll threshold is reachable regardless
-    // of where the user grabbed the item. Like the preview, it stays out of the space
-    // content pinned over the container's edges covers.
+    // of where the user grabbed the item. Like the preview, it stays in the part of the
+    // container that shows.
     if (this.#constrainToContainer && this.#constraintElement && this.#lastRawPosition) {
-      const rect = uncoveredRect(this.#constraintElement);
+      const rect = visibleRect(this.#constraintElement);
       let scrollCursor: CursorPosition = this.#lastRawPosition;
       if (axisLock && startPos) {
         scrollCursor = {

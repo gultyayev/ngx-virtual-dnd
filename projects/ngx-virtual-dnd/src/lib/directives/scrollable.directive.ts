@@ -1,6 +1,5 @@
 import {
   Directive,
-  effect,
   ElementRef,
   inject,
   input,
@@ -8,17 +7,15 @@ import {
   OnDestroy,
   OnInit,
   signal,
-  untracked,
 } from '@angular/core';
 import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-container.token';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
-import { DragSchedulerService } from '../services/drag-scheduler.service';
-import { PositionCalculatorService } from '../services/position-calculator.service';
 import {
   bindRafThrottledScrollTopSignal,
   bindResizeObserverHeightSignal,
 } from '../utils/dom-signal-bindings';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
+import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
 
 /**
  * Directive that marks an element as a scrollable container for virtual scrolling.
@@ -89,8 +86,6 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #ngZone = inject(NgZone);
   readonly #autoScrollService = inject(AutoScrollService);
-  readonly #positionCalculator = inject(PositionCalculatorService);
-  readonly #scheduler = inject(DragSchedulerService);
 
   /** Current scroll position (reactive) */
   readonly #scrollTop = signal(0);
@@ -142,18 +137,7 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
       config: () => this.autoScrollConfig(),
     });
 
-    // A drag in progress caches what it measured: when the covered space changes (a sticky header
-    // collapsing as the page scrolls), it measures the lists again, clamps the resting pointer
-    // again and checks the autoscroll edges again. Each is a no-op without a drag.
-    effect(() => {
-      this.scrollInsetTop();
-      this.scrollInsetBottom();
-      untracked(() => {
-        this.#positionCalculator.invalidateDroppableRects();
-        this.#scheduler.requestUpdate();
-        this.#autoScrollService.refresh();
-      });
-    });
+    refreshDragOnScrollInsetChange(this.scrollInsetTop, this.scrollInsetBottom);
   }
 
   get nativeElement(): HTMLElement {

@@ -103,6 +103,8 @@ class SortableListOutputsDirective {
         [recycleRows]="recycleRows()"
         [autoScrollEnabled]="autoScrollEnabled()"
         [autoScrollConfig]="autoScrollConfig()"
+        [scrollInsetTop]="scrollInsetTop()"
+        [scrollInsetBottom]="scrollInsetBottom()"
       >
       </vdnd-virtual-scroll>
     </div>
@@ -180,6 +182,15 @@ export class VirtualSortableListComponent<T> {
 
   /** Auto-scroll configuration */
   autoScrollConfig = input<Partial<AutoScrollConfig>>({});
+
+  /**
+   * Space (px) at the top of the list covered by content pinned over its rows, such as an
+   * overlaid header (see `vdnd-virtual-scroll`'s `scrollInsetTop`).
+   */
+  scrollInsetTop = input<number>(0);
+
+  /** Space (px) at the bottom of the list covered by content pinned over its rows. */
+  scrollInsetBottom = input<number>(0);
 
   /** Constrain drag preview and placeholder to container boundaries */
   constrainToContainer = input<boolean>(false);

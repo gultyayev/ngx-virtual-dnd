@@ -47,6 +47,7 @@ import { mapByAttribute } from '../utils/attribute-selectors';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
 import { revealDropTargetIn } from '../utils/drop-animator';
+import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
 
 /**
  * Context provided to the item template.
@@ -177,6 +178,8 @@ function longestIncreasingRun(values: number[]): boolean[] {
     '[style.height.px]': 'containerHeight() ?? null',
     '[attr.data-item-height]': 'itemHeight()',
     '[attr.data-total-items]': 'items().length',
+    '[attr.data-scroll-inset-top]': 'scrollInsetTop() || null',
+    '[attr.data-scroll-inset-bottom]': 'scrollInsetBottom() || null',
   },
   // No bindings: the effects render the rows, the placeholder, the spacer height and the content
   // offset (see #render). A signal read here would re-render every row whenever it changes.
@@ -311,6 +314,18 @@ export class VirtualScrollContainerComponent<T>
 
   /** Auto-scroll configuration */
   autoScrollConfig = input<Partial<AutoScrollConfig>>({});
+
+  /**
+   * Space (px) at the top of the list covered by content pinned over it, such as a header
+   * overlaid on its rows. A drag treats the list as starting below it: `constrainToContainer`
+   * keeps the preview under it, the top autoscroll zone starts at its lower edge (the pointer over
+   * it scrolls at full speed), a pointer over it is not over the list, and a keyboard drag keeps
+   * the placeholder below it. Measured from the element's border box.
+   */
+  scrollInsetTop = input<number>(0);
+
+  /** Space (px) at the bottom of the list covered by content pinned over it: see `scrollInsetTop`. */
+  scrollInsetBottom = input<number>(0);
 
   /** Array of items to render */
   items = input.required<T[]>();
@@ -684,6 +699,7 @@ export class VirtualScrollContainerComponent<T>
       enabled: () => this.autoScrollEnabled(),
       config: () => this.autoScrollConfig(),
     });
+    refreshDragOnScrollInsetChange(this.scrollInsetTop, this.scrollInsetBottom);
 
     // Keep the strategy's items in sync. A fixed-height strategy needs only their count, which
     // spares computing every item's ID on each items change (each drop).
@@ -852,18 +868,22 @@ export class VirtualScrollContainerComponent<T>
     const targetTop = strategy.getOffsetForIndex(placeholderIndex);
     const targetBottom = targetTop + this.placeholderHeight();
 
-    // Calculate visible range
-    const viewportTop = currentScrollTop;
-    const viewportBottom = currentScrollTop + height;
+    // Calculate visible range: the part content pinned over the edges doesn't cover (read
+    // tracked, so a keyboard drag reveals the placeholder again when it changes)
+    const insetTop = this.scrollInsetTop();
+    const insetBottom = this.scrollInsetBottom();
+    const viewportTop = currentScrollTop + insetTop;
+    const viewportBottom = currentScrollTop + height - insetBottom;
 
     // Check if target is fully visible
     if (targetTop < viewportTop) {
       // Target is above viewport - scroll up
-      element.scrollTop = targetTop;
-      this.#scrollTop.set(targetTop);
+      const newScrollTop = Math.max(0, targetTop - insetTop);
+      element.scrollTop = newScrollTop;
+      this.#scrollTop.set(newScrollTop);
     } else if (targetBottom > viewportBottom) {
       // Target is below viewport - scroll down
-      const newScrollTop = targetBottom - height;
+      const newScrollTop = targetBottom - height + insetBottom;
       element.scrollTop = newScrollTop;
       this.#scrollTop.set(newScrollTop);
       if (!isFollowUp) this.#revealPlaceholderAfterRender();

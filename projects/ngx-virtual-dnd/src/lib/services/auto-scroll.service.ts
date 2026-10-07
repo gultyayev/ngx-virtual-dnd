@@ -4,7 +4,12 @@ import { DragStateService } from './drag-state.service';
 import { PositionCalculatorService } from './position-calculator.service';
 import { DragSchedulerService } from './drag-scheduler.service';
 import { depthAcrossShadow } from '../utils/composed-dom';
-import { uncoveredRect } from '../utils/scroll-insets';
+import {
+  clipToScrollContainers,
+  intersectRects,
+  scrollAncestors,
+  uncoveredRect,
+} from '../utils/scroll-insets';
 
 /**
  * Configuration for auto-scroll behavior.
@@ -45,6 +50,17 @@ interface ExhaustedContainer {
   maxScrollLeft: number;
 }
 
+/** A candidate container, with what the tick needs of it (see #getOrderedContainers). */
+interface OrderedContainer {
+  id: string;
+  element: HTMLElement;
+  config: AutoScrollConfig;
+  /** Depth in the DOM, to order nested containers innermost first */
+  depth: number;
+  /** The scroll containers around it, which can hide part of it (see `scrollAncestors`) */
+  ancestors: Element[];
+}
+
 /**
  * Service that handles auto-scrolling when dragging near container edges.
  */
@@ -71,9 +87,7 @@ export class AutoScrollService {
    * whenever registrations change (containers rarely move mid-drag) and once per
    * drag (see startMonitoring), not per frame.
    */
-  #orderedContainers:
-    | { id: string; element: HTMLElement; config: AutoScrollConfig; depth: number }[]
-    | null = null;
+  #orderedContainers: OrderedContainer[] | null = null;
 
   /** Bound reference to #participantTick for stable add/remove with the scheduler. */
   readonly #boundParticipantTick: () => void = () => this.#participantTick();
@@ -151,22 +165,12 @@ export class AutoScrollService {
    * ancestor ahead of its descendant. Equal-depth (including unrelated) containers
    * keep registration order via the stable sort, so unrelated lists behave as before.
    */
-  #getOrderedContainers(): {
-    id: string;
-    element: HTMLElement;
-    config: AutoScrollConfig;
-    depth: number;
-  }[] {
+  #getOrderedContainers(): OrderedContainer[] {
     if (this.#orderedContainers) {
       return this.#orderedContainers;
     }
 
-    const entries: {
-      id: string;
-      element: HTMLElement;
-      config: AutoScrollConfig;
-      depth: number;
-    }[] = [];
+    const entries: OrderedContainer[] = [];
     for (const [id, { element, config }] of this.#scrollableContainers) {
       // Registration is unconditional (directives can't expose DOM size as a signal, so
       // gating registration on it goes stale — see #27). Filter by live scroll geometry
@@ -176,7 +180,13 @@ export class AutoScrollService {
       if (!this.#isScrollable(element)) {
         continue;
       }
-      entries.push({ id, element, config, depth: this.#domDepth(element) });
+      entries.push({
+        id,
+        element,
+        config,
+        depth: this.#domDepth(element),
+        ancestors: scrollAncestors(element),
+      });
     }
 
     // Deepest first; stable sort keeps registration order on ties.
@@ -294,18 +304,23 @@ export class AutoScrollService {
 
     // Candidates are ordered innermost-first: when the deepest container under the
     // cursor is exhausted at its boundary, the loop falls through to its ancestors.
-    for (const { id, element, config } of this.#getOrderedContainers()) {
+    for (const { id, element, config, ancestors } of this.#getOrderedContainers()) {
       const rect = element.getBoundingClientRect();
-      const isInside = this.#positionCalculator.isInsideContainer(cursor, rect);
+      // The part of the container that shows: the scroll containers around it, and content
+      // pinned over their edges (a page's sticky header), can hide part of it. A cursor over that
+      // content is over the outer container, which scrolls instead.
+      const shown = clipToScrollContainers(rect, ancestors);
+      const isInside = this.#positionCalculator.isInsideContainer(cursor, shown);
 
       if (!isInside) {
         continue;
       }
 
-      // The edge zones start at the edges of the part of the container that content pinned over
-      // its edges (its scroll insets) doesn't cover. A cursor over that content is deeper in the
-      // zone than the edge, so it scrolls at full speed.
-      const edges = uncoveredRect(element, rect);
+      // The edge zones start at the edges of the part that shows and that content pinned over
+      // the container's own edges (its scroll insets) doesn't cover. A cursor over that content
+      // is deeper in the zone than the edge, so it scrolls at full speed.
+      const uncovered = uncoveredRect(element, rect);
+      const edges = uncovered === rect ? shown : intersectRects(uncovered, shown);
       const nearEdge = this.#positionCalculator.getNearEdge(cursor, edges, config.threshold);
 
       // Reuse the per-frame direction object to avoid allocation.

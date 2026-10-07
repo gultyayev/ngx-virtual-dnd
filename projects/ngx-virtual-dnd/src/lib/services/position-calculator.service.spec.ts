@@ -772,6 +772,52 @@ describe('PositionCalculatorService', () => {
       expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBe(drop);
     });
 
+    it('clips a list in a nested scroll container to what its outer container leaves uncovered', () => {
+      const dragged = document.createElement('div');
+      // A page scroller whose sticky header covers 100..140, around a column scroller
+      const page = document.createElement('div');
+      page.className = 'vdnd-scrollable';
+      page.setAttribute('data-scroll-inset-top', '40');
+      stubRect(page, { top: 100, left: 100, right: 300, bottom: 300 });
+      document.body.appendChild(page);
+      created.push(page);
+      const column = document.createElement('div');
+      column.className = 'vdnd-scrollable';
+      stubRect(column, { top: 100, left: 100, right: 300, bottom: 300 });
+      page.appendChild(column);
+      const drop = document.createElement('div');
+      drop.setAttribute('data-droppable-id', 'list');
+      drop.setAttribute('data-droppable-group', 'g');
+      stubRect(drop, { top: 0, left: 100, right: 300, bottom: 600 });
+      column.appendChild(drop);
+      registerDroppable(drop);
+
+      service.beginDragSession('g');
+
+      expect(service.findDroppableAtPoint(150, 120, dragged, 'g')).toBeNull();
+      expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBe(drop);
+    });
+
+    it('clips a droppable to what the vdnd-virtual-scroll inside it leaves uncovered', () => {
+      const dragged = document.createElement('div');
+      const drop = document.createElement('div');
+      drop.setAttribute('data-droppable-id', 'list');
+      drop.setAttribute('data-droppable-group', 'g');
+      stubRect(drop, { top: 100, left: 100, right: 300, bottom: 300 });
+      const scroller = document.createElement('vdnd-virtual-scroll');
+      scroller.setAttribute('data-scroll-inset-top', '40');
+      stubRect(scroller, { top: 100, left: 100, right: 300, bottom: 300 });
+      drop.appendChild(scroller);
+      document.body.appendChild(drop);
+      registerDroppable(drop);
+      created.push(drop);
+
+      service.beginDragSession('g');
+
+      expect(service.findDroppableAtPoint(150, 120, dragged, 'g')).toBeNull();
+      expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBe(drop);
+    });
+
     it('does not clip when the droppable has no scrollable ancestor', () => {
       const dragged = document.createElement('div');
       const drop = document.createElement('div');

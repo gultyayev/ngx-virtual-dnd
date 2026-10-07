@@ -3,7 +3,7 @@ import { type CursorPosition, END_OF_LIST, type GrabOffset } from '../models/dra
 import { PositionCalculatorService } from './position-calculator.service';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { closestAcrossShadow } from '../utils/composed-dom';
-import { uncoveredRect } from '../utils/scroll-insets';
+import { ownUncoveredRect, uncoveredRect, visibleRect } from '../utils/scroll-insets';
 
 interface DroppableCache {
   droppableId: string | null;
@@ -156,6 +156,40 @@ export class DragIndexCalculatorService {
     return this.#getScrollGeometry(this.#resolveDroppable(droppableElement, draggedItemHeight));
   }
 
+  /**
+   * Scroll a droppable's rows so the slot of `height` px at `index` (where the placeholder renders
+   * before the item at that index) shows in full: inside the part of its scroll element that
+   * shows (see `visibleRect`), below and above the content pinned over its edges. For lists that
+   * have no reveal of their own (`vdnd-virtual-scroll` has one), during a keyboard drag. Needs the
+   * droppable's registered strategy for the slot's offset; a no-op without one, or when less than
+   * the slot shows.
+   */
+  revealSlot(droppableElement: HTMLElement, index: number, height: number): void {
+    const cache = this.#resolveDroppable(droppableElement, height);
+    const strategy = cache.droppableId ? this.#strategies.get(cache.droppableId) : undefined;
+    if (!strategy) {
+      return;
+    }
+
+    // Rows are placed relative to where the list starts in its scroll element (scrollTop below
+    // has the space reserved above them subtracted), so offsets compare to it directly
+    const { rect, scrollTop } = this.#getScrollGeometry(cache);
+    const shown = visibleRect(cache.scrollContainer, rect);
+    const shownTop = scrollTop + (shown.top - rect.top);
+    const shownBottom = scrollTop + (shown.bottom - rect.top);
+    if (shownBottom - shownTop < height) {
+      return;
+    }
+
+    const slotTop = strategy.getOffsetForIndex(index);
+    const slotBottom = slotTop + height;
+    if (slotTop < shownTop) {
+      cache.scrollContainer.scrollTop += slotTop - shownTop;
+    } else if (slotBottom > shownBottom) {
+      cache.scrollContainer.scrollTop += slotBottom - shownBottom;
+    }
+  }
+
   calculatePlaceholderIndex(args: {
     droppableElement: HTMLElement;
     position: CursorPosition;
@@ -272,10 +306,10 @@ export class DragIndexCalculatorService {
     // using preview bounds so top/bottom drops remain reachable — but only once the list
     // is scrolled to that end. A preview pinned at the edge of a scrolled list (which is
     // how a constrained drag autoscrolls) keeps the probe's index, the visible edge row.
-    // A list that is its own scroll container pins the preview at the edges of the part content
-    // pinned over its edges (its scroll insets) doesn't cover.
+    // A list that is its own scroll container (or wraps the vdnd-virtual-scroll that scrolls its
+    // rows) pins the preview at the edges of the part content pinned over them doesn't cover.
     if (isConstrainedToContainer) {
-      const droppableRect = uncoveredRect(droppableElement);
+      const droppableRect = ownUncoveredRect(droppableElement);
       const edgeTolerance = 2;
       const distanceToTop = Math.abs(previewTopY - droppableRect.top);
       const distanceToBottom = Math.abs(droppableRect.bottom - previewBottomY);

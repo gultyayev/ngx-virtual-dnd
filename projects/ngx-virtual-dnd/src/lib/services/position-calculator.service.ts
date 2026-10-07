@@ -6,7 +6,7 @@ import {
   parentAcrossShadow,
   shadowRootsAround,
 } from '../utils/composed-dom';
-import { hasScrollInsets, uncoveredRect } from '../utils/scroll-insets';
+import { visibleRect } from '../utils/scroll-insets';
 
 /**
  * Snapshot of the candidate droppables for an active drag session.
@@ -274,44 +274,27 @@ export class PositionCalculatorService {
   }
 
   /**
-   * The ancestor that clips a candidate's hit-test rect: its nearest `.vdnd-scrollable`
-   * ancestor (looking past shadow roots), or null when it has none or is one itself. Without clipping a droppable scrolled
-   * mostly out of a clipping container still hit-tests over its full unclipped rect (issue #23
-   * case 3). A candidate that is one itself clips to itself when content pinned over its edges
-   * covers part of it (scroll insets).
-   */
-  #clipOf(el: HTMLElement): Element | null {
-    const scrollable = closestAcrossShadow(el, '.vdnd-scrollable');
-    return scrollable === el && !hasScrollInsets(el) ? null : scrollable;
-  }
-
-  /**
-   * Measure the candidates' hit-test rects into `rects`, each clipped to the part of its clip
-   * ancestor (see `#clipOf`) that content pinned over its edges doesn't cover: rows scrolled
-   * behind a sticky header are not drop targets. Consecutive candidates in one scroller (lists side by side in it) read its rect
-   * once. The ancestor is looked up on each pass: a list moved to another scroller mid-drag keeps
-   * its registration. The intersection is built as a plain DOMRect; an empty intersection yields
-   * a negative width/height so the `#hitTest` bounds check can never match it.
+   * Measure the candidates' hit-test rects into `rects`: the part of each that shows (see
+   * `visibleRect`), clipped to every scroll container around it (looking past shadow roots) minus
+   * the space content pinned over their edges covers. Without clipping, a droppable scrolled mostly
+   * out of a clipping container still hit-tests over its full unclipped rect (issue #23 case 3),
+   * and rows behind a sticky header would be drop targets. Each element is read once per pass, so
+   * lists side by side in one scroller share its rect. The containers are looked up on each pass:
+   * a list moved to another scroller mid-drag keeps its registration. An empty intersection has a
+   * negative width/height, so the `#hitTest` bounds check can never match it.
    */
   #measureRects(candidates: readonly HTMLElement[], rects: DOMRect[]): DOMRect[] {
-    let lastClip: Element | null = null;
-    let lastClipRect: DOMRect | null = null;
+    const measured = new Map<Element, DOMRect>();
+    const read = (element: Element): DOMRect => {
+      let rect = measured.get(element);
+      if (!rect) {
+        rect = element.getBoundingClientRect();
+        measured.set(element, rect);
+      }
+      return rect;
+    };
     for (let i = 0; i < candidates.length; i++) {
-      const rect = candidates[i].getBoundingClientRect();
-      const clip = this.#clipOf(candidates[i]);
-      if (!clip) {
-        rects[i] = rect;
-        continue;
-      }
-      if (clip !== lastClip || !lastClipRect) {
-        lastClip = clip;
-        lastClipRect = uncoveredRect(clip);
-      }
-      const top = Math.max(rect.top, lastClipRect.top);
-      const left = Math.max(rect.left, lastClipRect.left);
-      const right = Math.min(rect.right, lastClipRect.right);
-      const bottom = Math.min(rect.bottom, lastClipRect.bottom);
-      rects[i] = new DOMRect(left, top, right - left, bottom - top);
+      rects[i] = visibleRect(candidates[i], undefined, read);
     }
     return rects;
   }
