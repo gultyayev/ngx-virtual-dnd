@@ -80,6 +80,40 @@ test.describe('Virtual viewport', () => {
     await expectOrder(page, 'viewport-a', ['a-2', 'a-3', 'a-1', 'a-4']);
   });
 
+  test('scrolls to follow a keyboard drag past its bottom edge', async ({ page }) => {
+    // 6 rows show in the 300px viewport; target 12 is far below them
+    await row(page, 'a-1').focus();
+    await page.keyboard.press('Space');
+    await expect(preview(page), 'The keyboard drag should start').toBeVisible();
+    for (let step = 0; step < 12; step++) {
+      await page.keyboard.press('ArrowDown');
+    }
+
+    // The placeholder for target 12 (right below Task 13: Task 1 is the one held) shows inside
+    // the viewport, within 2px
+    const tasks = viewport(page, 'viewport-a');
+    await poll(() =>
+      tasks.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const slot = element
+          .querySelector('.vdnd-drag-placeholder-visible')
+          ?.getBoundingClientRect();
+        const above = element.querySelector('[data-draggable-id="a-13"]')?.getBoundingClientRect();
+        return (
+          !!slot &&
+          !!above &&
+          Math.abs(slot.top - above.bottom) <= 2 &&
+          slot.top >= box.top - 2 &&
+          slot.bottom <= box.bottom + 2
+        );
+      }),
+    ).toBe(true);
+    expect(await tasks.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+    await page.keyboard.press('Space');
+    await expectDrop(page, 0, 12);
+  });
+
   test('reorders a row below the content offset with the keyboard', async ({ page }) => {
     await keyboardMoveDown(page, 'b-1', 1);
 
