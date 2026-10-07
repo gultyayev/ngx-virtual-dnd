@@ -25,6 +25,7 @@ import { VDND_GROUP_TOKEN } from './droppable-group.directive';
 import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
+import { listDraggables } from '../utils/list-draggables';
 
 /**
  * Marks an element as a valid drop target within the virtual scroll drag-and-drop system.
@@ -322,14 +323,10 @@ export class DroppableDirective implements OnDestroy {
       return 0;
     }
 
-    const draggables = droppable.querySelectorAll('[data-draggable-id]');
-    for (let i = 0; i < draggables.length; i++) {
-      if (draggables[i].getAttribute('data-draggable-id') === draggableId) {
-        return i;
-      }
-    }
-
-    return 0;
+    const index = listDraggables(droppable).findIndex(
+      (draggable) => draggable.getAttribute('data-draggable-id') === draggableId,
+    );
+    return Math.max(index, 0);
   }
 
   /**
