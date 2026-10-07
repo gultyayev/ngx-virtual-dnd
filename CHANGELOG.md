@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.5.0](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.4.0...v3.5.0) (2026-10-07)
+
+### Features
+
+- **lib:** support lists and items inside open shadow roots ([#125](https://github.com/gultyayev/ngx-virtual-dnd/issues/125)) ([73f362c](https://github.com/gultyayev/ngx-virtual-dnd/commit/73f362cd8f886189e2af1e00e0a07909f55ae6c7))
+
+### Bug Fixes
+
+- **lib:** compute scrollBy() and getScrollTop() from the element's live scrollTop ([#122](https://github.com/gultyayev/ngx-virtual-dnd/issues/122)) ([3622e11](https://github.com/gultyayev/ngx-virtual-dnd/commit/3622e113358ccd7356a66b456c0ec3056651331b))
+- **lib:** count wrapped rows when calculating a plain list's source index ([#137](https://github.com/gultyayev/ngx-virtual-dnd/issues/137)) ([5113cdd](https://github.com/gultyayev/ngx-virtual-dnd/commit/5113cdd892c2fd521a94dc35b8a1ab39f3c23145))
+- **lib:** keep a list's scroll position after a drop into it at its bottom ([#130](https://github.com/gultyayev/ngx-virtual-dnd/issues/130)) ([b7964f5](https://github.com/gultyayev/ngx-virtual-dnd/commit/b7964f573b22a7a922026a974c1f0418fcd228f0))
+- **lib:** keep a mouse drag going when another button is released ([#138](https://github.com/gultyayev/ngx-virtual-dnd/issues/138)) ([fbc53c7](https://github.com/gultyayev/ngx-virtual-dnd/commit/fbc53c71cae9d9ac16019d9c2a0c652f73cc67db))
+- **lib:** keep the clone root's own placement out of the drag preview ([#124](https://github.com/gultyayev/ngx-virtual-dnd/issues/124)) ([9f04d10](https://github.com/gultyayev/ngx-virtual-dnd/commit/9f04d100b27c7eebf8f4a56aa94265cba6e2b222))
+- **lib:** let a pointer drag start on a button draggable or inside a control ([#127](https://github.com/gultyayev/ngx-virtual-dnd/issues/127)) ([6d468b7](https://github.com/gultyayev/ngx-virtual-dnd/commit/6d468b791b7ab2fe94b28872e6ad8bdf0fb5c4a7))
+- **lib:** open the placeholder gap and scroll a vdndVirtualFor used directly in vdndScrollable ([#129](https://github.com/gultyayev/ngx-virtual-dnd/issues/129)) ([adb78fa](https://github.com/gultyayev/ngx-virtual-dnd/commit/adb78fac4187e6f3458a08e6a028e075138f70ae))
+- **lib:** report the source list in dragEnd of a draggable destroyed mid-drag ([#121](https://github.com/gultyayev/ngx-virtual-dnd/issues/121)) ([7bb5b9e](https://github.com/gultyayev/ngx-virtual-dnd/commit/7bb5b9efb344a6302378233811d58047b44b3086))
+- **lib:** reveal the keyboard placeholder again after it renders at a list's end ([4c7cfda](https://github.com/gultyayev/ngx-virtual-dnd/commit/4c7cfda2b5b2ab68981eba4b13dbb3cfe7b48981)), closes [#116](https://github.com/gultyayev/ngx-virtual-dnd/issues/116)
+- **lib:** skip hidden droppables in keyboard cross-list navigation ([b8bf247](https://github.com/gultyayev/ngx-virtual-dnd/commit/b8bf247cb2ffbb14dd11353e5c5158c7da7aa3f7)), closes [#113](https://github.com/gultyayev/ngx-virtual-dnd/issues/113)
+- **lib:** snap a constrained drop to the list edge only once the list is scrolled there ([#128](https://github.com/gultyayev/ngx-virtual-dnd/issues/128)) ([deee3aa](https://github.com/gultyayev/ngx-virtual-dnd/commit/deee3aad8c8f3c2f8af48ac9713d1013bcd7d22c))
+
 ## [3.4.0](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.3.0...v3.4.0) (2026-10-01)
 
 ### Features
