@@ -156,6 +156,8 @@ Keep a bound handler in a field so the same reference can be removed, attach pro
 
 11. **Library templates never forward high-frequency outputs with template listeners**: Angular marks the listening view and every ancestor dirty before running a template listener, so `(placeholderMove)="placeholderMove.emit($event)"` would re-render the consumer's whole component chain on every placeholder move. `VirtualSortableListComponent` forwards its inner droppable's `drop` and `placeholderMove` by subscribing (`SortableListOutputsDirective`, in its constructor).
 
+12. **Scroll insets are plain numbers the consumer passes**: `scrollInsetTop`/`scrollInsetBottom` (on `vdndScrollable`, `vdnd-virtual-scroll`, `vdnd-virtual-viewport`, `vdnd-sortable-list`) give the space sticky content covers. They are reflected as `data-scroll-inset-*` attributes, and drag code reads them live through `lib/utils/scroll-insets.ts`. The visible part of a list is its own uncovered rect clipped by the uncovered rect of every scroll container around it (`visibleRect`); hit-testing, the constrained clamp, autoscroll edges, the drop animation and the keyboard reveal use it. Rect helpers return `null` when no area is left: a `DOMRect` with a negative height normalizes into the gap between the two rects. An inset change mid-drag goes through `refreshDragOnScrollInsetChange` (re-measure, re-clamp, re-collect autoscroll containers, keyboard reveal after the render). Don't add registries or callbacks for sticky elements: the consumer measures.
+
 ### Safari Autoscroll
 
 Use direct `element.scrollTop += delta` (not `scrollBy()`) with synchronous callback — no RAF delay. See `.claude/history/safari-autoscroll.md` for details.
@@ -168,6 +170,7 @@ Use direct `element.scrollTop += delta` (not `scrollBy()`) with synchronous call
 - Solution: Document-level keyboard listeners during drag
 - Gotcha: Call `stopPropagation()` when starting to prevent immediate drop
 - Focus: Restore with `afterNextRender()` using `EnvironmentInjector`
+- Scroll into view: every arrow key scrolls the target slot into the visible part of the list, synchronously (a drop can follow before the next render). `vdnd-virtual-scroll` registers its own revealer with `KeyboardDragService`; every other list goes through `DragIndexCalculatorService.revealSlot`, now and once more after the next render: strategy offsets for virtual lists, the rendered rows (or a `vdnd-placeholder`) for plain `@for` lists, scrolling each container around them nearest first (`revealRange`).
 
 **Screen Reader Announcements:** Not built-in (i18n complexity). Consumers implement using position data in drag events. See the Accessibility guide (`docs/pages/guide/features/accessibility.mdx`) for an example.
 
