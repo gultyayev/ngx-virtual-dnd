@@ -392,6 +392,107 @@ describe('DragIndexCalculatorService', () => {
 
       expect(viewport.scrollTop).toBe(500);
     });
+
+    describe('in a list of plain rows', () => {
+      // A 300px scroll container (0..300) holding a list of 20 rows of 50px, laid out from its
+      // scroll position (no strategy: the rows are all rendered)
+      let scroller: HTMLElement;
+      let list: HTMLElement;
+      let rows: HTMLElement[];
+
+      beforeEach(() => {
+        scroller = document.createElement('div');
+        scroller.style.overflowY = 'auto';
+        scroller.getBoundingClientRect = () => new DOMRect(0, 0, 300, 300);
+        let scrollTop = 0;
+        Object.defineProperty(scroller, 'scrollHeight', { value: 1100 });
+        Object.defineProperty(scroller, 'clientHeight', { value: 300 });
+        Object.defineProperty(scroller, 'scrollTop', {
+          get: () => scrollTop,
+          set: (value: number) => (scrollTop = Math.max(0, Math.min(value, 800))),
+        });
+        list = document.createElement('div');
+        list.setAttribute('data-droppable-id', 'plain');
+        scroller.appendChild(list);
+        rows = Array.from({ length: 20 }, (_, i) => {
+          const row = document.createElement('div');
+          row.setAttribute('data-draggable-id', `row-${i}`);
+          row.getBoundingClientRect = () => new DOMRect(0, i * 50 - scroller.scrollTop, 300, 50);
+          list.appendChild(row);
+          return row;
+        });
+        document.body.appendChild(scroller);
+      });
+
+      afterEach(() => scroller.remove());
+
+      it('should scroll a slot below the visible part up to its bottom edge', () => {
+        // The slot before row 11: 550..600
+        service.revealSlot(list, 11, 50);
+
+        expect(scroller.scrollTop).toBe(600 - 300);
+      });
+
+      it('should scroll a slot above the visible part down below the space covered at the top', () => {
+        scroller.setAttribute('data-scroll-inset-top', '40');
+        scroller.scrollTop = 800;
+
+        // The slot before row 10: 500..550, to start 40px below the top edge
+        service.revealSlot(list, 10, 50);
+
+        expect(scroller.scrollTop).toBe(500 - 40);
+      });
+
+      it('should reveal the slot after the last row shown, past a hidden dragged row', () => {
+        // The dragged row is hidden (display: none): the slot follows row 18, at 950..1000
+        rows[19].getBoundingClientRect = () => new DOMRect(0, 0, 0, 0);
+
+        service.revealSlot(list, 20, 50);
+
+        expect(scroller.scrollTop).toBe(1000 - 300);
+      });
+
+      it('should reveal the placeholder the list renders itself', () => {
+        // A vdnd-placeholder rendered before row 11, pushing it down: 550..600
+        const placeholder = document.createElement('vdnd-placeholder');
+        placeholder.setAttribute('data-draggable-id', 'placeholder');
+        placeholder.getBoundingClientRect = () => new DOMRect(0, 550 - scroller.scrollTop, 300, 50);
+        list.insertBefore(placeholder, rows[11]);
+
+        service.revealSlot(list, 11, 50);
+
+        expect(scroller.scrollTop).toBe(600 - 300);
+      });
+
+      it('should scroll an outer container when the inner one has no room left', () => {
+        // The page (0..400) scrolls the 300px container, which sits 600px down in it
+        const page = document.createElement('div');
+        page.style.overflowY = 'auto';
+        page.getBoundingClientRect = () => new DOMRect(0, 0, 300, 400);
+        let pageScrollTop = 0;
+        Object.defineProperty(page, 'scrollHeight', { value: 2000 });
+        Object.defineProperty(page, 'clientHeight', { value: 400 });
+        Object.defineProperty(page, 'scrollTop', {
+          get: () => pageScrollTop,
+          set: (value: number) => (pageScrollTop = Math.max(0, Math.min(value, 1600))),
+        });
+        scroller.getBoundingClientRect = () => new DOMRect(0, 600 - page.scrollTop, 300, 300);
+        rows[2].getBoundingClientRect = () =>
+          new DOMRect(0, 600 - page.scrollTop + 100 - scroller.scrollTop, 300, 50);
+        document.body.appendChild(page);
+        page.appendChild(scroller);
+
+        try {
+          // The slot before row 2 shows in the container, which is below the page's bottom edge
+          service.revealSlot(list, 2, 50);
+
+          expect(scroller.scrollTop).toBe(0);
+          expect(page.scrollTop).toBe(750 - 400);
+        } finally {
+          page.remove();
+        }
+      });
+    });
   });
 
   describe('constrained edge snap on a scrollable list', () => {

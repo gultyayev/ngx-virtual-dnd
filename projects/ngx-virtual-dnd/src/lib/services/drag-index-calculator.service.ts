@@ -3,7 +3,11 @@ import { type CursorPosition, END_OF_LIST, type GrabOffset } from '../models/dra
 import { PositionCalculatorService } from './position-calculator.service';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { closestAcrossShadow } from '../utils/composed-dom';
-import { ownUncoveredRect, uncoveredRect, visibleRect } from '../utils/scroll-insets';
+import { listDraggables } from '../utils/list-draggables';
+import { ownUncoveredRect, revealRange, uncoveredRect, visibleRect } from '../utils/scroll-insets';
+
+/** The `data-draggable-id` `vdnd-placeholder` marks itself with */
+const PLACEHOLDER_DRAGGABLE_ID = 'placeholder';
 
 interface DroppableCache {
   droppableId: string | null;
@@ -160,14 +164,15 @@ export class DragIndexCalculatorService {
    * Scroll a droppable's rows so the slot of `height` px at `index` (where the placeholder renders
    * before the item at that index) shows in full: inside the part of its scroll element that
    * shows (see `visibleRect`), below and above the content pinned over its edges. For lists that
-   * have no reveal of their own (`vdnd-virtual-scroll` has one), during a keyboard drag. Needs the
-   * droppable's registered strategy for the slot's offset; a no-op without one, or when less than
-   * the slot shows.
+   * have no reveal of their own (`vdnd-virtual-scroll` has one), during a keyboard drag. A no-op
+   * when less than the slot shows. A list without a registered strategy renders all its rows:
+   * see #revealRenderedSlot.
    */
   revealSlot(droppableElement: HTMLElement, index: number, height: number): void {
     const cache = this.#resolveDroppable(droppableElement, height);
     const strategy = cache.droppableId ? this.#strategies.get(cache.droppableId) : undefined;
     if (!strategy) {
+      this.#revealRenderedSlot(droppableElement, index, height);
       return;
     }
 
@@ -191,6 +196,40 @@ export class DragIndexCalculatorService {
     } else if (slotBottom > shownBottom) {
       cache.scrollContainer.scrollTop += slotBottom - shownBottom;
     }
+  }
+
+  /**
+   * revealSlot for a list of plain rows (an `@for` of draggables), which renders all of them and
+   * no placeholder of its own: the slot starts where row `index` does, or below the last row shown
+   * before it (the dragged row is hidden), or is the `vdnd-placeholder` the list renders itself.
+   * Scrolls the containers around the list, nearest first and the page last (see `revealRange`).
+   */
+  #revealRenderedSlot(list: HTMLElement, index: number, height: number): void {
+    const draggables = listDraggables(list);
+    const placeholder = draggables.find(
+      (draggable) => draggable.getAttribute('data-draggable-id') === PLACEHOLDER_DRAGGABLE_ID,
+    );
+    const placeholderRect = placeholder?.getBoundingClientRect();
+    if (placeholderRect && placeholderRect.height > 0) {
+      revealRange(list, placeholderRect.top, placeholderRect.bottom);
+      return;
+    }
+
+    const rows = placeholder ? draggables.filter((row) => row !== placeholder) : draggables;
+    let top = list.getBoundingClientRect().top;
+    const atIndex = rows[index]?.getBoundingClientRect();
+    if (atIndex && atIndex.height > 0) {
+      top = atIndex.top;
+    } else {
+      for (let i = Math.min(index, rows.length) - 1; i >= 0; i--) {
+        const row = rows[i].getBoundingClientRect();
+        if (row.height > 0) {
+          top = row.bottom;
+          break;
+        }
+      }
+    }
+    revealRange(list, top, top + height);
   }
 
   calculatePlaceholderIndex(args: {

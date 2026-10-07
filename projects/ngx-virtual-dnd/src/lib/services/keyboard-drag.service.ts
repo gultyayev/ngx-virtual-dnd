@@ -203,9 +203,10 @@ export class KeyboardDragService {
       return;
     }
     // A list without a reveal of its own (vdnd-virtual-content, vdnd-virtual-viewport,
-    // *vdndVirtualFor in a vdndScrollable): scroll it now, so a drop that follows lands in the
-    // rendered range, and once more after the next render, when the content has room for the
-    // placeholder (before, the scroll range can be one placeholder short at the end).
+    // *vdndVirtualFor in a vdndScrollable, an @for of plain rows): scroll it now, so a drop that
+    // follows lands in the rendered range, and once more after the next render, when the content
+    // has room for the placeholder (before, the scroll range can be one placeholder short at the
+    // end) and a placeholder the list renders itself is in place.
     this.#revealSlot(droppableId);
     afterNextRender(() => this.#revealSlot(droppableId), { injector: this.#injector });
   }

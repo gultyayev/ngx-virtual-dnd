@@ -20,7 +20,8 @@ interface Box {
  * The nested-scroll fixture:
  * - a page scroller whose 80px sticky header covers its top, holding a 360px column scroller (a
  *   `vdndScrollable` list) 320px into its content and, 16px below it, a 360px `vdnd-sortable-list`;
- * - beside it, a `vdnd-sortable-list` with a 40px header overlaid on its rows.
+ * - beside it, a `vdnd-sortable-list` with a 40px header overlaid on its rows;
+ * - below them, 20 plain `@for` rows of 50px in a 300px scroller with a 40px sticky header.
  */
 test.describe('Scroll insets (nested and overlaid)', () => {
   let pageErrors: ReturnType<typeof collectPageErrors>;
@@ -212,6 +213,69 @@ test.describe('Scroll insets (nested and overlaid)', () => {
       await poll(
         async () => (await placeholder.boundingBox())?.y ?? Number.NaN,
       ).toBeGreaterThanOrEqual(headerBottom - 1);
+
+      await page.keyboard.press('Escape');
+      await expect(preview).toBeHidden();
+    });
+  });
+
+  test.describe('a list of plain rows under a sticky header', () => {
+    let plainScroller: Locator;
+
+    test.beforeEach(async ({ page }) => {
+      await open(page);
+      plainScroller = page.getByTestId('plain-scroller');
+      await plainScroller.scrollIntoViewIfNeeded();
+    });
+
+    /** Viewport top of a row */
+    async function rowTop(page: Page, id: string): Promise<number> {
+      return edge(page.locator(`[data-draggable-id="${id}"]`), 'top');
+    }
+
+    test('scrolls to follow a keyboard drag past its bottom edge', async ({ page }) => {
+      await page.locator('[data-draggable-id="plain-1"]').focus();
+      await page.keyboard.press('Space');
+      await expect(preview).toBeVisible();
+      for (let i = 0; i < 10; i++) {
+        await page.keyboard.press('ArrowDown');
+      }
+
+      // Target 10: the slot where Plain row 12 starts (Plain row 1 is the one held), 50px tall
+      const bottom = await edge(plainScroller, 'bottom');
+      await poll(async () => (await rowTop(page, 'plain-12')) + 50).toBeLessThanOrEqual(bottom + 2);
+      expect(await plainScroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+
+      await page.keyboard.press('Space');
+      await expect(preview).toBeHidden();
+      await poll(() =>
+        plainScroller.evaluate(
+          (el) =>
+            el.querySelectorAll<HTMLElement>('[data-draggable-id]')[10]?.dataset['draggableId'],
+        ),
+      ).toBe('plain-1');
+    });
+
+    test('keeps the keyboard slot below the sticky header', async ({ page }) => {
+      await scroll(plainScroller, 600);
+      const headerBottom = await edge(page.getByTestId('plain-header'), 'bottom');
+      const [first] = await rowsBetween(
+        plainScroller,
+        headerBottom,
+        await edge(plainScroller, 'bottom'),
+      );
+      const firstIndex = Number(first.id.replace('plain-', '')) - 1;
+      await page.locator(`[data-draggable-id="${first.id}"]`).focus();
+      await page.keyboard.press('Space');
+      await expect(preview).toBeVisible();
+      for (let i = 0; i < 4; i++) {
+        await page.keyboard.press('ArrowUp');
+      }
+
+      // The slot starts where the row 4 above the held one does
+      await poll(() => rowTop(page, `plain-${firstIndex + 1 - 4}`)).toBeGreaterThanOrEqual(
+        headerBottom - 2,
+      );
 
       await page.keyboard.press('Escape');
       await expect(preview).toBeHidden();

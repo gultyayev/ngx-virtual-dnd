@@ -27,7 +27,8 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
  *   scroller (a `vdndScrollable` list) and below it a `vdnd-sortable-list`, both scrolling under
  *   that header with the page;
  * - beside it, a `vdnd-sortable-list` with a 40px header overlaid on the top of its rows
- *   (`scrollInsetTop` on the list).
+ *   (`scrollInsetTop` on the list);
+ * - below them, a list of plain `@for` rows in a scroller with a 40px sticky header.
  *
  * `?constrain=true` keeps drags inside their list (`constrainToContainer`).
  */
@@ -111,6 +112,25 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
           </div>
         </ng-template>
       </div>
+
+      <div
+        class="ns-plain"
+        vdndGroup="plain"
+        vdndScrollable
+        [scrollInsetTop]="40"
+        data-testid="plain-scroller"
+      >
+        <header class="ns-plain-header" data-testid="plain-header">Plain list header</header>
+        <div vdndDroppable="plain" [constrainToContainer]="constrain" (drop)="onDrop($event)">
+          @for (row of plain(); track row.id) {
+            <div class="item" [vdndDraggable]="row.id" [vdndDraggableData]="row">
+              <div class="item-inner">
+                <span class="item-text">{{ row.name }}</span>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
     </main>
 
     <vdnd-drag-preview />
@@ -193,6 +213,32 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
       background: var(--bg-sunk);
     }
 
+    .ns-plain {
+      height: 300px;
+      margin-top: 24px;
+      overflow: auto;
+      background: var(--bg-sunk);
+      border-radius: 12px;
+    }
+
+    .ns-plain-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      background: var(--surface-2);
+    }
+
+    .ns-plain .item {
+      height: 50px;
+    }
+
     .ns-side {
       position: relative;
       flex: 1;
@@ -223,11 +269,17 @@ export class NestedScrollDemoComponent {
   readonly column = signal<Row[]>(createRows('column', 'Column row', 40));
   readonly inner = signal<Row[]>(createRows('inner', 'Inner row', 40));
   readonly side = signal<Row[]>(createRows('side', 'Side row', 40));
+  readonly plain = signal<Row[]>(createRows('plain', 'Plain row', 20));
 
   readonly trackById = (_index: number, row: Row): string => row.id;
   readonly rowId = (row: Row): string => row.id;
 
   onDrop(event: DropEvent): void {
-    moveItem(event, { column: this.column, inner: this.inner, side: this.side });
+    moveItem(event, {
+      column: this.column,
+      inner: this.inner,
+      side: this.side,
+      plain: this.plain,
+    });
   }
 }

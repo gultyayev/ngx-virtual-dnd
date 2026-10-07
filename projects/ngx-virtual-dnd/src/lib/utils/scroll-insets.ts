@@ -154,3 +154,52 @@ export function visibleRect(
     read,
   );
 }
+
+/** Whether `element` scrolls its content vertically (an overflow that scrolls, and content to). */
+function scrollsVertically(element: Element): boolean {
+  if (element.scrollHeight <= element.clientHeight) {
+    return false;
+  }
+  const { overflowY } = getComputedStyle(element);
+  return overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+}
+
+/**
+ * Scroll the containers around `element` (itself included), nearest first and the page last, so
+ * the vertical range `top`..`bottom` (viewport px) shows in the part of each nothing pinned over
+ * its edges covers (see `uncoveredRect`). A container whose uncovered part is shorter than the
+ * range is left as it is.
+ */
+export function revealRange(element: Element, top: number, bottom: number): void {
+  const page = element.ownerDocument.scrollingElement;
+  for (
+    let container: Element | null = element;
+    container;
+    container = parentAcrossShadow(container)
+  ) {
+    const isPage = container === page;
+    if (isPage ? container.scrollHeight <= container.clientHeight : !scrollsVertically(container)) {
+      continue;
+    }
+    // The page's rect is its whole content; what shows of it is the viewport
+    const shown = uncoveredRect(
+      container,
+      isPage
+        ? new DOMRect(0, 0, container.clientWidth, container.clientHeight)
+        : container.getBoundingClientRect(),
+    );
+    if (!shown || shown.height < bottom - top) {
+      continue;
+    }
+    const delta =
+      top < shown.top ? top - shown.top : bottom > shown.bottom ? bottom - shown.bottom : 0;
+    if (delta === 0) {
+      continue;
+    }
+    const before = container.scrollTop;
+    container.scrollTop = before + delta;
+    const moved = container.scrollTop - before;
+    top -= moved;
+    bottom -= moved;
+  }
+}
