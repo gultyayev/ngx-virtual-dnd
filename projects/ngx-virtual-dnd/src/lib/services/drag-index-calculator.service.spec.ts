@@ -483,6 +483,80 @@ describe('DragIndexCalculatorService', () => {
         }
       });
 
+      describe('in a vdndScrollable', () => {
+        // A vdndScrollable (0..400) scrolling 2000px of content, holding the 300px container
+        let outer: HTMLElement;
+
+        beforeEach(() => {
+          outer = document.createElement('div');
+          outer.classList.add('vdnd-scrollable');
+          outer.style.overflowY = 'auto';
+          outer.getBoundingClientRect = () => new DOMRect(0, 0, 300, 400);
+          let scrollTop = 0;
+          Object.defineProperty(outer, 'scrollHeight', { value: 2000 });
+          Object.defineProperty(outer, 'clientHeight', { value: 400 });
+          Object.defineProperty(outer, 'scrollTop', {
+            get: () => scrollTop,
+            set: (value: number) => (scrollTop = Math.max(0, Math.min(value, 1600))),
+          });
+          document.body.appendChild(outer);
+        });
+
+        afterEach(() => outer.remove());
+
+        /** Place the container `top` px down in the vdndScrollable's content */
+        function placeScroller(top: number): void {
+          scroller.getBoundingClientRect = () => new DOMRect(0, top - outer.scrollTop, 300, 300);
+          rows.forEach((row, i) => {
+            row.getBoundingClientRect = () =>
+              new DOMRect(0, top - outer.scrollTop + i * 50 - scroller.scrollTop, 300, 50);
+          });
+        }
+
+        it('should leave the slot to the vdndScrollable when it can scroll it into view', () => {
+          // Only the container's top 60px show (340..400); the slot before row 2 is at 440..490
+          outer.appendChild(scroller);
+          placeScroller(340);
+
+          service.revealSlot(list, 2, 50);
+
+          expect(scroller.scrollTop).toBe(0);
+          expect(outer.scrollTop).toBe(490 - 400);
+        });
+
+        it('should reveal the slot below a header over the vdndScrollable scrolled to its top', () => {
+          // A 40px header overlaid on the vdndScrollable's top covers the container's (0..40)
+          outer.setAttribute('data-scroll-inset-top', '40');
+          outer.appendChild(scroller);
+          placeScroller(0);
+          scroller.scrollTop = 200;
+
+          // The slot before row 4: 200..250, at the container's top edge, under the header
+          service.revealSlot(list, 4, 50);
+
+          expect(scroller.scrollTop).toBe(200 - 40);
+          expect(outer.scrollTop).toBe(0);
+        });
+
+        it('should keep the slot clear of a header that does not scroll while the vdndScrollable scrolls', () => {
+          // A box that does not scroll, 370px down, whose 40px header covers the container's top
+          const box = document.createElement('div');
+          box.setAttribute('data-scroll-inset-top', '40');
+          box.getBoundingClientRect = () => new DOMRect(0, 370 - outer.scrollTop, 300, 300);
+          outer.appendChild(box);
+          box.appendChild(scroller);
+          placeScroller(370);
+          scroller.scrollTop = 200;
+
+          // The slot before row 4: 370..420, under the header (370..410) and past the bottom edge
+          service.revealSlot(list, 4, 50);
+
+          // The container moves it below the header (410..460), the vdndScrollable up into view
+          expect(scroller.scrollTop).toBe(200 - 40);
+          expect(outer.scrollTop).toBe(460 - 400);
+        });
+      });
+
       it('should scroll an outer container when the inner one has no room left', () => {
         // The page (0..400) scrolls the 300px container, which sits 600px down in it
         const page = document.createElement('div');

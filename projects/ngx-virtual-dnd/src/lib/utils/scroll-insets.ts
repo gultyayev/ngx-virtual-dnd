@@ -160,44 +160,66 @@ function scrollsVertically(element: Element): boolean {
   if (element.scrollHeight <= element.clientHeight) {
     return false;
   }
+  if (element === element.ownerDocument.scrollingElement) {
+    return true;
+  }
   const { overflowY } = getComputedStyle(element);
   return overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+}
+
+/** `uncoveredRect` of what shows of a scroll container: for the page, the viewport. */
+function shownUncoveredRect(container: Element): DOMRect | null {
+  return uncoveredRect(
+    container,
+    container === container.ownerDocument.scrollingElement
+      ? new DOMRect(0, 0, container.clientWidth, container.clientHeight)
+      : container.getBoundingClientRect(),
+  );
 }
 
 /**
  * Scroll the containers around `element` (itself included), nearest first and the page last, so
  * the vertical range `top`..`bottom` (viewport px) shows in the part of each nothing pinned over
- * its edges covers (see `uncoveredRect`), clipped to the uncovered part of the scroll containers
- * around it when the range fits there. A container whose uncovered part is shorter than the range
- * is left as it is.
+ * its edges covers (see `uncoveredRect`), and of the scroll containers around it as far as they
+ * can't scroll it there themselves (a header over it in one that doesn't scroll). A container
+ * whose uncovered part is shorter than the range is left as it is.
  */
 export function revealRange(element: Element, top: number, bottom: number): void {
-  const page = element.ownerDocument.scrollingElement;
   for (
     let container: Element | null = element;
     container;
     container = parentAcrossShadow(container)
   ) {
-    const isPage = container === page;
-    if (isPage ? container.scrollHeight <= container.clientHeight : !scrollsVertically(container)) {
+    if (!scrollsVertically(container)) {
       continue;
     }
-    // The page's rect is its whole content; what shows of it is the viewport
-    const own = uncoveredRect(
-      container,
-      isPage
-        ? new DOMRect(0, 0, container.clientWidth, container.clientHeight)
-        : container.getBoundingClientRect(),
-    );
-    // Clear of what the scroll containers around it cover too (one that can't scroll would leave
-    // it covered), unless too little of it shows there: those scroll it into view next
-    const clipped = clipToScrollContainers(own, scrollAncestors(container));
-    const shown = clipped && clipped.height >= bottom - top ? clipped : own;
-    if (!shown || shown.height < bottom - top) {
+    const own = shownUncoveredRect(container);
+    if (!own || own.height < bottom - top) {
       continue;
     }
-    const delta =
-      top < shown.top ? top - shown.top : bottom > shown.bottom ? bottom - shown.bottom : 0;
+    // Clear of what each scroll container around it covers, as far as that one can't scroll the
+    // range out from under it on its own pass (top and bottom only: this scrolls vertically)
+    let shownTop = own.top;
+    let shownBottom = own.bottom;
+    for (const ancestor of scrollAncestors(container)) {
+      const uncovered = shownUncoveredRect(ancestor);
+      if (!uncovered) {
+        continue;
+      }
+      const scrolls = scrollsVertically(ancestor);
+      const roomUp = scrolls ? ancestor.scrollTop : 0;
+      const roomDown = scrolls
+        ? ancestor.scrollHeight - ancestor.clientHeight - ancestor.scrollTop
+        : 0;
+      shownTop = Math.max(shownTop, uncovered.top - roomUp);
+      shownBottom = Math.min(shownBottom, uncovered.bottom + roomDown);
+    }
+    // Too little of it left: reveal it in its own uncovered part
+    if (shownBottom - shownTop < bottom - top) {
+      shownTop = own.top;
+      shownBottom = own.bottom;
+    }
+    const delta = top < shownTop ? top - shownTop : bottom > shownBottom ? bottom - shownBottom : 0;
     if (delta === 0) {
       continue;
     }

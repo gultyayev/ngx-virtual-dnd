@@ -170,7 +170,7 @@ Use direct `element.scrollTop += delta` (not `scrollBy()`) with synchronous call
 - Solution: Document-level keyboard listeners during drag
 - Gotcha: Call `stopPropagation()` when starting to prevent immediate drop
 - Focus: Restore with `afterNextRender()` using `EnvironmentInjector`
-- Scroll into view: every arrow key scrolls the target slot into the visible part of the list, synchronously (a drop can follow before the next render). `vdnd-virtual-scroll` registers its own revealer with `KeyboardDragService`; every other list goes through `DragIndexCalculatorService.revealSlot`, now and once more after the next render: strategy offsets for virtual lists, the rendered rows (or a `vdnd-placeholder`) for plain `@for` lists, scrolling each container around them nearest first (`revealRange`).
+- Scroll into view: every arrow key scrolls the target slot into the visible part of the list, synchronously (a drop can follow before the next render). `vdnd-virtual-scroll` registers its own revealer with `KeyboardDragService`; every other list goes through `DragIndexCalculatorService.revealSlot`, now and once more after the next render: strategy offsets for virtual lists, the rendered rows (or a `vdnd-placeholder`) for plain `@for` lists, scrolling each container around them nearest first, clear of the insets of the scroll containers around it that can't scroll the slot out from under them (`revealRange`).
 
 **Screen Reader Announcements:** Not built-in (i18n complexity). Consumers implement using position data in drag events. See the Accessibility guide (`docs/pages/guide/features/accessibility.mdx`) for an example.
 
