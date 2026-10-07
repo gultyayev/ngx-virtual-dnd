@@ -146,6 +146,24 @@ export class KeyboardDragService {
   }
 
   /**
+   * Scroll the active droppable's placeholder into view again, once: the space covered in a
+   * scroll container around it changed. A no-op without a keyboard drag.
+   * @internal
+   */
+  revealPlaceholder(): void {
+    const droppableId = this.activeDroppableId();
+    if (!this.isActive() || droppableId === null) {
+      return;
+    }
+    const reveal = this.#revealers.get(droppableId);
+    if (reveal) {
+      reveal();
+    } else {
+      this.#revealSlot(droppableId);
+    }
+  }
+
+  /**
    * Complete the keyboard drag (Space or Enter to drop).
    */
   completeKeyboardDrag(): void {

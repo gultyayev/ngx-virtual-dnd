@@ -24,7 +24,8 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
 /**
  * E2E fixture for scroll insets:
  * - a page scroller whose 80px sticky header covers its top (`scrollInsetTop`), holding a column
- *   scroller (a `vdndScrollable` list) that scrolls under that header with the page;
+ *   scroller (a `vdndScrollable` list) and below it a `vdnd-sortable-list`, both scrolling under
+ *   that header with the page;
  * - beside it, a `vdnd-sortable-list` with a 40px header overlaid on the top of its rows
  *   (`scrollInsetTop` on the list).
  *
@@ -71,7 +72,19 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
               </div>
             </ng-container>
           </div>
-          <div class="ns-filler">Content below the list</div>
+          <vdnd-sortable-list
+            class="ns-inner"
+            droppableId="inner"
+            data-testid="nested-inner-list"
+            [items]="inner()"
+            [itemHeight]="50"
+            [containerHeight]="360"
+            [itemIdFn]="rowId"
+            [itemTemplate]="rowTpl"
+            [constrainToContainer]="constrain"
+            (drop)="onDrop($event)"
+          />
+          <div class="ns-filler">Content below the lists</div>
         </div>
 
         <div class="ns-side">
@@ -174,6 +187,12 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
       background: var(--bg-sunk);
     }
 
+    .ns-inner {
+      display: block;
+      margin: 16px 16px 0;
+      background: var(--bg-sunk);
+    }
+
     .ns-side {
       position: relative;
       flex: 1;
@@ -202,12 +221,13 @@ export class NestedScrollDemoComponent {
   readonly constrain = inject(ActivatedRoute).snapshot.queryParamMap.get('constrain') === 'true';
 
   readonly column = signal<Row[]>(createRows('column', 'Column row', 40));
+  readonly inner = signal<Row[]>(createRows('inner', 'Inner row', 40));
   readonly side = signal<Row[]>(createRows('side', 'Side row', 40));
 
   readonly trackById = (_index: number, row: Row): string => row.id;
   readonly rowId = (row: Row): string => row.id;
 
   onDrop(event: DropEvent): void {
-    moveItem(event, { column: this.column, side: this.side });
+    moveItem(event, { column: this.column, inner: this.inner, side: this.side });
   }
 }

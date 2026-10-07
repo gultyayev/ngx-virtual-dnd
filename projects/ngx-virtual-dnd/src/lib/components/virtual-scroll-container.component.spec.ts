@@ -925,6 +925,42 @@ describe('VirtualScrollContainerComponent', () => {
       expect(virtualScrollEl.scrollTop).toBe(500 - 40);
     });
 
+    describe('under what a scroll container around it covers', () => {
+      // The list (100..400) scrolls under a page whose sticky header covers it down to 160
+      let page: HTMLElement;
+
+      beforeEach(() => {
+        page = fixture.nativeElement as HTMLElement;
+        page.getBoundingClientRect = () => new DOMRect(0, 0, 200, 800);
+        virtualScrollEl.getBoundingClientRect = () => new DOMRect(0, 100, 200, 300);
+      });
+
+      afterEach(() => page.removeAttribute('data-scroll-inset-top'));
+
+      it('should keep the placeholder below it', () => {
+        page.setAttribute('data-scroll-inset-top', '160');
+        virtualScrollComponent.scrollTo(2000);
+        startSameListKeyboardDrag(50);
+
+        // Placeholder at [500, 550): it must start 60px below the list's top edge
+        dragStateService.setKeyboardTargetIndex(10);
+        fixture.detectChanges();
+
+        expect(virtualScrollEl.scrollTop).toBe(500 - 60);
+      });
+
+      it('should keep the placeholder in its own uncovered part while all of it is covered', () => {
+        page.setAttribute('data-scroll-inset-top', '400');
+        virtualScrollComponent.scrollTo(2000);
+        startSameListKeyboardDrag(50);
+
+        dragStateService.setKeyboardTargetIndex(10);
+        fixture.detectChanges();
+
+        expect(virtualScrollEl.scrollTop).toBe(500);
+      });
+    });
+
     it('should scroll on the arrow key itself, before change detection runs', () => {
       component.droppableId.set('list');
       fixture.detectChanges();

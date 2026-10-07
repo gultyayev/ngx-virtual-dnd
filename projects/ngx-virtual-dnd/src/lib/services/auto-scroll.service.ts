@@ -260,10 +260,12 @@ export class AutoScrollService {
 
   /**
    * Check the containers again on the next tick even if the cursor rests: their geometry
-   * changed (a scroll container's covered space).
+   * changed (a scroll container's covered space). Collects them again too: an element that
+   * gets insets becomes a scroll container around the lists in it.
    * @internal
    */
   refresh(): void {
+    this.#orderedContainers = null;
     this.#lastTickCursorX = NaN;
     this.#lastTickCursorY = NaN;
   }

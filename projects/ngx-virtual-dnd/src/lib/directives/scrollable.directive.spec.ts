@@ -3,6 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { ScrollableDirective } from './scrollable.directive';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
+import { DragIndexCalculatorService } from '../services/drag-index-calculator.service';
+import { DroppableRegistryService } from '../services/droppable-registry.service';
+import { KeyboardDragService } from '../services/keyboard-drag.service';
+import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 
 class MockResizeObserver {
   observe = jest.fn();
@@ -145,6 +149,51 @@ describe('ScrollableDirective', () => {
       fixture.detectChanges();
 
       expect(scrollableEl.hasAttribute('data-scroll-inset-top')).toBe(false);
+    });
+
+    it('should keep a keyboard placeholder in view when the space covered at the top grows', async () => {
+      // The element is its own list (as *vdndVirtualFor in it): 100 rows of 50px in 300px
+      emulateScrollableLayout(scrollableEl, 5000, 300);
+      scrollableEl.getBoundingClientRect = () => new DOMRect(0, 0, 200, 300);
+      scrollableEl.setAttribute('data-droppable-id', 'list');
+      const unregister = TestBed.inject(DroppableRegistryService).register(
+        scrollableEl,
+        'list',
+        'g',
+      );
+      const strategy = new FixedHeightStrategy(50);
+      strategy.setItemCount(100);
+      const indexCalculator = TestBed.inject(DragIndexCalculatorService);
+      indexCalculator.registerStrategy('list', strategy);
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      try {
+        hostComponent.scrollInsetTop.set(40);
+        fixture.detectChanges();
+        scrollableEl.scrollTop = 2000;
+        const element = document.createElement('div');
+        element.getBoundingClientRect = () => new DOMRect(0, 0, 200, 50);
+        keyboardDrag.startKeyboardDrag(
+          { draggableId: 'row-50', droppableId: 'list', element, height: 50, width: 200 },
+          50,
+          100,
+          'list',
+        );
+        // Target 10 (above the source): the placeholder before row 10 at [500, 550)
+        keyboardDrag.moveToIndex(10);
+        await fixture.whenStable();
+        expect(scrollableEl.scrollTop).toBe(460);
+
+        // The header grows over the placeholder while the keyboard drag rests
+        hostComponent.scrollInsetTop.set(100);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(scrollableEl.scrollTop).toBe(400);
+      } finally {
+        keyboardDrag.cancelKeyboardDrag();
+        indexCalculator.unregisterStrategy('list');
+        unregister();
+      }
     });
   });
 

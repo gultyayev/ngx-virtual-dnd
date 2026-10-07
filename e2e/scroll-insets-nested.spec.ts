@@ -19,13 +19,14 @@ interface Box {
 /**
  * The nested-scroll fixture:
  * - a page scroller whose 80px sticky header covers its top, holding a 360px column scroller (a
- *   `vdndScrollable` list) 320px into its content;
+ *   `vdndScrollable` list) 320px into its content and, 16px below it, a 360px `vdnd-sortable-list`;
  * - beside it, a `vdnd-sortable-list` with a 40px header overlaid on its rows.
  */
 test.describe('Scroll insets (nested and overlaid)', () => {
   let pageErrors: ReturnType<typeof collectPageErrors>;
   let pageScroller: Locator;
   let column: Locator;
+  let innerScroller: Locator;
   let sideScroller: Locator;
   let preview: Locator;
 
@@ -40,6 +41,7 @@ test.describe('Scroll insets (nested and overlaid)', () => {
     });
     pageScroller = page.getByTestId('nested-page');
     column = page.getByTestId('nested-column');
+    innerScroller = page.getByTestId('nested-inner-list').locator('vdnd-virtual-scroll');
     sideScroller = page.getByTestId('side-list').locator('vdnd-virtual-scroll');
     preview = page.getByTestId('vdnd-drag-preview');
     await expect(column.locator('[data-draggable-id]').first()).toBeVisible();
@@ -179,6 +181,39 @@ test.describe('Scroll insets (nested and overlaid)', () => {
       await poll(async () => (await preview.boundingBox())!.y - headerBottom).toBeCloseTo(1, 0);
 
       await page.mouse.up();
+      await expect(preview).toBeHidden();
+    });
+  });
+
+  test.describe('a vdnd-sortable-list scrolling inside a page with a sticky header', () => {
+    test('keeps the keyboard placeholder below the page header', async ({ page }) => {
+      await open(page);
+      await scroll(innerScroller, 1000);
+      // The list's top 60px behind the page header
+      const pageTop = await edge(pageScroller, 'top');
+      const listTop = await edge(innerScroller, 'top');
+      await scroll(pageScroller, Math.round(listTop - pageTop - 20));
+      expect(await edge(innerScroller, 'top')).toBeCloseTo(pageTop + 20, 0);
+      const headerBottom = pageTop + 80;
+      const [first] = await rowsBetween(
+        innerScroller,
+        headerBottom,
+        await edge(innerScroller, 'bottom'),
+      );
+      await page.locator(`[data-draggable-id="${first.id}"]`).focus();
+      await page.keyboard.press('Space');
+      await expect(preview).toBeVisible();
+
+      const placeholder = page.locator('.vdnd-drag-placeholder-visible');
+      for (let i = 0; i < 4; i++) {
+        await page.keyboard.press('ArrowUp');
+      }
+      await waitForFrames(page, 2);
+      await poll(
+        async () => (await placeholder.boundingBox())?.y ?? Number.NaN,
+      ).toBeGreaterThanOrEqual(headerBottom - 1);
+
+      await page.keyboard.press('Escape');
       await expect(preview).toBeHidden();
     });
   });

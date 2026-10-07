@@ -48,6 +48,7 @@ import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
 import { revealDropTargetIn } from '../utils/drop-animator';
 import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
+import { clipToScrollContainers, scrollAncestors } from '../utils/scroll-insets';
 
 /**
  * Context provided to the item template.
@@ -870,24 +871,48 @@ export class VirtualScrollContainerComponent<T>
 
     // Calculate visible range: the part content pinned over the edges doesn't cover (read
     // tracked, so a keyboard drag reveals the placeholder again when it changes)
-    const insetTop = this.scrollInsetTop();
-    const insetBottom = this.scrollInsetBottom();
-    const viewportTop = currentScrollTop + insetTop;
-    const viewportBottom = currentScrollTop + height - insetBottom;
+    const { hiddenTop, hiddenBottom } = this.#hiddenEdges(element, height);
+    const viewportTop = currentScrollTop + hiddenTop;
+    const viewportBottom = currentScrollTop + height - hiddenBottom;
 
     // Check if target is fully visible
     if (targetTop < viewportTop) {
       // Target is above viewport - scroll up
-      const newScrollTop = Math.max(0, targetTop - insetTop);
+      const newScrollTop = Math.max(0, targetTop - hiddenTop);
       element.scrollTop = newScrollTop;
       this.#scrollTop.set(newScrollTop);
     } else if (targetBottom > viewportBottom) {
       // Target is below viewport - scroll down
-      const newScrollTop = targetBottom - height + insetBottom;
+      const newScrollTop = targetBottom - height + hiddenBottom;
       element.scrollTop = newScrollTop;
       this.#scrollTop.set(newScrollTop);
       if (!isFollowUp) this.#revealPlaceholderAfterRender();
     }
+  }
+
+  /**
+   * How much of the list's top and bottom (px) a keyboard drag keeps its placeholder out of: its
+   * own scroll insets, and what the scroll containers around it cover or clip beyond them (a
+   * page's sticky header the list scrolls under). Only its own insets while those containers
+   * leave less than the placeholder of it.
+   */
+  #hiddenEdges(element: HTMLElement, height: number): { hiddenTop: number; hiddenBottom: number } {
+    const hiddenTop = this.scrollInsetTop();
+    const hiddenBottom = this.scrollInsetBottom();
+    const ancestors = scrollAncestors(element);
+    const uncoveredHeight = height - hiddenTop - hiddenBottom;
+    if (ancestors.length === 0 || uncoveredHeight <= 0) {
+      return { hiddenTop, hiddenBottom };
+    }
+    const rect = element.getBoundingClientRect();
+    const shown = clipToScrollContainers(
+      new DOMRect(rect.left, rect.top + hiddenTop, rect.width, uncoveredHeight),
+      ancestors,
+    );
+    if (!shown || shown.height < this.placeholderHeight()) {
+      return { hiddenTop, hiddenBottom };
+    }
+    return { hiddenTop: shown.top - rect.top, hiddenBottom: rect.top + height - shown.bottom };
   }
 
   /** Run #revealPlaceholder again, once, after the next render, when the scroll range includes the placeholder. */

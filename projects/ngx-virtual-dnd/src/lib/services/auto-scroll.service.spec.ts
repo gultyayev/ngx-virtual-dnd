@@ -544,6 +544,46 @@ describe('AutoScrollService', () => {
       }
     });
 
+    it('should hand a nested container over to an outer one that gets insets during the drag', () => {
+      // The outer container (100..500) is no scroll container until its header covers 100..200
+      document.body.appendChild(mockElement);
+      const inner = document.createElement('div');
+      Object.defineProperty(inner, 'scrollHeight', { value: 1000 });
+      Object.defineProperty(inner, 'clientHeight', { value: 300 });
+      Object.defineProperty(inner, 'scrollWidth', { value: 200 });
+      Object.defineProperty(inner, 'clientWidth', { value: 200 });
+      inner.scrollTop = 200;
+      inner.getBoundingClientRect = () => new DOMRect(50, 150, 200, 300);
+      mockElement.appendChild(inner);
+      service.registerContainer('inner', inner);
+
+      try {
+        // Away from both edge zones: nothing scrolls
+        setupDrag({ x: 150, y: 300 });
+        service.registerContainer('test-container', mockElement);
+        startMonitoringWithScheduler();
+        flushRAF();
+        expect(inner.scrollTop).toBe(200);
+
+        // The header appears over the inner container's top; the pointer moves over it
+        mockElement.setAttribute('data-scroll-inset-top', '100');
+        service.refresh();
+        dragStateService.updateDragPosition({
+          cursorPosition: { x: 150, y: 170 },
+          activeDroppableId: null,
+          placeholderId: null,
+          placeholderIndex: null,
+        });
+        flushRAF();
+
+        expect(inner.scrollTop).toBe(200);
+        expect(mockElement.scrollTop).toBeLessThan(200);
+      } finally {
+        service.unregisterContainer('inner');
+        mockElement.remove();
+      }
+    });
+
     it('should not scroll a container its insets cover all over', () => {
       // 250 + 250 covers all of the 400px container
       mockElement.setAttribute('data-scroll-inset-top', '250');
