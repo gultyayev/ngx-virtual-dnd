@@ -310,9 +310,8 @@ export class AutoScrollService {
       // pinned over their edges (a page's sticky header), can hide part of it. A cursor over that
       // content is over the outer container, which scrolls instead.
       const shown = clipToScrollContainers(rect, ancestors);
-      const isInside = this.#positionCalculator.isInsideContainer(cursor, shown);
 
-      if (!isInside) {
+      if (!shown || !this.#positionCalculator.isInsideContainer(cursor, shown)) {
         continue;
       }
 
@@ -321,6 +320,10 @@ export class AutoScrollService {
       // is deeper in the zone than the edge, so it scrolls at full speed.
       const uncovered = uncoveredRect(element, rect);
       const edges = uncovered === rect ? shown : intersectRects(uncovered, shown);
+      // All of what shows is covered: no edge to scroll from (an outer container may scroll)
+      if (!edges) {
+        continue;
+      }
       const nearEdge = this.#positionCalculator.getNearEdge(cursor, edges, config.threshold);
 
       // Reuse the per-frame direction object to avoid allocation.

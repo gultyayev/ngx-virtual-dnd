@@ -18,8 +18,8 @@ interface DragSessionSnapshot {
   groupName: string;
   /** Candidate droppables in document order (document order === default paint order). */
   candidates: HTMLElement[];
-  /** Cached bounding rects, parallel to `candidates`. */
-  rects: DOMRect[];
+  /** Cached hit-test rects, parallel to `candidates`: null where nothing of it shows. */
+  rects: (DOMRect | null)[];
   /** When true, rects are re-read on the next hit-test (set on scroll/resize). */
   dirty: boolean;
   /**
@@ -280,10 +280,10 @@ export class PositionCalculatorService {
    * out of a clipping container still hit-tests over its full unclipped rect (issue #23 case 3),
    * and rows behind a sticky header would be drop targets. Each element is read once per pass, so
    * lists side by side in one scroller share its rect. The containers are looked up on each pass:
-   * a list moved to another scroller mid-drag keeps its registration. An empty intersection has a
-   * negative width/height, so the `#hitTest` bounds check can never match it.
+   * a list moved to another scroller mid-drag keeps its registration. A candidate nothing of which
+   * shows (scrolled out of view, or all behind sticky content) gets null, which never matches.
    */
-  #measureRects(candidates: readonly HTMLElement[], rects: DOMRect[]): DOMRect[] {
+  #measureRects(candidates: readonly HTMLElement[], rects: (DOMRect | null)[]): (DOMRect | null)[] {
     const measured = new Map<Element, DOMRect>();
     const read = (element: Element): DOMRect => {
       let rect = measured.get(element);
@@ -388,7 +388,12 @@ export class PositionCalculatorService {
    * that toggling `disabled` mid-drag takes effect on the very next frame. The check is
    * a cheap `hasAttribute` read that does not force layout, keeping the loop hot.
    */
-  #hitTest(x: number, y: number, candidates: HTMLElement[], rects: DOMRect[]): HTMLElement | null {
+  #hitTest(
+    x: number,
+    y: number,
+    candidates: HTMLElement[],
+    rects: (DOMRect | null)[],
+  ): HTMLElement | null {
     let match: HTMLElement | null = null;
     for (let i = 0; i < candidates.length; i++) {
       const candidate = candidates[i];
@@ -396,7 +401,7 @@ export class PositionCalculatorService {
         continue;
       }
       const r = rects[i];
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      if (r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
         match = candidate;
       }
     }

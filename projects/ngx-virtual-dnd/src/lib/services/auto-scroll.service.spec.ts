@@ -544,6 +544,14 @@ describe('AutoScrollService', () => {
       }
     });
 
+    it('should not scroll a container its insets cover all over', () => {
+      // 250 + 250 covers all of the 400px container
+      mockElement.setAttribute('data-scroll-inset-top', '250');
+      mockElement.setAttribute('data-scroll-inset-bottom', '250');
+
+      expect(scrollTopAfterTick({ x: 150, y: 300 })).toBe(200);
+    });
+
     it('should not scroll from a cursor outside the container', () => {
       mockElement.setAttribute('data-scroll-inset-top', '100');
 

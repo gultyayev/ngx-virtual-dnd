@@ -170,7 +170,8 @@ export function findDropTarget(
     if (rect.width === 0 && rect.height === 0) return null;
     // Only where the list shows: scroll containers around it, and content pinned over their
     // edges (a sticky header), can hide part of it.
-    const visible = overlaps(rect, visibleRect(droppable));
+    const shown = visibleRect(droppable);
+    const visible = shown !== null && overlaps(rect, shown);
     return visible ? { element, rect } : null;
   }
   return null;

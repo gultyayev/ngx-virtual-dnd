@@ -818,6 +818,58 @@ describe('PositionCalculatorService', () => {
       expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBe(drop);
     });
 
+    /** A droppable (100..130) in a `.vdnd-scrollable` with the given rect and insets */
+    function droppableIn(
+      scrollerRect: Partial<DOMRect>,
+      insets: { top?: number; bottom?: number } = {},
+    ): HTMLElement {
+      const scroller = document.createElement('div');
+      scroller.className = 'vdnd-scrollable';
+      if (insets.top) scroller.setAttribute('data-scroll-inset-top', String(insets.top));
+      if (insets.bottom) scroller.setAttribute('data-scroll-inset-bottom', String(insets.bottom));
+      stubRect(scroller, scrollerRect);
+      document.body.appendChild(scroller);
+      created.push(scroller);
+      const drop = document.createElement('div');
+      drop.setAttribute('data-droppable-id', 'list');
+      drop.setAttribute('data-droppable-group', 'g');
+      stubRect(drop, { top: 100, left: 100, right: 300, bottom: 130 });
+      scroller.appendChild(drop);
+      registerDroppable(drop);
+      return drop;
+    }
+
+    it('does not hit a droppable scrolled out of its scroll container, between the two', () => {
+      const dragged = document.createElement('div');
+      droppableIn({ top: 160, left: 100, right: 300, bottom: 300 });
+
+      service.beginDragSession('g');
+
+      expect(service.findDroppableAtPoint(150, 150, dragged, 'g')).toBeNull();
+    });
+
+    it("does not hit a droppable all behind the space covered at its scroller's top", () => {
+      const dragged = document.createElement('div');
+      droppableIn({ top: 100, left: 100, right: 300, bottom: 300 }, { top: 60 });
+
+      service.beginDragSession('g');
+
+      expect(service.findDroppableAtPoint(150, 150, dragged, 'g')).toBeNull();
+    });
+
+    it('does not hit a droppable whose scroller is covered all over', () => {
+      const dragged = document.createElement('div');
+      const drop = droppableIn(
+        { top: 100, left: 100, right: 300, bottom: 300 },
+        { top: 150, bottom: 150 },
+      );
+      stubRect(drop, { top: 100, left: 100, right: 300, bottom: 300 });
+
+      service.beginDragSession('g');
+
+      expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBeNull();
+    });
+
     it('does not clip when the droppable has no scrollable ancestor', () => {
       const dragged = document.createElement('div');
       const drop = document.createElement('div');

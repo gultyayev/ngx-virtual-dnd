@@ -34,35 +34,51 @@ export function hasScrollInsets(element: Element): boolean {
 }
 
 /**
- * The part of a scroll container nothing pinned over its edges covers: its rect (`rect`, read
- * when not given) shrunk by its scroll insets. The rect itself when it has none. Empty (a
- * negative height) when the insets cover all of it.
+ * Rect results here are null when no area is left. A rect with a negative height would not do:
+ * DOMRect normalizes it (its `top` is the lesser of `y` and `y + height`), so it would cover the
+ * gap between the two rects it came from.
  */
-export function uncoveredRect(element: Element, rect = element.getBoundingClientRect()): DOMRect {
+
+/**
+ * The part of a scroll container nothing pinned over its edges covers: its rect (`rect`, read
+ * when not given) shrunk by its scroll insets. The rect itself when it has none; null when they
+ * cover all of it.
+ */
+export function uncoveredRect(
+  element: Element,
+  rect = element.getBoundingClientRect(),
+): DOMRect | null {
   const top = readScrollInset(element, 'top');
   const bottom = readScrollInset(element, 'bottom');
   if (top === 0 && bottom === 0) {
     return rect;
   }
   const uncoveredTop = rect.top + top;
+  const uncoveredBottom = rect.bottom - bottom;
+  if (uncoveredBottom <= uncoveredTop) {
+    return null;
+  }
   return new DOMRect(
     rect.left,
     uncoveredTop,
     rect.right - rect.left,
-    rect.bottom - bottom - uncoveredTop,
+    uncoveredBottom - uncoveredTop,
   );
 }
 
-/** The overlap of two rects: empty (a negative width or height) when they don't overlap. */
-export function intersectRects(a: DOMRect, b: DOMRect): DOMRect {
+/** The overlap of two rects, or null when they don't overlap (or either is null). */
+export function intersectRects(a: DOMRect | null, b: DOMRect | null): DOMRect | null {
+  if (!a || !b) {
+    return null;
+  }
   const left = Math.max(a.left, b.left);
   const top = Math.max(a.top, b.top);
-  return new DOMRect(
-    left,
-    top,
-    Math.min(a.right, b.right) - left,
-    Math.min(a.bottom, b.bottom) - top,
-  );
+  const right = Math.min(a.right, b.right);
+  const bottom = Math.min(a.bottom, b.bottom);
+  if (right <= left || bottom <= top) {
+    return null;
+  }
+  return new DOMRect(left, top, right - left, bottom - top);
 }
 
 /**
@@ -83,14 +99,20 @@ export function scrollAncestors(element: Element): Element[] {
   return containers;
 }
 
-/** `rect` clipped to the uncovered part of each of `containers`. `rect` itself without any. */
+/**
+ * `rect` clipped to the uncovered part of each of `containers`: `rect` itself without any, null
+ * when they hide all of it.
+ */
 export function clipToScrollContainers(
-  rect: DOMRect,
+  rect: DOMRect | null,
   containers: readonly Element[],
   read: RectReader = readRect,
-): DOMRect {
+): DOMRect | null {
   let clipped = rect;
   for (const container of containers) {
+    if (!clipped) {
+      return null;
+    }
     clipped = intersectRects(clipped, uncoveredRect(container, read(container)));
   }
   return clipped;
@@ -99,13 +121,14 @@ export function clipToScrollContainers(
 /**
  * The part of `element` the space covered in it leaves: its rect (`rect`, read when not given)
  * minus its own scroll insets and those of a `vdnd-virtual-scroll` child (the droppable of
- * `vdnd-sortable-list` wraps the one that scrolls its rows). The rect itself without any.
+ * `vdnd-sortable-list` wraps the one that scrolls its rows). The rect itself without any, null
+ * when they cover all of it.
  */
 export function ownUncoveredRect(
   element: Element,
   rect?: DOMRect,
   read: RectReader = readRect,
-): DOMRect {
+): DOMRect | null {
   let uncovered = uncoveredRect(element, rect ?? read(element));
   for (const child of Array.from(element.children)) {
     if (child.tagName === 'VDND-VIRTUAL-SCROLL' && hasScrollInsets(child)) {
@@ -118,13 +141,13 @@ export function ownUncoveredRect(
 /**
  * The part of `element` that shows: its own uncovered part (see `ownUncoveredRect`), clipped to
  * the uncovered part of every scroll container around it. The rect itself when nothing clips or
- * covers it.
+ * covers it, null when nothing of it shows.
  */
 export function visibleRect(
   element: Element,
   rect?: DOMRect,
   read: RectReader = readRect,
-): DOMRect {
+): DOMRect | null {
   return clipToScrollContainers(
     ownUncoveredRect(element, rect, read),
     scrollAncestors(element),

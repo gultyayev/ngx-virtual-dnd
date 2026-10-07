@@ -259,6 +259,19 @@ describe('findDropTarget', () => {
     expect(findDropTarget('behind-header', ['list'], getDroppable)).toBeNull();
   });
 
+  it('returns null when the scroll container around its list is covered all over', () => {
+    const scroller = document.createElement('div');
+    scroller.className = 'vdnd-scrollable';
+    scroller.setAttribute('data-scroll-inset-top', '250');
+    scroller.setAttribute('data-scroll-inset-bottom', '250');
+    scroller.getBoundingClientRect = () => rect(0, 0, 200, 400);
+    document.body.appendChild(scroller);
+    const list = createList('list', rect(0, 0, 200, 400), scroller);
+    addItem(list, 'item-1', rect(0, 180, 200, 40));
+
+    expect(findDropTarget('item-1', ['list'], getDroppable)).toBeNull();
+  });
+
   it('returns null when the item is scrolled out of the scroll container around its list', () => {
     const scroller = document.createElement('div');
     scroller.className = 'vdnd-scrollable';

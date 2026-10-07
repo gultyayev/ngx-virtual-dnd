@@ -175,6 +175,9 @@ export class DragIndexCalculatorService {
     // has the space reserved above them subtracted), so offsets compare to it directly
     const { rect, scrollTop } = this.#getScrollGeometry(cache);
     const shown = visibleRect(cache.scrollContainer, rect);
+    if (!shown) {
+      return;
+    }
     const shownTop = scrollTop + (shown.top - rect.top);
     const shownBottom = scrollTop + (shown.bottom - rect.top);
     if (shownBottom - shownTop < height) {
@@ -294,9 +297,8 @@ export class DragIndexCalculatorService {
     // than the viewport. If cursor is in the bottom portion of the container and we're at
     // or past the last visible slot, snap to totalItems.
     // The bottom edge is that of the part of the container nothing pinned over it covers.
-    const cursorRelativeToBottom =
-      uncoveredRect(cache.scrollContainer, rect).bottom - previewCenterY;
-    const isNearBottomEdge = cursorRelativeToBottom < itemHeight;
+    const uncovered = uncoveredRect(cache.scrollContainer, rect);
+    const isNearBottomEdge = uncovered !== null && uncovered.bottom - previewCenterY < itemHeight;
     if (isNearBottomEdge && placeholderIndex >= totalItems - 1) {
       placeholderIndex = totalItems;
     }
@@ -308,8 +310,8 @@ export class DragIndexCalculatorService {
     // how a constrained drag autoscrolls) keeps the probe's index, the visible edge row.
     // A list that is its own scroll container (or wraps the vdnd-virtual-scroll that scrolls its
     // rows) pins the preview at the edges of the part content pinned over them doesn't cover.
-    if (isConstrainedToContainer) {
-      const droppableRect = ownUncoveredRect(droppableElement);
+    const droppableRect = isConstrainedToContainer ? ownUncoveredRect(droppableElement) : null;
+    if (droppableRect) {
       const edgeTolerance = 2;
       const distanceToTop = Math.abs(previewTopY - droppableRect.top);
       const distanceToBottom = Math.abs(droppableRect.bottom - previewBottomY);

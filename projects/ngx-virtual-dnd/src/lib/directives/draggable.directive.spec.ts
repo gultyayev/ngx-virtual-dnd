@@ -2333,6 +2333,17 @@ describe('DraggableDirective', () => {
       expect(autoScrollCursor).toEqual({ x: 150, y: 150 });
     });
 
+    it('should clamp to the whole container when the space covered in it hides all of it', () => {
+      // 280px at the top and 40px at the bottom cover all of the 300px container
+      insetFixture.componentInstance.insetTop.set(280);
+      insetFixture.detectChanges();
+
+      const { cursor } = dragTo(-500);
+
+      // Its top edge, as without insets: 0 + 20 + 1
+      expect(cursor).toEqual({ x: 150, y: 21 });
+    });
+
     it('should keep constraining a drag whose first move lands on the covered space', () => {
       const updateDragPosition = jest.spyOn(dragStateService, 'updateDragPosition');
       item.dispatchEvent(

@@ -747,7 +747,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       return position;
     }
 
-    const containerRect = visibleRect(this.#constraintElement);
+    const containerRect = this.#constraintRect(this.#constraintElement);
     const grabOffset = this.#dragState.grabOffset();
     if (!grabOffset) {
       return position;
@@ -766,6 +766,15 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       x: Math.max(minX, Math.min(position.x, maxX)),
       y: Math.max(minY, Math.min(position.y, maxY)),
     };
+  }
+
+  /**
+   * The rect a constrained drag stays in: the part of the container that shows. When nothing of
+   * it shows (scrolled out of view, or all behind sticky content), the whole container, as
+   * without scroll insets: autoscroll at its edge brings it back into view.
+   */
+  #constraintRect(element: HTMLElement): DOMRect {
+    return visibleRect(element) ?? element.getBoundingClientRect();
   }
 
   /**
@@ -803,7 +812,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     // of where the user grabbed the item. Like the preview, it stays in the part of the
     // container that shows.
     if (this.#constrainToContainer && this.#constraintElement && this.#lastRawPosition) {
-      const rect = visibleRect(this.#constraintElement);
+      const rect = this.#constraintRect(this.#constraintElement);
       let scrollCursor: CursorPosition = this.#lastRawPosition;
       if (axisLock && startPos) {
         scrollCursor = {

@@ -41,16 +41,23 @@ describe('scroll insets', () => {
 
       const uncovered = uncoveredRect(element, rect);
 
-      expect([uncovered.left, uncovered.top, uncovered.right, uncovered.bottom]).toEqual([
+      expect([uncovered?.left, uncovered?.top, uncovered?.right, uncovered?.bottom]).toEqual([
         10, 160, 210, 460,
       ]);
+    });
+
+    it('should be null when the insets cover all of it', () => {
+      element.setAttribute('data-scroll-inset-top', '250');
+      element.setAttribute('data-scroll-inset-bottom', '150');
+
+      expect(uncoveredRect(element, rect)).toBeNull();
     });
 
     it('should read the element rect when none is given', () => {
       element.getBoundingClientRect = () => rect;
       element.setAttribute('data-scroll-inset-top', '60');
 
-      expect(uncoveredRect(element).top).toBe(160);
+      expect(uncoveredRect(element)?.top).toBe(160);
     });
   });
 });
@@ -76,7 +83,7 @@ describe('visible part of an element', () => {
     return el;
   }
 
-  const edges = (r: DOMRect): number[] => [r.top, r.bottom];
+  const edges = (r: DOMRect | null): number[] | null => (r ? [r.top, r.bottom] : null);
 
   afterEach(() => {
     created.forEach((el) => el.remove());
@@ -130,6 +137,22 @@ describe('visible part of an element', () => {
     visibleRect(list, undefined, read);
 
     expect(read.mock.calls.map(([el]) => el)).toEqual([list, page]);
+  });
+
+  it('should be null when a scroll container around it hides all of it', () => {
+    // The scroller shows 160..300; the list (100..130) is scrolled out above it. A DOMRect with
+    // a negative height would normalize to 130..160, between them.
+    const scroller = box(document.body, 160, 300, { scroller: true });
+    const list = box(scroller, 100, 130);
+
+    expect(visibleRect(list)).toBeNull();
+  });
+
+  it('should be null when it is behind what a scroll container around it covers', () => {
+    const scroller = box(document.body, 100, 300, { scroller: true, insetTop: 60 });
+    const list = box(scroller, 100, 130);
+
+    expect(visibleRect(list)).toBeNull();
   });
 
   it('should list the scroll containers around an element, nearest first', () => {
