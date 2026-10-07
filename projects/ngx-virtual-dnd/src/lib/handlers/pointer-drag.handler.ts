@@ -379,6 +379,12 @@ export class PointerDragHandler {
       return;
     }
 
+    // Another mouse button lifted while the left one (the only one that starts a press) is
+    // still down
+    if (!('touches' in event) && event.button !== 0) {
+      return;
+    }
+
     // Only prevent default if we were actually dragging
     // Otherwise, allow native touch behavior (like scroll momentum) to complete
     // The drag end runs consumer handlers (dragEnd, drop); stop tracking even if one throws
