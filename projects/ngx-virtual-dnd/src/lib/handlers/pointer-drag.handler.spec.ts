@@ -616,6 +616,49 @@ describe('PointerDragHandler', () => {
 
       expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
     });
+
+    describe.each([
+      ['middle', 1],
+      ['right', 2],
+    ])('releasing the %s button while the left one stays held', (_name, button) => {
+      const releaseOtherButton = (x: number, y: number): void => {
+        document.dispatchEvent(
+          new MouseEvent('mouseup', {
+            clientX: x,
+            clientY: y,
+            button,
+            buttons: 1, // The left button is still down
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      };
+
+      it('should keep an active drag going until the left button is released', () => {
+        handler.onPointerDown(createMouseDown(150, 220), false);
+        document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+        releaseOtherButton(160, 220);
+        document.dispatchEvent(createMouseEvent('mousemove', 170, 240));
+
+        expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
+        expect(mockCallbacks.onDragMove).toHaveBeenLastCalledWith({ x: 170, y: 240 });
+
+        document.dispatchEvent(createMouseEvent('mouseup', 170, 240));
+
+        expect(mockCallbacks.onDragEnd).toHaveBeenCalledTimes(1);
+        expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(false);
+      });
+
+      it('should keep a pending press so the left button can still start the drag', () => {
+        handler.onPointerDown(createMouseDown(150, 220), false);
+
+        releaseOtherButton(150, 220);
+        document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+        expect(mockCallbacks.onDragStart).toHaveBeenCalledWith({ x: 160, y: 220 });
+      });
+    });
   });
 
   describe('a drag end that throws', () => {
