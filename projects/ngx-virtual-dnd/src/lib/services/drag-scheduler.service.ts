@@ -89,6 +89,17 @@ export class DragSchedulerService {
   }
 
   /**
+   * Run the next tick's main compute again for the last queued cursor, as if the pointer had
+   * moved: the geometry it is computed against changed (a scroll container's covered space).
+   * No-op while the scheduler is stopped.
+   */
+  requestUpdate(): void {
+    if (this.#onTick) {
+      this.#cursorDirty = true;
+    }
+  }
+
+  /**
    * Register a function to be called at the start of each frame, before the main tick.
    * AutoScrollService registers here to perform edge-scroll within the same frame.
    * No-op if the same function reference is already registered.

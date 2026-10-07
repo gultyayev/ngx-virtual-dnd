@@ -249,6 +249,16 @@ export class AutoScrollService {
   }
 
   /**
+   * Check the containers again on the next tick even if the cursor rests: their geometry
+   * changed (a scroll container's covered space).
+   * @internal
+   */
+  refresh(): void {
+    this.#lastTickCursorX = NaN;
+    this.#lastTickCursorY = NaN;
+  }
+
+  /**
    * Participant tick — called by DragSchedulerService each RAF frame.
    *
    * Runs the edge-scroll check and, if a scroll is performed, synchronously
@@ -304,20 +314,26 @@ export class AutoScrollService {
       direction.y = 0;
       let maxDistance = 0;
 
-      if (nearEdge.top) {
+      // In a container shorter (or narrower) than both zones together, the cursor can be in both:
+      // the edge it is nearer to (or has passed) wins, the start edge on a tie.
+      const toTop = cursor.y - edges.top;
+      const toBottom = edges.bottom - cursor.y;
+      if (nearEdge.top && (!nearEdge.bottom || toTop <= toBottom)) {
         direction.y = -1;
-        maxDistance = Math.max(maxDistance, config.threshold - (cursor.y - edges.top));
+        maxDistance = Math.max(maxDistance, config.threshold - toTop);
       } else if (nearEdge.bottom) {
         direction.y = 1;
-        maxDistance = Math.max(maxDistance, config.threshold - (edges.bottom - cursor.y));
+        maxDistance = Math.max(maxDistance, config.threshold - toBottom);
       }
 
-      if (nearEdge.left) {
+      const toLeft = cursor.x - edges.left;
+      const toRight = edges.right - cursor.x;
+      if (nearEdge.left && (!nearEdge.right || toLeft <= toRight)) {
         direction.x = -1;
-        maxDistance = Math.max(maxDistance, config.threshold - (cursor.x - edges.left));
+        maxDistance = Math.max(maxDistance, config.threshold - toLeft);
       } else if (nearEdge.right) {
         direction.x = 1;
-        maxDistance = Math.max(maxDistance, config.threshold - (edges.right - cursor.x));
+        maxDistance = Math.max(maxDistance, config.threshold - toRight);
       }
 
       if (direction.x !== 0 || direction.y !== 0) {

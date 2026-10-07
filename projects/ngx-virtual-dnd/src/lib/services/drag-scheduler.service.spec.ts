@@ -168,6 +168,30 @@ describe('DragSchedulerService', () => {
       expect(onTick).toHaveBeenNthCalledWith(2, cursor, false);
     });
 
+    it('should run the next tick with the last cursor as dirty after requestUpdate()', () => {
+      const onTick = jest.fn();
+      const cursor: CursorPosition = { x: 100, y: 200 };
+      service.start(onTick);
+      service.queueCursorUpdate(cursor);
+      flushRAF(); // frame 1: dirty
+      flushRAF(); // frame 2: resting
+
+      service.requestUpdate();
+      flushRAF(); // frame 3: dirty again, same cursor
+
+      expect(onTick).toHaveBeenNthCalledWith(2, cursor, false);
+      expect(onTick).toHaveBeenNthCalledWith(3, cursor, true);
+    });
+
+    it('should not carry a requestUpdate() made while stopped into the next drag', () => {
+      service.requestUpdate();
+      const onTick = jest.fn();
+      service.start(onTick);
+      flushRAF();
+
+      expect(onTick).toHaveBeenCalledWith(null, false);
+    });
+
     it('should use the latest cursor when multiple updates are queued before a frame', () => {
       const onTick = jest.fn();
       service.start(onTick);

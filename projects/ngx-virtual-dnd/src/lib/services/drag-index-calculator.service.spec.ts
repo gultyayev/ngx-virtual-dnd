@@ -295,6 +295,29 @@ describe('DragIndexCalculatorService', () => {
     expect(indexAt(319)).toBe(12);
   });
 
+  it('snaps to the end near the bottom edge of the part of the list nothing covers', () => {
+    // 8 rows of 50px fill 0..400 of a 500px list whose bottom 100px a sticky footer covers
+    const strategy = new MockStrategy([0, 50, 100, 150, 200, 250, 300, 350, 400], (offset) =>
+      Math.floor(offset / 50),
+    );
+    const droppable = createDroppable('list-1', 8);
+    droppable.setAttribute('data-scroll-inset-bottom', '100');
+    service.registerStrategy('list-1', strategy);
+
+    const index = service.calculatePlaceholderIndex({
+      droppableElement: droppable,
+      // Preview 360..410: its center (385) is 15px above the footer, over the last row
+      position: { x: 20, y: 360 },
+      previousPosition: null,
+      grabOffset: { x: 20, y: 0 },
+      draggedItemHeight: 50,
+      sourceDroppableId: null,
+      sourceIndex: null,
+    }).index;
+
+    expect(index).toBe(8);
+  });
+
   describe('constrained edge snap on a scrollable list', () => {
     // 50 rows of 50px in a 400px list: max scrollTop = 2500 - 400 = 2100.
     const ROW = 50;

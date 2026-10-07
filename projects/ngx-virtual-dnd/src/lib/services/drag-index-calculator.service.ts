@@ -259,7 +259,9 @@ export class DragIndexCalculatorService {
     // Due to max scroll limits, the math alone can't reach totalItems when the list is longer
     // than the viewport. If cursor is in the bottom portion of the container and we're at
     // or past the last visible slot, snap to totalItems.
-    const cursorRelativeToBottom = rect.bottom - previewCenterY;
+    // The bottom edge is that of the part of the container nothing pinned over it covers.
+    const cursorRelativeToBottom =
+      uncoveredRect(cache.scrollContainer, rect).bottom - previewCenterY;
     const isNearBottomEdge = cursorRelativeToBottom < itemHeight;
     if (isNearBottomEdge && placeholderIndex >= totalItems - 1) {
       placeholderIndex = totalItems;

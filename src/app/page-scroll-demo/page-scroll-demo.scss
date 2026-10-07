@@ -80,6 +80,10 @@ ion-content::part(scroll) {
 .is-sticky .tm-add {
   bottom: 0;
 }
+/* The hover tint over the opaque background (the global hover rule loses to the one above) */
+.is-sticky .tm-add:hover {
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg);
+}
 
 /* Fixed-height virtual mode: every row must render at exactly itemHeight (72px). */
 .tm-fixed .task {

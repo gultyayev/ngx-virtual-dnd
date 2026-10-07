@@ -192,6 +192,56 @@ test.describe('Scroll insets (sticky header and footer)', () => {
       await expect(taskDemo.dragPreview).toBeHidden();
     });
 
+    test('keeps constraining a drag whose first move lands on the sticky header', async ({
+      page,
+    }) => {
+      await scrollTo(1500);
+      const layout = await stickyLayout(page);
+      const [topRow] = await waitForUncoveredRows(page);
+      const x = topRow.x + topRow.width / 2;
+      await page.mouse.move(x, topRow.y + topRow.height / 2);
+      await page.mouse.down();
+      // A fast pull up: the move that starts the drag is already over the header
+      await page.mouse.move(x, (layout.containerTop + layout.headerBottom) / 2);
+      await expect(taskDemo.dragPreview).toBeVisible();
+
+      await moveTo(page, x, layout.containerTop + 5);
+      await poll(async () => (await previewEdges(page)).top - layout.headerBottom).toBeCloseTo(
+        1,
+        0,
+      );
+
+      await page.mouse.up();
+      await expect(taskDemo.dragPreview).toBeHidden();
+    });
+
+    test('keeps the preview below the sticky header when the header grows mid-drag', async ({
+      page,
+    }) => {
+      await scrollTo(1500);
+      const layout = await stickyLayout(page);
+      const rows = await waitForUncoveredRows(page);
+      await startDrag(page, rows[Math.floor(rows.length / 2)]);
+      await moveTo(page, layout.centerX, layout.headerBottom + 5);
+      await poll(async () => (await previewEdges(page)).top - layout.headerBottom).toBeCloseTo(
+        1,
+        0,
+      );
+
+      // The header grows 60px while the pointer rests
+      await taskDemo.header.evaluate((header) => {
+        header.style.minHeight = `${header.getBoundingClientRect().height + 60}px`;
+      });
+
+      await poll(
+        async () => (await previewEdges(page)).top - (await stickyLayout(page)).headerBottom,
+      ).toBeCloseTo(1, 0);
+      expect((await stickyLayout(page)).headerBottom).toBeCloseTo(layout.headerBottom + 60, 0);
+
+      await page.mouse.up();
+      await expect(taskDemo.dragPreview).toBeHidden();
+    });
+
     test('drops at the start of the list under the sticky header', async ({ page }) => {
       const layout = await stickyLayout(page);
       const rows = await waitForUncoveredRows(page);
@@ -228,12 +278,13 @@ test.describe('Scroll insets (sticky header and footer)', () => {
       const dragged = rows[rows.length - 3];
       await startDrag(page, dragged);
 
+      const total = Number(await page.getByTestId('task-count').getAttribute('data-total'));
       await moveTo(page, layout.centerX, layout.containerBottom - 5);
       await waitForAutoscroll(taskDemo.scrollContainer, 'down', 'end');
       await expect(async () => {
         const state = await debugState(page);
         expect(state.activeDroppable).toBe('tasks');
-        expect(state.placeholderIndex).toBe(150);
+        expect(state.placeholderIndex).toBe(total);
       }).toPass({ timeout: 3000 });
 
       await page.mouse.up();
@@ -263,6 +314,20 @@ test.describe('Scroll insets (sticky header and footer)', () => {
       await expect(taskDemo.dragPreview).toBeHidden();
     });
 
+    test('autoscrolls down from just above the sticky footer', async ({ page }) => {
+      await scrollTo(1500);
+      const layout = await stickyLayout(page);
+      const rows = await waitForUncoveredRows(page);
+      await startDrag(page, rows[Math.floor(rows.length / 2)]);
+
+      // 25px above the footer: further from the container's bottom edge than the 50px threshold
+      await moveTo(page, layout.centerX, layout.footerTop - 25);
+      await waitForAutoscroll(taskDemo.scrollContainer, 'down', 2000);
+
+      await page.mouse.up();
+      await expect(taskDemo.dragPreview).toBeHidden();
+    });
+
     test('does not target the rows under the sticky header', async ({ page }) => {
       await scrollTo(3000);
       const layout = await stickyLayout(page);
@@ -273,7 +338,7 @@ test.describe('Scroll insets (sticky header and footer)', () => {
       // Rows scroll under the header, but the pointer over it is not over the list
       const headerY = layout.headerBottom - 10;
       await settleDragPosition(page, layout.centerX, headerY);
-      await waitForFrames(page, 2);
+      await waitForFrames(page, 10);
       expect((await debugState(page)).activeDroppable).toBeNull();
 
       // Back in the uncovered part, the list is the target again

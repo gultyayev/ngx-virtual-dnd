@@ -463,6 +463,39 @@ describe('AutoScrollService', () => {
       expect(scrollTopAfterTick({ x: 150, y: 300 })).toBe(200);
     });
 
+    it('should scroll towards the nearer edge when the uncovered part is shorter than the threshold', () => {
+      // Uncovered: 250..290, 40px (less than the 50px threshold), so both edge zones overlap
+      mockElement.setAttribute('data-scroll-inset-top', '150');
+      mockElement.setAttribute('data-scroll-inset-bottom', '210');
+
+      // Over the bottom covered space: 45px below the top edge, 5px past the bottom one
+      expect(scrollTopAfterTick({ x: 150, y: 295 })).toBeGreaterThan(200);
+    });
+
+    it('should scroll up when the cursor is nearer the top edge of a short uncovered part', () => {
+      mockElement.setAttribute('data-scroll-inset-top', '150');
+      mockElement.setAttribute('data-scroll-inset-bottom', '210');
+
+      expect(scrollTopAfterTick({ x: 150, y: 260 })).toBeLessThan(200);
+    });
+
+    it('should check a resting cursor again after refresh() (the covered space changed)', () => {
+      setupDrag({ x: 150, y: 300 });
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(mockElement.scrollTop).toBe(200);
+
+      // A header grows over the resting cursor
+      mockElement.setAttribute('data-scroll-inset-top', '200');
+      flushRAF();
+      expect(mockElement.scrollTop).toBe(200);
+      service.refresh();
+      flushRAF();
+
+      expect(mockElement.scrollTop).toBeLessThan(200);
+    });
+
     it('should not scroll from a cursor outside the container', () => {
       mockElement.setAttribute('data-scroll-inset-top', '100');
 

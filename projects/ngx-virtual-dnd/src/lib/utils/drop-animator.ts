@@ -4,6 +4,8 @@ import {
   type VdndAnimationConfig,
 } from '../tokens/animation-config.token';
 import { queryByAttribute } from './attribute-selectors';
+import { closestAcrossShadow } from './composed-dom';
+import { uncoveredRect } from './scroll-insets';
 
 /** Where the ghost should land, and the element that stands there. */
 export interface DropAnimationTarget {
@@ -167,13 +169,24 @@ export function findDropTarget(
     const rect = element.getBoundingClientRect();
     // Hidden, or virtualized/scrolled out of the list's visible box: nowhere to land.
     if (rect.width === 0 && rect.height === 0) return null;
-    const bounds = droppable.getBoundingClientRect();
     const visible =
-      rect.bottom > bounds.top &&
-      rect.top < bounds.bottom &&
-      rect.right > bounds.left &&
-      rect.left < bounds.right;
+      overlaps(rect, droppable.getBoundingClientRect()) && overlapsScrollerView(rect, droppable);
     return visible ? { element, rect } : null;
   }
   return null;
+}
+
+/** Whether two rects overlap. */
+function overlaps(a: DOMRect, b: DOMRect): boolean {
+  return a.bottom > b.top && a.top < b.bottom && a.right > b.left && a.left < b.right;
+}
+
+/**
+ * Whether `rect` shows in the part of the list's scroll container (its nearest `vdndScrollable`,
+ * itself included) that content pinned over its edges doesn't cover: a list in a page scroller
+ * spans rows scrolled out of view, or behind a sticky header. True without one.
+ */
+function overlapsScrollerView(rect: DOMRect, droppable: HTMLElement): boolean {
+  const scroller = closestAcrossShadow(droppable, '.vdnd-scrollable');
+  return !scroller || overlaps(rect, uncoveredRect(scroller));
 }

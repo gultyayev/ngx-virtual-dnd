@@ -557,11 +557,14 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       groupName,
     );
 
-    // Cache constraint flag and element for clamping during drag
+    // Cache constraint flag and element for clamping during drag. The item's own list decides:
+    // the move that starts the drag can already be outside it, or over content pinned over its
+    // scroll container's edge, which is not part of any list.
+    const constraintSource = parentDroppableElement ?? droppableElement;
     this.#constrainToContainer =
-      droppableElement?.hasAttribute('data-constrain-to-container') ?? false;
+      constraintSource?.hasAttribute('data-constrain-to-container') ?? false;
     this.#constraintElement = this.#constrainToContainer
-      ? this.#findConstraintElement(droppableElement)
+      ? this.#findConstraintElement(constraintSource)
       : null;
 
     const activeDroppableId = droppableElement

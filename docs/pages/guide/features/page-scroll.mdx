@@ -60,9 +60,11 @@ The drag then treats the part of the container between them as the container:
 
 - With `constrainToContainer`, the preview stays between the header and the footer.
 - Auto-scroll starts at the header's lower edge and the footer's upper edge. A pointer over either scrolls at full speed.
-- Rows scrolled behind the header or footer are not drop targets.
+- The pointer over the header or footer is not over the list, as outside the container. The drop position still follows the preview's top edge, as at any edge of the container, so without `constrainToContainer` a preview pulled over the header can point at a row behind it.
 
-When the header collapses or grows while the page scrolls, keep the height you pass up to date: the drag uses the current value.
+When the header collapses or grows while the page scrolls, keep the height you pass up to date: a drag in progress measures again when it changes.
+
+Measure the insets from the container's outer (border) edges: a border on the container adds its width, and a horizontal scrollbar under a `bottom: 0` footer adds its height. The insets apply to the lists whose nearest `vdndScrollable` sets them, so a list in a nested scroll container doesn't get its outer container's insets.
 
 ## Ionic
 

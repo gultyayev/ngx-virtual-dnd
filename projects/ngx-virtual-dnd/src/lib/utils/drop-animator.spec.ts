@@ -227,6 +227,32 @@ describe('findDropTarget', () => {
     expect(findDropTarget('item-1', ['list'], getDroppable)).toBeNull();
   });
 
+  it('returns null when the item is behind content pinned over its scroll container', () => {
+    // A page scroller (0..400) whose top 100px a sticky header covers, around a taller list
+    const scroller = document.createElement('div');
+    scroller.className = 'vdnd-scrollable';
+    scroller.setAttribute('data-scroll-inset-top', '100');
+    scroller.getBoundingClientRect = () => rect(0, 0, 200, 400);
+    document.body.appendChild(scroller);
+    const list = createList('list', rect(0, -500, 200, 2000), scroller);
+    addItem(list, 'behind-header', rect(0, 20, 200, 50));
+    const visible = addItem(list, 'below-header', rect(0, 120, 200, 50));
+
+    expect(findDropTarget('behind-header', ['list'], getDroppable)).toBeNull();
+    expect(findDropTarget('below-header', ['list'], getDroppable)?.element).toBe(visible);
+  });
+
+  it('returns null when the item is scrolled out of the scroll container around its list', () => {
+    const scroller = document.createElement('div');
+    scroller.className = 'vdnd-scrollable';
+    scroller.getBoundingClientRect = () => rect(0, 0, 200, 400);
+    document.body.appendChild(scroller);
+    const list = createList('list', rect(0, -500, 200, 2000), scroller);
+    addItem(list, 'item-1', rect(0, 450, 200, 50));
+
+    expect(findDropTarget('item-1', ['list'], getDroppable)).toBeNull();
+  });
+
   it('returns null when the item is hidden or not rendered anywhere', () => {
     const list = createList('list', rect(0, 0, 200, 400));
     addItem(list, 'hidden', rect(0, 0, 0, 0));

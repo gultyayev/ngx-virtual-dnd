@@ -20,7 +20,7 @@
       <div class="page-header" #headerElement data-testid="task-page-header">
         <div class="tm-head">
           <h1 class="tm-title">Task Manager</h1>
-          <span class="tm-count"
+          <span class="tm-count" data-testid="task-count" [attr.data-total]="tasks().length"
             ><b>{{ openCount() }}</b> open · {{ tasks().length }} total</span
           >
         </div>

@@ -341,7 +341,7 @@ class ShadowListHostComponent {}
 // A constrained list in a `vdndScrollable` whose top and bottom sticky content covers
 @Component({
   template: `
-    <div vdndScrollable [scrollInsetTop]="60" [scrollInsetBottom]="40">
+    <div vdndScrollable [scrollInsetTop]="insetTop()" [scrollInsetBottom]="40">
       <div vdndDroppable="inset-list" vdndDroppableGroup="test-group" [constrainToContainer]="true">
         <div vdndDraggable="inset-item" vdndDraggableGroup="test-group"></div>
       </div>
@@ -349,7 +349,9 @@ class ShadowListHostComponent {}
   `,
   imports: [ScrollableDirective, DroppableDirective, DraggableDirective],
 })
-class InsetScrollableHostComponent {}
+class InsetScrollableHostComponent {
+  readonly insetTop = signal(60);
+}
 
 // A draggable an `@if` inside its list removes, while the list itself stays
 @Component({
@@ -2310,6 +2312,58 @@ describe('DraggableDirective', () => {
 
       expect(cursor).toEqual({ x: 150, y: 150 });
       expect(autoScrollCursor).toEqual({ x: 150, y: 150 });
+    });
+
+    it('should keep constraining a drag whose first move lands on the covered space', () => {
+      const updateDragPosition = jest.spyOn(dragStateService, 'updateDragPosition');
+      item.dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 100, clientY: 100, button: 0, bubbles: true }),
+      );
+      // Pulled up fast: the move that starts the drag is already over the space covered at the top
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: 40 }));
+      expect(dragStateService.isDragging()).toBe(true);
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: -500 }));
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 150, clientY: -500 }));
+
+      expect(updateDragPosition.mock.lastCall?.[0].cursorPosition).toEqual({ x: 150, y: 81 });
+    });
+
+    describe('when the covered space changes mid-drag', () => {
+      const nextFrame = (): Promise<void> =>
+        new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+      afterEach(() => {
+        document.dispatchEvent(new MouseEvent('mouseup', { clientX: 150, clientY: 150 }));
+      });
+
+      it('should stop targeting the rows it grows over', () => {
+        const positionCalculator = TestBed.inject(PositionCalculatorService);
+        attemptPointerDrag(item);
+        expect(
+          positionCalculator.findDroppableAtPoint(150, 100, item, 'test-group'),
+        ).not.toBeNull();
+
+        // A collapsed header expands over y 60..150
+        insetFixture.componentInstance.insetTop.set(150);
+        insetFixture.detectChanges();
+
+        expect(positionCalculator.findDroppableAtPoint(150, 100, item, 'test-group')).toBeNull();
+      });
+
+      it('should clamp the resting pointer again', async () => {
+        const updateDragPosition = jest.spyOn(dragStateService, 'updateDragPosition');
+        attemptPointerDrag(item);
+        document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: -500 }));
+        await nextFrame();
+        expect(updateDragPosition.mock.lastCall?.[0].cursorPosition).toEqual({ x: 150, y: 81 });
+
+        insetFixture.componentInstance.insetTop.set(100);
+        insetFixture.detectChanges();
+        await nextFrame();
+
+        // The preview's top edge 1px below the new covered space: 100 + 20 + 1
+        expect(updateDragPosition.mock.lastCall?.[0].cursorPosition).toEqual({ x: 150, y: 121 });
+      });
     });
   });
 

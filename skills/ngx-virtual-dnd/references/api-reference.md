@@ -280,7 +280,7 @@ Marks a scrollable element (it must have `overflow: auto`/`scroll` and a height)
 | `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top edge (e.g. a sticky header inside it) |
 | `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom edge (e.g. a sticky footer inside it) |
 
-The consumer measures the insets. During a drag, the element counts as the part between them: `constrainToContainer` clamps the preview there, the auto-scroll edge zones start at its edges (a pointer over the covered space scrolls at full speed), and droppables are hit-tested only there (rows behind a sticky header are not drop targets).
+The consumer measures the insets. During a drag, the element counts as the part between them: `constrainToContainer` clamps the preview there, the auto-scroll edge zones start at its edges (a pointer over the covered space scrolls at full speed), and droppables are hit-tested only there (a pointer over a sticky header is not over the list; the drop position still follows the preview's top edge). Insets are measured from the element's border box, apply to lists whose nearest `vdndScrollable` is this element, and are re-read mid-drag when they change. Adds `data-scroll-inset-top` / `data-scroll-inset-bottom` while non-zero.
 
 **Outputs:** None
 

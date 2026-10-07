@@ -1,5 +1,6 @@
 import {
   Directive,
+  effect,
   ElementRef,
   inject,
   input,
@@ -7,9 +8,12 @@ import {
   OnDestroy,
   OnInit,
   signal,
+  untracked,
 } from '@angular/core';
 import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-container.token';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
+import { DragSchedulerService } from '../services/drag-scheduler.service';
+import { PositionCalculatorService } from '../services/position-calculator.service';
 import {
   bindRafThrottledScrollTopSignal,
   bindResizeObserverHeightSignal,
@@ -85,6 +89,8 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #ngZone = inject(NgZone);
   readonly #autoScrollService = inject(AutoScrollService);
+  readonly #positionCalculator = inject(PositionCalculatorService);
+  readonly #scheduler = inject(DragSchedulerService);
 
   /** Current scroll position (reactive) */
   readonly #scrollTop = signal(0);
@@ -114,7 +120,8 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
    * Space (px) at the top of the container covered by content pinned over it, such as a sticky
    * header inside it. A drag treats the container as starting below it: `constrainToContainer`
    * keeps the preview under it, the top autoscroll zone starts at its lower edge (the pointer
-   * over it scrolls at full speed), and rows behind it are not drop targets.
+   * over it scrolls at full speed), and a pointer over it is not over the lists inside. Measured
+   * from the element's border box; changing it mid-drag makes the drag measure again.
    */
   scrollInsetTop = input<number>(0);
 
@@ -133,6 +140,19 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
       getId: () => this.scrollContainerId() ?? this.#generatedScrollId,
       enabled: () => this.autoScrollEnabled(),
       config: () => this.autoScrollConfig(),
+    });
+
+    // A drag in progress caches what it measured: when the covered space changes (a sticky header
+    // collapsing as the page scrolls), it measures the lists again, clamps the resting pointer
+    // again and checks the autoscroll edges again. Each is a no-op without a drag.
+    effect(() => {
+      this.scrollInsetTop();
+      this.scrollInsetBottom();
+      untracked(() => {
+        this.#positionCalculator.invalidateDroppableRects();
+        this.#scheduler.requestUpdate();
+        this.#autoScrollService.refresh();
+      });
     });
   }
 
