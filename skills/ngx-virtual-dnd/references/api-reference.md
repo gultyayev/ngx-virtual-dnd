@@ -277,6 +277,10 @@ Marks a scrollable element (it must have `overflow: auto`/`scroll` and a height)
 | `scrollContainerId` | `string` | `undefined` | No | ID for auto-scroll registration |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
+| `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top edge (e.g. a sticky header inside it) |
+| `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom edge (e.g. a sticky footer inside it) |
+
+The consumer measures the insets. During a drag, the element counts as the part between them: `constrainToContainer` clamps the preview there, the auto-scroll edge zones start at its edges (a pointer over the covered space scrolls at full speed), and droppables are hit-tested only there (rows behind a sticky header are not drop targets).
 
 **Outputs:** None
 

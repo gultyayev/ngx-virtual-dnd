@@ -4,10 +4,12 @@ import {
   Component,
   computed,
   ElementRef,
+  inject,
   OnDestroy,
   signal,
   viewChild,
 } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { IonCheckbox, IonContent, IonHeader, IonIcon, IonToolbar } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import { reorderThree } from 'ionicons/icons';
@@ -45,6 +47,10 @@ type CategoryFilter = 'all' | 'work' | 'personal' | 'urgent';
  * - Custom scroll container with ion-content-scroll-host class
  * - vdndScrollable directive on the scroll container
  * - OffsetScrollAdapter wrapping the virtual list to account for header height
+ *
+ * E2E fixture flags: `?sticky=true` pins the header and the "Add task" button inside the scroll
+ * container and passes their heights as the container's scroll insets; `?constrain=true` keeps
+ * the drag inside the container (`constrainToContainer`).
  */
 @Component({
   selector: 'app-page-scroll-demo',
@@ -78,8 +84,17 @@ export class PageScrollDemoComponent implements OnDestroy {
     { value: 'urgent', label: 'Urgent' },
   ];
 
+  readonly #queryParams = inject(ActivatedRoute).snapshot.queryParamMap;
+
+  /** Header and "Add task" button pinned inside the scroll container (`?sticky=true`) */
+  readonly sticky = this.#queryParams.get('sticky') === 'true';
+
+  /** Drag kept inside the scroll container (`?constrain=true`) */
+  readonly constrain = this.#queryParams.get('constrain') === 'true';
+
   // View queries
   readonly headerElement = viewChild.required<ElementRef<HTMLElement>>('headerElement');
+  readonly footerElement = viewChild.required<ElementRef<HTMLElement>>('footerElement');
 
   // State
   readonly showBanner = signal(true);
@@ -88,6 +103,9 @@ export class PageScrollDemoComponent implements OnDestroy {
 
   // Header height for offset calculation
   readonly headerHeight = signal(0);
+
+  // "Add task" button height, the space it covers at the bottom when pinned
+  readonly footerHeight = signal(0);
 
   // Filtered tasks based on category
   readonly filteredTasks = computed(() => {
@@ -115,20 +133,23 @@ export class PageScrollDemoComponent implements OnDestroy {
   constructor() {
     addIcons({ reorderThree });
 
-    // Set up header height tracking after render
+    // Set up header and footer height tracking after render
     afterNextRender(() => {
       const headerEl = this.headerElement().nativeElement;
+      const footerEl = this.footerElement().nativeElement;
       this.headerHeight.set(headerEl.offsetHeight);
+      this.footerHeight.set(footerEl.offsetHeight);
 
       this.#resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
           // Use borderBoxSize to avoid layout thrashing in Safari
           const height =
             entry.borderBoxSize?.[0]?.blockSize ?? (entry.target as HTMLElement).offsetHeight;
-          this.headerHeight.set(height);
+          (entry.target === headerEl ? this.headerHeight : this.footerHeight).set(height);
         }
       });
       this.#resizeObserver.observe(headerEl);
+      this.#resizeObserver.observe(footerEl);
     });
   }
 

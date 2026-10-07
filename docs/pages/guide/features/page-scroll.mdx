@@ -27,6 +27,43 @@ The element marked `vdndScrollable` must be the one that scrolls, so give it a h
 - `vdndContentHeader` marks a header inside the component. Its height is measured and used as the list's top offset. If the header lives outside the component, pass its height with `[contentOffset]` instead.
 - Auto-scroll uses the `vdndScrollable` element, so dragging near the top or bottom of the page scrolls it.
 
+## Sticky headers and footers
+
+A header or footer with `position: sticky` inside the scroll container stays on screen while the rows scroll behind it. The drag can't tell it covers the container, so tell it with `scrollInsetTop` and `scrollInsetBottom`: the height in pixels each covers. Measure them however suits your layout:
+
+```angular-html
+<div
+  vdndScrollable
+  [scrollInsetTop]="headerHeight()"
+  [scrollInsetBottom]="footerHeight()"
+>
+  <header class="sticky-header">...</header>
+  <vdnd-virtual-content [itemHeight]="72" [contentOffset]="headerHeight()" vdndDroppable="tasks">
+    ...
+  </vdnd-virtual-content>
+  <footer class="sticky-footer">...</footer>
+</div>
+```
+
+```css
+.sticky-header {
+  position: sticky;
+  top: 0;
+}
+.sticky-footer {
+  position: sticky;
+  bottom: 0;
+}
+```
+
+The drag then treats the part of the container between them as the container:
+
+- With `constrainToContainer`, the preview stays between the header and the footer.
+- Auto-scroll starts at the header's lower edge and the footer's upper edge. A pointer over either scrolls at full speed.
+- Rows scrolled behind the header or footer are not drop targets.
+
+When the header collapses or grows while the page scrolls, keep the height you pass up to date: the drag uses the current value.
+
 ## Ionic
 
 `<ion-content>` scrolls an element inside its shadow DOM, so `vdndScrollable` cannot go on `ion-content` itself. Turn off its scrolling and add a scroll host in the light DOM:

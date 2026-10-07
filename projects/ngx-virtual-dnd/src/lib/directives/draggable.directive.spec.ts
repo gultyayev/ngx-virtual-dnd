@@ -12,6 +12,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DraggableDirective } from './draggable.directive';
 import { DroppableDirective } from './droppable.directive';
+import { ScrollableDirective } from './scrollable.directive';
 import { VirtualViewportComponent } from '../components/virtual-viewport.component';
 import { DragStateService } from '../services/drag-state.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
@@ -336,6 +337,19 @@ class ShadowListComponent {}
   imports: [ShadowListComponent],
 })
 class ShadowListHostComponent {}
+
+// A constrained list in a `vdndScrollable` whose top and bottom sticky content covers
+@Component({
+  template: `
+    <div vdndScrollable [scrollInsetTop]="60" [scrollInsetBottom]="40">
+      <div vdndDroppable="inset-list" vdndDroppableGroup="test-group" [constrainToContainer]="true">
+        <div vdndDraggable="inset-item" vdndDraggableGroup="test-group"></div>
+      </div>
+    </div>
+  `,
+  imports: [ScrollableDirective, DroppableDirective, DraggableDirective],
+})
+class InsetScrollableHostComponent {}
 
 // A draggable an `@if` inside its list removes, while the list itself stays
 @Component({
@@ -2224,6 +2238,78 @@ describe('DraggableDirective', () => {
       // Clamped to the scrollable's bottom (300), not the list's (2000)
       expect(cursorOverride).toHaveBeenLastCalledWith({ x: 100, y: 300 });
       shadowFixture.destroy();
+    });
+  });
+
+  describe('in a scrollable with scroll insets', () => {
+    /** A rect at the top left of the page */
+    const rect = (top: number, right: number, bottom: number): DOMRect =>
+      ({
+        top,
+        left: 0,
+        right,
+        bottom,
+        width: right,
+        height: bottom - top,
+        x: 0,
+        y: top,
+      }) as DOMRect;
+
+    let insetFixture: ComponentFixture<InsetScrollableHostComponent>;
+    let item: HTMLElement;
+
+    beforeEach(() => {
+      insetFixture = TestBed.createComponent(InsetScrollableHostComponent);
+      insetFixture.detectChanges();
+      const host: HTMLElement = insetFixture.nativeElement;
+      // A 300px tall viewport (60px covered at its top, 40px at its bottom) on a taller list
+      host.querySelector<HTMLElement>('.vdnd-scrollable')!.getBoundingClientRect = () =>
+        rect(0, 300, 300);
+      host.querySelector<HTMLElement>('[data-droppable-id]')!.getBoundingClientRect = () =>
+        rect(0, 300, 2000);
+      item = host.querySelector<HTMLElement>('[data-draggable-id]')!;
+      // Pressed at y 100, 20px below its top edge
+      item.getBoundingClientRect = () => rect(80, 200, 130);
+    });
+
+    afterEach(() => insetFixture.destroy());
+
+    /** Drag the item to `y`, release there, and return the clamped positions */
+    function dragTo(y: number): { cursor: unknown; autoScrollCursor: unknown } {
+      const cursorOverride = jest.spyOn(TestBed.inject(AutoScrollService), 'setCursorOverride');
+      const updateDragPosition = jest.spyOn(dragStateService, 'updateDragPosition');
+      attemptPointerDrag(item);
+      expect(dragStateService.isDragging()).toBe(true);
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: y }));
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 150, clientY: y }));
+      return {
+        cursor: updateDragPosition.mock.lastCall?.[0].cursorPosition,
+        autoScrollCursor: cursorOverride.mock.lastCall?.[0],
+      };
+    }
+
+    it('should keep the constrained preview above the space covered at the bottom', () => {
+      const { cursor, autoScrollCursor } = dragTo(1000);
+
+      // The preview's bottom edge 1px above 260 (300 - 40): 260 - (50 - 20) - 1
+      expect(cursor).toEqual({ x: 150, y: 229 });
+      // The autoscroll cursor stops at the uncovered bottom edge, deep in its edge zone
+      expect(autoScrollCursor).toEqual({ x: 150, y: 260 });
+    });
+
+    it('should keep the constrained preview below the space covered at the top', () => {
+      const { cursor, autoScrollCursor } = dragTo(-500);
+
+      // The preview's top edge 1px below 60: 60 + 20 + 1
+      expect(cursor).toEqual({ x: 150, y: 81 });
+      expect(autoScrollCursor).toEqual({ x: 150, y: 60 });
+    });
+
+    it('should not clamp a pointer inside the uncovered part', () => {
+      const { cursor, autoScrollCursor } = dragTo(150);
+
+      expect(cursor).toEqual({ x: 150, y: 150 });
+      expect(autoScrollCursor).toEqual({ x: 150, y: 150 });
     });
   });
 

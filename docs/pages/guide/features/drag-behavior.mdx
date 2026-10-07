@@ -92,6 +92,8 @@ This is the opposite of CDK's `cdkDragLockAxis`, where `'x'` means the item move
 
 The preview cannot leave the container. Holding it against the container's top or bottom edge drops the item at the first or last position once the list is scrolled to that end; until then the drop position is the visible row at that edge, while autoscroll, when it runs, moves the list there. The container is the nearest `vdndScrollable` ancestor if there is one, and the droppable otherwise.
 
+When a sticky header or footer inside the `vdndScrollable` element covers part of it, pass their heights as `scrollInsetTop` and `scrollInsetBottom` so the preview stays clear of them (see [Sticky headers and footers](/guide/features/page-scroll#sticky-headers-and-footers)).
+
 ## Disabling
 
 Every draggable, droppable and list accepts `disabled`:

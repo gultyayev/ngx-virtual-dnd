@@ -267,6 +267,34 @@ describe('DragIndexCalculatorService', () => {
     expect(index).toBe(0);
   });
 
+  it('snaps to the edges of the part of a constrained list that nothing pinned over it covers', () => {
+    const strategy = new MockStrategy(
+      [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600],
+      (offset) => Math.floor(offset / 50),
+    );
+    // The list is its own vdndScrollable: a sticky header covers its top 100px of 500, a sticky
+    // footer its bottom 60px
+    const droppable = createDroppable('list-1', 12, true);
+    droppable.setAttribute('data-scroll-inset-top', '100');
+    droppable.setAttribute('data-scroll-inset-bottom', '60');
+    service.registerStrategy('list-1', strategy);
+    const indexAt = (y: number): number =>
+      service.calculatePlaceholderIndex({
+        droppableElement: droppable,
+        position: { x: 20, y },
+        previousPosition: null,
+        grabOffset: { x: 20, y: 120 },
+        draggedItemHeight: 240,
+        sourceDroppableId: null,
+        sourceIndex: null,
+      }).index;
+
+    // Clamped below the header: preview top 101
+    expect(indexAt(221)).toBe(0);
+    // Clamped above the footer: preview bottom 439
+    expect(indexAt(319)).toBe(12);
+  });
+
   describe('constrained edge snap on a scrollable list', () => {
     // 50 rows of 50px in a 400px list: max scrollTop = 2500 - 400 = 2100.
     const ROW = 50;

@@ -55,12 +55,20 @@ export class TaskDemoPage {
     this.visiblePlaceholder = page.locator(taskDemoSelectors.visiblePlaceholder);
   }
 
-  /** Open a task demo. `count` sets the number of tasks (`/dynamic-height` only). */
+  /**
+   * Open a task demo. `count` sets the number of tasks (`/dynamic-height` only). `sticky` pins the
+   * header and the "Add task" button inside the scroll container and `constrain` keeps the drag
+   * inside it (`/page-scroll` only).
+   */
   async goto(
     path: '/page-scroll' | '/dynamic-height',
-    options: { count?: number } = {},
+    options: { count?: number; sticky?: boolean; constrain?: boolean } = {},
   ): Promise<void> {
-    const query = options.count === undefined ? '' : `?count=${options.count}`;
+    const params = new URLSearchParams();
+    if (options.count !== undefined) params.set('count', String(options.count));
+    if (options.sticky) params.set('sticky', 'true');
+    if (options.constrain) params.set('constrain', 'true');
+    const query = params.toString() ? `?${params}` : '';
     await this.page.goto(`${path}${query}`, { waitUntil: 'domcontentloaded' });
     await this.waitUntilReady();
   }

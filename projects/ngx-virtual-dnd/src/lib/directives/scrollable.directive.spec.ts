@@ -42,6 +42,8 @@ function emulateScrollableLayout(element: HTMLElement, scrollHeight: number, cli
       [scrollContainerId]="scrollContainerId()"
       [autoScrollEnabled]="autoScrollEnabled()"
       [autoScrollConfig]="autoScrollConfig()"
+      [scrollInsetTop]="scrollInsetTop()"
+      [scrollInsetBottom]="scrollInsetBottom()"
     >
       Content
     </div>
@@ -52,6 +54,8 @@ class TestHostComponent {
   scrollContainerId = signal<string | undefined>('scrollable-container');
   autoScrollEnabled = signal(false);
   autoScrollConfig = signal<Partial<AutoScrollConfig>>({});
+  scrollInsetTop = signal(0);
+  scrollInsetBottom = signal(0);
 }
 
 describe('ScrollableDirective', () => {
@@ -119,6 +123,31 @@ describe('ScrollableDirective', () => {
     expect(unregisterSpy).toHaveBeenCalledWith('scrollable-container');
     expect(registerSpy).toHaveBeenCalledWith('updated-scrollable-container', scrollableEl, {});
   });
+  describe('scroll insets', () => {
+    it('should not mark the element while nothing covers its edges', () => {
+      expect(scrollableEl.hasAttribute('data-scroll-inset-top')).toBe(false);
+      expect(scrollableEl.hasAttribute('data-scroll-inset-bottom')).toBe(false);
+    });
+
+    it('should mark the element with the space covered at its edges, for the drag to read', () => {
+      hostComponent.scrollInsetTop.set(64);
+      hostComponent.scrollInsetBottom.set(48.5);
+      fixture.detectChanges();
+
+      expect(scrollableEl.getAttribute('data-scroll-inset-top')).toBe('64');
+      expect(scrollableEl.getAttribute('data-scroll-inset-bottom')).toBe('48.5');
+    });
+
+    it('should remove the mark when the space goes back to 0', () => {
+      hostComponent.scrollInsetTop.set(64);
+      fixture.detectChanges();
+      hostComponent.scrollInsetTop.set(0);
+      fixture.detectChanges();
+
+      expect(scrollableEl.hasAttribute('data-scroll-inset-top')).toBe(false);
+    });
+  });
+
   describe('scrollBy', () => {
     let element: HTMLElement;
 

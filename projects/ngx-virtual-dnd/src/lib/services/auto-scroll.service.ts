@@ -4,6 +4,7 @@ import { DragStateService } from './drag-state.service';
 import { PositionCalculatorService } from './position-calculator.service';
 import { DragSchedulerService } from './drag-scheduler.service';
 import { depthAcrossShadow } from '../utils/composed-dom';
+import { uncoveredRect } from '../utils/scroll-insets';
 
 /**
  * Configuration for auto-scroll behavior.
@@ -291,7 +292,11 @@ export class AutoScrollService {
         continue;
       }
 
-      const nearEdge = this.#positionCalculator.getNearEdge(cursor, rect, config.threshold);
+      // The edge zones start at the edges of the part of the container that content pinned over
+      // its edges (its scroll insets) doesn't cover. A cursor over that content is deeper in the
+      // zone than the edge, so it scrolls at full speed.
+      const edges = uncoveredRect(element, rect);
+      const nearEdge = this.#positionCalculator.getNearEdge(cursor, edges, config.threshold);
 
       // Reuse the per-frame direction object to avoid allocation.
       const direction = this.#tickDirection;
@@ -301,18 +306,18 @@ export class AutoScrollService {
 
       if (nearEdge.top) {
         direction.y = -1;
-        maxDistance = Math.max(maxDistance, config.threshold - (cursor.y - rect.top));
+        maxDistance = Math.max(maxDistance, config.threshold - (cursor.y - edges.top));
       } else if (nearEdge.bottom) {
         direction.y = 1;
-        maxDistance = Math.max(maxDistance, config.threshold - (rect.bottom - cursor.y));
+        maxDistance = Math.max(maxDistance, config.threshold - (edges.bottom - cursor.y));
       }
 
       if (nearEdge.left) {
         direction.x = -1;
-        maxDistance = Math.max(maxDistance, config.threshold - (cursor.x - rect.left));
+        maxDistance = Math.max(maxDistance, config.threshold - (cursor.x - edges.left));
       } else if (nearEdge.right) {
         direction.x = 1;
-        maxDistance = Math.max(maxDistance, config.threshold - (rect.right - cursor.x));
+        maxDistance = Math.max(maxDistance, config.threshold - (edges.right - cursor.x));
       }
 
       if (direction.x !== 0 || direction.y !== 0) {

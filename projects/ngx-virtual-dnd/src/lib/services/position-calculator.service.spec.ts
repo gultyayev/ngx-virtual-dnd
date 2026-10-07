@@ -739,6 +739,39 @@ describe('PositionCalculatorService', () => {
       expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBe(drop);
     });
 
+    it('clips a candidate rect to the part of its scrollable ancestor nothing covers', () => {
+      const dragged = document.createElement('div');
+      const { scrollable, lists } = scrollableWithLists(['list']);
+      const [drop] = lists;
+      // Sticky content covers 100..140 and 270..300 of the 100..300 viewport
+      scrollable.setAttribute('data-scroll-inset-top', '40');
+      scrollable.setAttribute('data-scroll-inset-bottom', '30');
+
+      service.beginDragSession('g');
+
+      expect(service.findDroppableAtPoint(150, 120, dragged, 'g')).toBeNull();
+      expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBe(drop);
+      expect(service.findDroppableAtPoint(150, 285, dragged, 'g')).toBeNull();
+    });
+
+    it('clips a droppable that is the scrollable itself to the part nothing covers', () => {
+      const dragged = document.createElement('div');
+      const drop = document.createElement('div');
+      drop.className = 'vdnd-scrollable';
+      drop.setAttribute('data-droppable-id', 'list');
+      drop.setAttribute('data-droppable-group', 'g');
+      drop.setAttribute('data-scroll-inset-top', '40');
+      stubRect(drop, { top: 100, left: 100, right: 300, bottom: 300 });
+      document.body.appendChild(drop);
+      registerDroppable(drop);
+      created.push(drop);
+
+      service.beginDragSession('g');
+
+      expect(service.findDroppableAtPoint(150, 120, dragged, 'g')).toBeNull();
+      expect(service.findDroppableAtPoint(150, 200, dragged, 'g')).toBe(drop);
+    });
+
     it('does not clip when the droppable has no scrollable ancestor', () => {
       const dragged = document.createElement('div');
       const drop = document.createElement('div');

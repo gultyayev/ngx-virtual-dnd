@@ -3,6 +3,7 @@ import { type CursorPosition, END_OF_LIST, type GrabOffset } from '../models/dra
 import { PositionCalculatorService } from './position-calculator.service';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { closestAcrossShadow } from '../utils/composed-dom';
+import { uncoveredRect } from '../utils/scroll-insets';
 
 interface DroppableCache {
   droppableId: string | null;
@@ -269,8 +270,10 @@ export class DragIndexCalculatorService {
     // using preview bounds so top/bottom drops remain reachable — but only once the list
     // is scrolled to that end. A preview pinned at the edge of a scrolled list (which is
     // how a constrained drag autoscrolls) keeps the probe's index, the visible edge row.
+    // A list that is its own scroll container pins the preview at the edges of the part content
+    // pinned over its edges (its scroll insets) doesn't cover.
     if (isConstrainedToContainer) {
-      const droppableRect = droppableElement.getBoundingClientRect();
+      const droppableRect = uncoveredRect(droppableElement);
       const edgeTolerance = 2;
       const distanceToTop = Math.abs(previewTopY - droppableRect.top);
       const distanceToBottom = Math.abs(droppableRect.bottom - previewBottomY);

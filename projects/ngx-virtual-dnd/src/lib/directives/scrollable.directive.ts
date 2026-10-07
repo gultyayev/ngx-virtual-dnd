@@ -48,6 +48,19 @@ import { createAutoScrollRegistration } from '../utils/auto-scroll-registration'
  * ```
  *
  * @example
+ * With a sticky header and footer inside the container (their heights measured by the consumer):
+ * ```html
+ * <div vdndScrollable
+ *      [scrollInsetTop]="headerHeight()"
+ *      [scrollInsetBottom]="footerHeight()"
+ *      style="overflow: auto; height: 400px;">
+ *   <header style="position: sticky; top: 0;">...</header>
+ *   ...
+ *   <footer style="position: sticky; bottom: 0;">...</footer>
+ * </div>
+ * ```
+ *
+ * @example
  * With auto-scroll configuration:
  * ```html
  * <div vdndScrollable
@@ -64,6 +77,8 @@ import { createAutoScrollRegistration } from '../utils/auto-scroll-registration'
   host: {
     class: 'vdnd-scrollable',
     '[style.overflow-anchor]': '"none"',
+    '[attr.data-scroll-inset-top]': 'scrollInsetTop() || null',
+    '[attr.data-scroll-inset-bottom]': 'scrollInsetBottom() || null',
   },
 })
 export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestroy {
@@ -94,6 +109,20 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
 
   /** Auto-scroll configuration */
   autoScrollConfig = input<Partial<AutoScrollConfig>>({});
+
+  /**
+   * Space (px) at the top of the container covered by content pinned over it, such as a sticky
+   * header inside it. A drag treats the container as starting below it: `constrainToContainer`
+   * keeps the preview under it, the top autoscroll zone starts at its lower edge (the pointer
+   * over it scrolls at full speed), and rows behind it are not drop targets.
+   */
+  scrollInsetTop = input<number>(0);
+
+  /**
+   * Space (px) at the bottom of the container covered by content pinned over it, such as a
+   * sticky footer or button inside it. The bottom counterpart of `scrollInsetTop`.
+   */
+  scrollInsetBottom = input<number>(0);
 
   // ========== VdndScrollContainer Implementation ==========
 

@@ -12,8 +12,10 @@
     class="scroll-container ion-content-scroll-host"
     data-testid="task-scroll-container"
     vdndScrollable
+    [scrollInsetTop]="sticky ? headerHeight() : 0"
+    [scrollInsetBottom]="sticky ? footerHeight() : 0"
   >
-    <div class="tm-stage">
+    <div class="tm-stage" [class.is-sticky]="sticky">
       <!-- Static header section that scrolls away (measured for the virtual offset) -->
       <div class="page-header" #headerElement data-testid="task-page-header">
         <div class="tm-head">
@@ -87,6 +89,7 @@
           [itemHeight]="itemHeight"
           [contentOffset]="headerHeight()"
           vdndDroppable="tasks"
+          [constrainToContainer]="constrain"
           (drop)="onDrop($event)"
         >
           <ng-container *vdndVirtualFor="let task of filteredTasks(); trackBy: trackById">
@@ -111,7 +114,13 @@
       </div>
 
       <!-- Footer that appears after list -->
-      <button type="button" class="tm-add" data-testid="add-task-footer" (click)="addTask()">
+      <button
+        #footerElement
+        type="button"
+        class="tm-add"
+        data-testid="add-task-footer"
+        (click)="addTask()"
+      >
         <svg
           width="16"
           height="16"
