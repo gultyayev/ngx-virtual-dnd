@@ -249,3 +249,15 @@ export function revealRange(element: Element, top: number, bottom: number): void
     bottom -= moved;
   }
 }
+
+/**
+ * `revealRange` through the containers around `element` (not itself): for a list that scrolled
+ * the range as far as its own scroll range lets it, when something over the part of it that
+ * shows still covers the range (a page's sticky header over the list's first slot).
+ */
+export function revealRangeAround(element: Element, top: number, bottom: number): void {
+  const parent = parentAcrossShadow(element);
+  if (parent) {
+    revealRange(parent, top, bottom);
+  }
+}

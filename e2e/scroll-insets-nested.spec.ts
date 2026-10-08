@@ -223,6 +223,57 @@ test.describe('Scroll insets (nested and overlaid)', () => {
     });
   });
 
+  test.describe('a list scrolled to its first slot while it is under the page header', () => {
+    /**
+     * Put the top of `list` (the element whose rows scroll) 60px behind the page header with its
+     * rows scrolled by 100px, start a keyboard drag on its first row below the header and move it
+     * to the first slot: the list alone can scroll it no further than 20px below the page top.
+     */
+    async function keyboardDragToFirstSlot(page: Page, list: Locator): Promise<number> {
+      await scroll(pageScroller, 0);
+      await scroll(list, 100);
+      const pageTop = await edge(pageScroller, 'top');
+      await scroll(pageScroller, Math.round((await edge(list, 'top')) - pageTop - 20));
+      expect(await edge(list, 'top')).toBeCloseTo(pageTop + 20, 0);
+      const headerBottom = pageTop + 80;
+      const [first] = await rowsBetween(list, headerBottom, await edge(list, 'bottom'));
+      await page.locator(`[data-draggable-id="${first.id}"]`).focus();
+      await page.keyboard.press('Space');
+      await expect(preview).toBeVisible();
+      for (let i = 0; i < 6; i++) {
+        await page.keyboard.press('ArrowUp');
+      }
+      await poll(() => list.evaluate((el) => el.scrollTop)).toBe(0);
+      return headerBottom;
+    }
+
+    test('scrolls the page to show the first slot of a vdnd-sortable-list', async ({ page }) => {
+      await open(page);
+      const headerBottom = await keyboardDragToFirstSlot(page, innerScroller);
+
+      // The placeholder in the first slot, at the top of the list's rows (a plain poll on its
+      // edge could pass on a frame before it moves there)
+      const placeholderTop = async (): Promise<number> =>
+        (await page.locator('.vdnd-drag-placeholder-visible').boundingBox())?.y ?? Number.NaN;
+      await poll(async () => (await placeholderTop()) - (await edge(innerScroller, 'top'))).toBe(0);
+      expect(await placeholderTop()).toBeGreaterThanOrEqual(headerBottom - 1);
+
+      await page.keyboard.press('Escape');
+      await expect(preview).toBeHidden();
+    });
+
+    test('scrolls the page to show the first slot of a *vdndVirtualFor list', async ({ page }) => {
+      await open(page);
+      const headerBottom = await keyboardDragToFirstSlot(page, column);
+
+      // The column renders no placeholder element: its first slot starts at its top
+      await poll(() => edge(column, 'top')).toBeGreaterThanOrEqual(headerBottom - 1);
+
+      await page.keyboard.press('Escape');
+      await expect(preview).toBeHidden();
+    });
+  });
+
   test.describe('a list of plain rows under a sticky header', () => {
     let plainScroller: Locator;
 

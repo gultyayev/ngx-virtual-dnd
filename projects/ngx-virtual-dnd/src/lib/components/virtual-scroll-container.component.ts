@@ -48,7 +48,12 @@ import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
 import { revealDropTargetIn } from '../utils/drop-animator';
 import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
-import { clipToScrollContainers, scrollAncestors, validScrollInset } from '../utils/scroll-insets';
+import {
+  clipToScrollContainers,
+  revealRangeAround,
+  scrollAncestors,
+  validScrollInset,
+} from '../utils/scroll-insets';
 
 /**
  * Context provided to the item template.
@@ -897,8 +902,18 @@ export class VirtualScrollContainerComponent<T>
       const newScrollTop = targetBottom - height + hiddenBottom;
       element.scrollTop = newScrollTop;
       this.#scrollTop.set(newScrollTop);
-      if (!isFollowUp) this.#revealPlaceholderAfterRender();
+      if (!isFollowUp) {
+        // The follow-up reveals it through the containers around the list: until then the
+        // content can be one placeholder short
+        this.#revealPlaceholderAfterRender();
+        return;
+      }
     }
+
+    // The list scrolls the placeholder no further than its own scroll range: at its first slot,
+    // a page's sticky header can still cover it. The containers around it reveal the rest.
+    const top = element.getBoundingClientRect().top + targetTop - element.scrollTop;
+    revealRangeAround(element, top, top + this.placeholderHeight());
   }
 
   /**

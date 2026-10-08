@@ -9,6 +9,7 @@ import {
   ownUncoveredRect,
   readScrollInset,
   revealRange,
+  revealRangeAround,
   scrollAncestors,
   uncoveredRect,
   visibleRect,
@@ -183,9 +184,11 @@ export class DragIndexCalculatorService {
    * Scroll a droppable's rows so the slot of `height` px at `index` (where the placeholder renders
    * before the item at that index) shows in full: inside the part of its scroll element that
    * shows (see `visibleRect`), below and above the content pinned over its edges. For lists that
-   * have no reveal of their own (`vdnd-virtual-scroll` has one), during a keyboard drag. A no-op
-   * when less than the slot shows. A list without a registered strategy renders all its rows:
-   * see #revealRenderedSlot.
+   * have no reveal of their own (`vdnd-virtual-scroll` has one), during a keyboard drag. The list
+   * itself doesn't scroll when less than the slot shows of it; the scroll containers around it
+   * then reveal the slot, and whatever of it the list's scroll range leaves hidden (see
+   * `revealRangeAround`). A list without a registered strategy renders all its rows: see
+   * #revealRenderedSlot.
    */
   revealSlot(droppableElement: HTMLElement, index: number, height: number): void {
     const cache = this.#resolveDroppable(droppableElement, height);
@@ -198,23 +201,26 @@ export class DragIndexCalculatorService {
     // Rows are placed relative to where the list starts in its scroll element (scrollTop below
     // has the space reserved above them subtracted), so offsets compare to it directly
     const { rect, scrollTop } = this.#getScrollGeometry(cache);
-    const shown = visibleRect(cache.scrollContainer, rect);
-    if (!shown) {
-      return;
-    }
-    const shownTop = scrollTop + (shown.top - rect.top);
-    const shownBottom = scrollTop + (shown.bottom - rect.top);
-    if (shownBottom - shownTop < height) {
-      return;
-    }
-
     const slotTop = strategy.getOffsetForIndex(index);
     const slotBottom = slotTop + height;
-    if (slotTop < shownTop) {
-      cache.scrollContainer.scrollTop += slotTop - shownTop;
-    } else if (slotBottom > shownBottom) {
-      cache.scrollContainer.scrollTop += slotBottom - shownBottom;
+    const shown = visibleRect(cache.scrollContainer, rect);
+    if (shown) {
+      const shownTop = scrollTop + (shown.top - rect.top);
+      const shownBottom = scrollTop + (shown.bottom - rect.top);
+      if (shownBottom - shownTop >= height) {
+        if (slotTop < shownTop) {
+          cache.scrollContainer.scrollTop += slotTop - shownTop;
+        } else if (slotBottom > shownBottom) {
+          cache.scrollContainer.scrollTop += slotBottom - shownBottom;
+        }
+      }
     }
+
+    // The list scrolls the slot no further than its own scroll range: at its first slot, a
+    // page's sticky header can still cover it. The containers around it reveal the rest.
+    const after = this.#getScrollGeometry(cache);
+    const top = after.rect.top + slotTop - after.scrollTop;
+    revealRangeAround(cache.scrollContainer, top, top + height);
   }
 
   /**
