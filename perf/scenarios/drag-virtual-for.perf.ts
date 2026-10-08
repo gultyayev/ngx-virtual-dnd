@@ -1,73 +1,86 @@
-import { test } from '@playwright/test';
-import {
-  aggregateScenarioMetrics,
-  MetricsCollector,
-  ScenarioMetrics,
-  METRICS_SCHEMA_VERSION,
-} from '../fixtures/metrics-collector';
+import { expect, test } from '@playwright/test';
 import { PerfPage } from '../fixtures/perf.page';
+import { runScenario } from '../fixtures/scenario';
 
-const ITERATIONS = 5;
-const WARMUP_ITERATIONS = 1;
 const CPU_THROTTLE = 4;
-/** The 300px viewport shows rows 0-5 (50px rows), so row 4 is on screen without scrolling. */
 const TARGET_INDEX = 4;
+const POINTER_STEPS = 20;
+const SELECTOR = '[data-droppable-id="viewport-a"]';
 
-/**
- * The other drag scenarios drag in `vdnd-virtual-scroll` lists. This one drags in a
- * `vdnd-virtual-viewport` that renders its rows with `*vdndVirtualFor` (#93), crossing a few
- * rows so placeholder moves and cursor-only frames are both measured.
- */
 test.describe('Drag Within *vdndVirtualFor List Performance', () => {
   test('drag row 0 to row 4 in a vdnd-virtual-viewport list', async ({ page }, testInfo) => {
     const perfPage = new PerfPage(page);
-    const collector = new MetricsCollector(page);
-    await collector.init();
-    await collector.setCpuThrottling(CPU_THROTTLE);
-
-    const results: ScenarioMetrics[] = [];
-    const totalRuns = WARMUP_ITERATIONS + ITERATIONS;
-
-    for (let i = 0; i < totalRuns; i++) {
-      // Reload for the original row order (each drop reorders the list)
-      await perfPage.goto('/virtual-viewport');
-      await page.waitForTimeout(300);
-
-      const sourceBox = await perfPage.getDraggableBox('viewport-a', 0);
-      const targetBox = await perfPage.getDraggableBox('viewport-a', TARGET_INDEX);
-
-      if (!sourceBox || !targetBox) {
-        throw new Error('Could not get bounding boxes');
-      }
-
-      const metrics = await collector.measureScenario(async () => {
-        await perfPage.simulateDrag({
-          startX: sourceBox.x + sourceBox.width / 2,
-          startY: sourceBox.y + sourceBox.height / 2,
-          endX: targetBox.x + targetBox.width / 2,
-          endY: targetBox.y + targetBox.height / 2,
-          steps: 20,
-        });
-      });
-
-      if (i >= WARMUP_ITERATIONS) {
-        results.push(metrics);
-      }
-    }
-
-    const report = {
-      scenario: 'drag-within-virtual-for-list',
-      metricsSchemaVersion: METRICS_SCHEMA_VERSION,
-      cpuThrottle: CPU_THROTTLE,
-      iterations: ITERATIONS,
-      ...aggregateScenarioMetrics(results),
-    };
-
-    testInfo.attach('drag-within-virtual-for-list', {
-      body: JSON.stringify(report, null, 2),
-      contentType: 'application/json',
-    });
-
-    await collector.dispose();
+    let coordinates = { startX: 0, startY: 0, endX: 0, endY: 0 };
+    await runScenario(
+      page,
+      testInfo,
+      {
+        scenario: 'drag-within-virtual-for-list',
+        kind: 'fixed-work',
+        cpuThrottle: CPU_THROTTLE,
+        workload: {
+          items: 60,
+          sourceIndex: 0,
+          destinationIndex: TARGET_INDEX,
+          pointerSteps: POINTER_STEPS,
+          reset: 'fresh-document',
+          route: '/virtual-viewport',
+        },
+      },
+      {
+        setup: async () => {
+          await perfPage.goto('/virtual-viewport');
+          const source = await perfPage.getDraggableBox('viewport-a', 0);
+          const target = await perfPage.getDraggableBox('viewport-a', TARGET_INDEX);
+          if (!source || !target) throw new Error('Missing virtual-for drag source or target');
+          coordinates = {
+            startX: source.x + source.width / 2,
+            startY: source.y + source.height / 2,
+            endX: target.x + target.width / 2,
+            endY: target.y + target.height / 2,
+          };
+          const container = await page.locator(SELECTOR).boundingBox();
+          if (!container) throw new Error('Missing virtual-for scroll container');
+          expect(coordinates.endY).toBeGreaterThan(container.y + 50);
+          expect(coordinates.endY).toBeLessThan(container.y + container.height - 50);
+          expect(await perfPage.scrollTop(SELECTOR)).toBe(0);
+        },
+        run: async () => {
+          const result = await perfPage.simulateDrag({ ...coordinates, steps: POINTER_STEPS });
+          const endScrollTop = await perfPage.scrollTop(SELECTOR);
+          return {
+            operations: result.operations,
+            startScrollTop: 0,
+            endScrollTop,
+            scrollDistance: endScrollTop,
+            sourceId: 'a-1',
+            destinationIndex: TARGET_INDEX,
+            completed: true,
+          };
+        },
+        verify: async ({ workload }) => {
+          expect(workload['operations']).toBe(POINTER_STEPS + 1);
+          expect(workload['scrollDistance']).toBe(0);
+          await expect(page.getByTestId('vdnd-drag-preview')).not.toBeVisible();
+          await expect(page.getByTestId('viewport-demo')).toHaveAttribute(
+            'data-last-drop-source-index',
+            '0',
+          );
+          await expect(page.getByTestId('viewport-demo')).toHaveAttribute(
+            'data-last-drop-destination-index',
+            String(TARGET_INDEX),
+          );
+          await perfPage.expectRenderedOrder('viewport-a', [
+            'a-2',
+            'a-3',
+            'a-4',
+            'a-5',
+            'a-1',
+            'a-6',
+          ]);
+          await expect(page.getByTestId('viewport-a-count')).toHaveText('60');
+        },
+      },
+    );
   });
 });

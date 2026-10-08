@@ -2,17 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { aggregate, round } from './statistics.ts';
 
-test('aggregate returns zeros for an empty sample set', () => {
-  assert.deepEqual(aggregate([]), {
-    mean: 0,
-    median: 0,
-    p95: 0,
-    stddev: 0,
-    mad: 0,
-    min: 0,
-    max: 0,
-    samples: 0,
-  });
+test('aggregate rejects an empty sample set instead of inventing a clean measurement', () => {
+  assert.throws(() => aggregate([]), /empty/i);
+});
+
+test('aggregate rejects nonfinite measurements', () => {
+  for (const value of [NaN, Infinity, -Infinity]) {
+    assert.throws(() => aggregate([10, value]), /finite/i);
+  }
 });
 
 test('aggregate computes mean, median and range for an odd sample count', () => {
@@ -29,14 +26,12 @@ test('aggregate averages the two middle values for an even sample count', () => 
   assert.equal(result.median, 2.5);
 });
 
-test('median is unaffected by a single noisy outlier (p95-of-5 = max)', () => {
-  // Documents issue #42, problem 4: with 5 samples the p95 index selects the max,
-  // so one noisy run dominates p95 while the median stays representative.
+test('median resists a single noisy outlier without reporting a redundant p95', () => {
   const values = [10, 10, 10, 10, 200];
   const result = aggregate(values);
   assert.equal(result.median, 10);
-  assert.equal(result.p95, 200);
   assert.equal(result.max, 200);
+  assert.ok(!('p95' in result));
 });
 
 test('stddev uses the sample (n-1) denominator', () => {
