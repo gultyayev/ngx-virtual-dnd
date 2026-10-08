@@ -104,10 +104,23 @@ script and long-task instrumentation.
 left only `comparison.json`, it reports that invalid result instead of an older
 standalone suite; a summary without raw evidence cannot establish a valid
 verdict. With neither experiment nor summary present, it uses `latest.json`.
-It accepts `--input`, `--output` (replace Markdown), and `--threshold`. It exits 3
+It accepts `--input`, `--output` (replace Markdown), `--threshold`, and `--details`. It exits 3
 for invalid evidence and 0 for a successfully rendered report; use
 `perf:compare` for the verdict's exit code. The report uses the actual sample
-counts, browser identity, CPU throttle, exposure, and workload observations.
+counts and the same validated measurements used for the verdict.
+
+The default report shows the verdict and one row per scenario, with task time,
+layout/style changes, and any uncertain or regressing metric. CI uses this compact
+report in the PR comment and job summary. Use `--details` for full metric tables,
+workload observations, confidence intervals, source hashes, environment settings,
+and runner health. CI saves that report as `report-details.md` alongside the raw
+JSON in its downloadable workflow artifacts.
+
+```bash
+npm run perf:report -- --input perf/results/experiment.json
+npm run perf:report -- --input perf/results/experiment.json --details \
+  --output perf/results/report-details.md
+```
 
 `perf:baseline` remains a local snapshot convenience. Historical snapshots can
 be inspected with `perf:compare -- --baseline <file> --current <file>`, but valid
