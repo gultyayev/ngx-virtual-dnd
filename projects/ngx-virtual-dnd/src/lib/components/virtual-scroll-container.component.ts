@@ -48,7 +48,7 @@ import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
 import { revealDropTargetIn } from '../utils/drop-animator';
 import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
-import { clipToScrollContainers, scrollAncestors } from '../utils/scroll-insets';
+import { clipToScrollContainers, scrollAncestors, validScrollInset } from '../utils/scroll-insets';
 
 /**
  * Context provided to the item template.
@@ -295,6 +295,9 @@ export class VirtualScrollContainerComponent<T>
   /** Content offset last written to the content wrapper */
   #contentTransformSet: string | null = null;
 
+  /** The content wrapper's bottom padding last set (see #render) */
+  #contentPaddingSet: string | null = null;
+
   /** Whether #revealPlaceholder is scheduled to run again after the next render */
   #revealAfterRenderPending = false;
 
@@ -321,12 +324,20 @@ export class VirtualScrollContainerComponent<T>
    * overlaid on its rows. A drag treats the list as starting below it: `constrainToContainer`
    * keeps the preview under it, the top autoscroll zone starts at its lower edge (the pointer over
    * it scrolls at full speed), a pointer over it is not over the list, and a keyboard drag keeps
-   * the placeholder below it. Measured from the element's border box.
+   * the placeholder below it. The rows start below it and the scroll range ends with as much
+   * space below them as `scrollInsetBottom` covers, so the first and last rows can scroll clear
+   * of both. Measured from the element's border box.
    */
   scrollInsetTop = input<number>(0);
 
   /** Space (px) at the bottom of the list covered by content pinned over it: see `scrollInsetTop`. */
   scrollInsetBottom = input<number>(0);
+
+  /** The space reserved above the rows: `scrollInsetTop`, or 0 when negative or invalid. */
+  readonly #rowsTop = computed(() => validScrollInset(this.scrollInsetTop()));
+
+  /** The space reserved below the rows: `scrollInsetBottom`, or 0 when negative or invalid. */
+  readonly #rowsBottomSpace = computed(() => validScrollInset(this.scrollInsetBottom()));
 
   /** Array of items to render */
   items = input.required<T[]>();
@@ -452,19 +463,19 @@ export class VirtualScrollContainerComponent<T>
   /** Current scroll position */
   readonly #scrollTop = signal(0);
 
-  /** Total height of all items (for scrollbar) */
+  /** Height of the scroll content (for the scrollbar): all items and the space around them */
   protected readonly totalHeight = computed(() => {
     const count = this.items().length;
     const strategy = this.#strategy();
     strategy.version();
-    return strategy.getTotalHeight(count);
+    return this.#rowsTop() + strategy.getTotalHeight(count) + this.#rowsBottomSpace();
   });
 
   /** First visible item index */
   readonly #firstVisibleIndex = computed(() => {
     const strategy = this.#strategy();
     strategy.version();
-    return strategy.getFirstVisibleIndex(this.#scrollTop());
+    return strategy.getFirstVisibleIndex(Math.max(0, this.#scrollTop() - this.#rowsTop()));
   });
 
   /** Number of items visible in the viewport */
@@ -494,7 +505,7 @@ export class VirtualScrollContainerComponent<T>
     const strategy = this.#strategy();
     strategy.version();
 
-    const offset = strategy.getOffsetForIndex(start);
+    const offset = this.#rowsTop() + strategy.getOffsetForIndex(start);
     return `translateY(${offset}px)`;
   });
 
@@ -865,8 +876,8 @@ export class VirtualScrollContainerComponent<T>
     const element = this.#elementRef.nativeElement;
     const currentScrollTop = element.scrollTop;
 
-    // Calculate placeholder position using strategy
-    const targetTop = strategy.getOffsetForIndex(placeholderIndex);
+    // Calculate placeholder position using strategy (rows start below the top inset)
+    const targetTop = this.#rowsTop() + strategy.getOffsetForIndex(placeholderIndex);
     const targetBottom = targetTop + this.placeholderHeight();
 
     // Calculate visible range: the part content pinned over the edges doesn't cover (read
@@ -952,6 +963,9 @@ export class VirtualScrollContainerComponent<T>
     const trackBy = this.effectiveTrackByFn();
     const recycle = this.recycleRows();
     const transform = this.contentTransform();
+    // The space reserved below the rows follows the last one rendered, the placeholder after it
+    // too: in a drag from another list it renders past the spacer's end
+    const padding = `${this.#rowsBottomSpace()}px`;
     const slot = this.#placeholderSlot();
     const placeholderHeight = slot >= 0 ? this.placeholderHeight() : null;
 
@@ -960,6 +974,10 @@ export class VirtualScrollContainerComponent<T>
       if (transform !== this.#contentTransformSet) {
         wrapper.style.transform = transform;
         this.#contentTransformSet = transform;
+      }
+      if (padding !== this.#contentPaddingSet) {
+        wrapper.style.paddingBottom = padding;
+        this.#contentPaddingSet = padding;
       }
       this.#renderRows(outlet, template, entries, keys, trackBy, recycle);
       this.#renderPlaceholder(outlet, slot, placeholderHeight);
@@ -1307,20 +1325,23 @@ export class VirtualScrollContainerComponent<T>
           if (index === undefined || height <= 0) return;
 
           const strategy = this.#strategy();
-          const top = strategy.getOffsetForIndex(index);
           const rowHeight = unmeasuredHeight > 0 ? unmeasuredHeight : strategy.getItemHeight(index);
+          // In the part of the list its insets leave uncovered (rows start below the top one)
+          const insetTop = this.#rowsTop();
+          const shownHeight = Math.max(0, height - insetTop - this.#rowsBottomSpace());
+          const top = strategy.getOffsetForIndex(index);
           const bottom = top + rowHeight;
           const element = this.#elementRef.nativeElement;
           const scrollTop = element.scrollTop;
           // Near: within a row's height of the view, but no more than the view's own height
-          const margin = Math.min(rowHeight, height);
-          if (top > scrollTop + height + margin || bottom < scrollTop - margin) return;
+          const margin = Math.min(rowHeight, shownHeight);
+          if (top > scrollTop + shownHeight + margin || bottom < scrollTop - margin) return;
           let target: number;
           if (top < scrollTop) {
             target = top;
-          } else if (bottom > scrollTop + height) {
+          } else if (bottom > scrollTop + shownHeight) {
             // A row taller than the viewport shows its top
-            target = Math.min(top, bottom - height);
+            target = Math.min(top, bottom - shownHeight);
           } else {
             return;
           }
@@ -1459,7 +1480,8 @@ export class VirtualScrollContainerComponent<T>
   }
 
   /**
-   * Scroll to a specific item index.
+   * Scroll to a specific item index: its row starts at the top of the part `scrollInsetTop`
+   * leaves uncovered.
    */
   scrollToIndex(index: number): void {
     const strategy = this.#strategy();
@@ -1478,7 +1500,7 @@ export class VirtualScrollContainerComponent<T>
   }
 
   /**
-   * Get the total scrollable height.
+   * Get the total scrollable height: the rows and the space reserved around them.
    */
   getScrollHeight(): number {
     return this.totalHeight();

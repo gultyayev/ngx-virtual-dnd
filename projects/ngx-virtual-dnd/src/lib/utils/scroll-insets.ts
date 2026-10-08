@@ -21,12 +21,18 @@ export type RectReader = (element: Element) => DOMRect;
 
 const readRect: RectReader = (element) => element.getBoundingClientRect();
 
+/** A scroll inset as drag code reads it: the value, or 0 when negative or invalid. */
+export function validScrollInset(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 /** The space covered at an edge of a scroll container, or 0 (unmarked, negative or invalid). */
 export function readScrollInset(element: Element, edge: 'top' | 'bottom'): number {
-  const value = parseFloat(
-    element.getAttribute(edge === 'top' ? SCROLL_INSET_TOP_ATTR : SCROLL_INSET_BOTTOM_ATTR) ?? '',
+  return validScrollInset(
+    parseFloat(
+      element.getAttribute(edge === 'top' ? SCROLL_INSET_TOP_ATTR : SCROLL_INSET_BOTTOM_ATTR) ?? '',
+    ),
   );
-  return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 /** Whether content pinned over either edge of a scroll container covers part of it. */

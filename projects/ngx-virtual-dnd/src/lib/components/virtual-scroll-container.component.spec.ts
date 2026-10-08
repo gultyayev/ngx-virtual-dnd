@@ -918,11 +918,42 @@ describe('VirtualScrollContainerComponent', () => {
       virtualScrollComponent.scrollTo(2000);
       startSameListKeyboardDrag(50);
 
-      // Placeholder at [500, 550): it must start 40px below the top edge
+      // Placeholder at [500, 550) of the rows, which start below the 40px: it must start 40px
+      // below the top edge
       dragStateService.setKeyboardTargetIndex(10);
       fixture.detectChanges();
 
-      expect(virtualScrollEl.scrollTop).toBe(500 - 40);
+      expect(virtualScrollEl.scrollTop).toBe(40 + 500 - 40);
+    });
+
+    it('should reserve the space covered at its edges around the rows', () => {
+      component.scrollInsetTop.set(40);
+      component.scrollInsetBottom.set(30);
+      fixture.detectChanges();
+
+      const spacer = virtualScrollEl.querySelector<HTMLElement>('.vdnd-virtual-scroll-spacer')!;
+      const wrapper = virtualScrollEl.querySelector<HTMLElement>(
+        '.vdnd-virtual-scroll-content-wrapper',
+      )!;
+      expect(spacer.style.height).toBe(`${40 + 5000 + 30}px`);
+      expect(virtualScrollComponent.getScrollHeight()).toBe(40 + 5000 + 30);
+      // The first row starts below the top inset; the bottom one follows the last rendered row
+      expect(wrapper.style.transform).toBe('translateY(40px)');
+      expect(wrapper.style.paddingBottom).toBe('30px');
+    });
+
+    it('should render the rows its top inset scrolls into view', () => {
+      component.overscan.set(0);
+      component.scrollInsetTop.set(40);
+      fixture.detectChanges();
+
+      // 40 + 10 rows down: row 10 is the first one at the top of the scroll area
+      virtualScrollComponent.scrollTo(540);
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.querySelector('.item')?.getAttribute('data-draggable-id')).toBe(
+        'item-10',
+      );
     });
 
     describe('under what a scroll container around it covers', () => {

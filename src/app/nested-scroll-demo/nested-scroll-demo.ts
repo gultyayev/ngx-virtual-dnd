@@ -26,8 +26,8 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
  * - a page scroller whose 80px sticky header covers its top (`scrollInsetTop`), holding a column
  *   scroller (a `vdndScrollable` list) and below it a `vdnd-sortable-list`, both scrolling under
  *   that header with the page;
- * - beside it, a `vdnd-sortable-list` with a 40px header overlaid on the top of its rows
- *   (`scrollInsetTop` on the list);
+ * - beside it, a `vdnd-sortable-list` with a 40px header and a 30px footer overlaid on its rows
+ *   (`scrollInsetTop` and `scrollInsetBottom` on the list);
  * - below them, a list of plain `@for` rows in a scroller with a 40px sticky header.
  *
  * `?constrain=true` keeps drags inside their list (`constrainToContainer`).
@@ -49,8 +49,8 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
     <main class="ns" data-testid="nested-scroll-demo">
       <h1 class="ns-title">Scroll insets</h1>
       <p class="ns-hint">
-        Left: a list scrolling inside a page with a sticky header. Right: a list with a header
-        overlaid on its rows.
+        Left: a list scrolling inside a page with a sticky header. Right: a list with a header and a
+        footer overlaid on its rows.
       </p>
 
       <div class="ns-panes" vdndGroup="nested">
@@ -100,8 +100,10 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
             [itemTemplate]="rowTpl"
             [constrainToContainer]="constrain"
             [scrollInsetTop]="40"
+            [scrollInsetBottom]="30"
             (drop)="onDrop($event)"
           />
+          <div class="ns-overlay-footer" data-testid="side-overlay-footer">Overlaid footer</div>
         </div>
 
         <ng-template #rowTpl let-row>
@@ -245,13 +247,12 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
       background: var(--bg-sunk);
     }
 
-    .ns-overlay {
+    .ns-overlay,
+    .ns-overlay-footer {
       position: absolute;
-      top: 0;
       left: 0;
       right: 0;
       z-index: 2;
-      height: 40px;
       display: flex;
       align-items: center;
       padding: 0 16px;
@@ -259,6 +260,16 @@ const createRows = (prefix: string, name: string, count: number): Row[] =>
       font-weight: 600;
       color: var(--ink);
       background: var(--surface-2);
+    }
+
+    .ns-overlay {
+      top: 0;
+      height: 40px;
+    }
+
+    .ns-overlay-footer {
+      bottom: 0;
+      height: 30px;
     }
   `,
 })

@@ -13,26 +13,26 @@ All components are standalone and exported from `ngx-virtual-dnd`.
 
 Droppable, virtual scroller and placeholder in one element. The default choice. See the [Quick start](/guide/start/quick-start).
 
-| Input                  | Type                                           | Default                 | Description                                                                                                                         |
-| ---------------------- | ---------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `droppableId`          | `string`                                       | **required**            | Unique ID of this list                                                                                                              |
-| `items`                | `T[]`                                          | **required**            | Items to render                                                                                                                     |
-| `itemHeight`           | `number`                                       | **required**            | Row height in px (the estimate when `dynamicItemHeight` is on)                                                                      |
-| `itemIdFn`             | `(item: T) => string`                          | **required**            | Returns an item's ID; must equal the `vdndDraggable` value rendered for it                                                          |
-| `itemTemplate`         | `TemplateRef<VirtualScrollItemContext<T>>`     | **required**            | Row template; its root element carries `vdndDraggable`                                                                              |
-| `group`                | `string`                                       | —                       | Group name. Not needed inside a `vdndGroup`                                                                                         |
-| `containerHeight`      | `number`                                       | —                       | Height in px. Without it, give the inner `vdnd-virtual-scroll` a CSS height                                                         |
-| `dynamicItemHeight`    | `boolean`                                      | `false`                 | Measure rows instead of using a fixed height                                                                                        |
-| `trackByFn`            | `(index: number, item: T) => string \| number` | derived from `itemIdFn` | Track-by function for rendering                                                                                                     |
-| `droppableData`        | `unknown`                                      | —                       | Arbitrary data, delivered as `DropEvent.destination.data`                                                                           |
-| `disabled`             | `boolean`                                      | `false`                 | Stop items being dropped into this list (items can still be dragged out; set `disabled` on the draggables too for a read-only list) |
-| `overscan`             | `number`                                       | `3`                     | Rows rendered beyond the visible area, above and below                                                                              |
-| `recycleRows`          | `boolean`                                      | `false`                 | Reuse the views of rows that scroll out, see [Row recycling](/guide/features/performance#row-recycling). Added in 3.3.0             |
-| `autoScrollEnabled`    | `boolean`                                      | `true`                  | Scroll when dragging near the edges                                                                                                 |
-| `autoScrollConfig`     | `Partial<AutoScrollConfig>`                    | `{}`                    | Auto-scroll tuning, see [Auto-scroll](/guide/features/auto-scroll)                                                                  |
-| `constrainToContainer` | `boolean`                                      | `false`                 | Keep the preview and drop position inside the list                                                                                  |
-| `scrollInsetTop`       | `number`                                       | `0`                     | Height (px) of content overlaid on the top of the rows, see [Scroll insets](/guide/features/page-scroll#sticky-headers-and-footers) |
-| `scrollInsetBottom`    | `number`                                       | `0`                     | Height (px) of content overlaid on the bottom of the rows                                                                           |
+| Input                  | Type                                           | Default                 | Description                                                                                                                                              |
+| ---------------------- | ---------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `droppableId`          | `string`                                       | **required**            | Unique ID of this list                                                                                                                                   |
+| `items`                | `T[]`                                          | **required**            | Items to render                                                                                                                                          |
+| `itemHeight`           | `number`                                       | **required**            | Row height in px (the estimate when `dynamicItemHeight` is on)                                                                                           |
+| `itemIdFn`             | `(item: T) => string`                          | **required**            | Returns an item's ID; must equal the `vdndDraggable` value rendered for it                                                                               |
+| `itemTemplate`         | `TemplateRef<VirtualScrollItemContext<T>>`     | **required**            | Row template; its root element carries `vdndDraggable`                                                                                                   |
+| `group`                | `string`                                       | —                       | Group name. Not needed inside a `vdndGroup`                                                                                                              |
+| `containerHeight`      | `number`                                       | —                       | Height in px. Without it, give the inner `vdnd-virtual-scroll` a CSS height                                                                              |
+| `dynamicItemHeight`    | `boolean`                                      | `false`                 | Measure rows instead of using a fixed height                                                                                                             |
+| `trackByFn`            | `(index: number, item: T) => string \| number` | derived from `itemIdFn` | Track-by function for rendering                                                                                                                          |
+| `droppableData`        | `unknown`                                      | —                       | Arbitrary data, delivered as `DropEvent.destination.data`                                                                                                |
+| `disabled`             | `boolean`                                      | `false`                 | Stop items being dropped into this list (items can still be dragged out; set `disabled` on the draggables too for a read-only list)                      |
+| `overscan`             | `number`                                       | `3`                     | Rows rendered beyond the visible area, above and below                                                                                                   |
+| `recycleRows`          | `boolean`                                      | `false`                 | Reuse the views of rows that scroll out, see [Row recycling](/guide/features/performance#row-recycling). Added in 3.3.0                                  |
+| `autoScrollEnabled`    | `boolean`                                      | `true`                  | Scroll when dragging near the edges                                                                                                                      |
+| `autoScrollConfig`     | `Partial<AutoScrollConfig>`                    | `{}`                    | Auto-scroll tuning, see [Auto-scroll](/guide/features/auto-scroll)                                                                                       |
+| `constrainToContainer` | `boolean`                                      | `false`                 | Keep the preview and drop position inside the list                                                                                                       |
+| `scrollInsetTop`       | `number`                                       | `0`                     | Height (px) of content overlaid on the top of the rows; they start below it. See [Scroll insets](/guide/features/page-scroll#sticky-headers-and-footers) |
+| `scrollInsetBottom`    | `number`                                       | `0`                     | Height (px) of content overlaid on the bottom of the rows; the last one scrolls clear of it                                                              |
 
 | Output            | Type                   | Description                                                                     |
 | ----------------- | ---------------------- | ------------------------------------------------------------------------------- |
@@ -47,25 +47,25 @@ The item template context (`VirtualScrollItemContext<T>`) exposes `$implicit` (t
 
 Low-level virtual scroller. Place it inside an element with `vdndDroppable`. See [Choosing a component](/guide/essentials/choosing-a-component#low-level-scroller).
 
-| Input                   | Type                                           | Default                 | Description                                                         |
-| ----------------------- | ---------------------------------------------- | ----------------------- | ------------------------------------------------------------------- |
-| `items`                 | `T[]`                                          | **required**            | Items to render                                                     |
-| `itemHeight`            | `number`                                       | **required**            | Row height in px                                                    |
-| `itemIdFn`              | `(item: T) => string`                          | **required**            | Returns an item's ID; must equal its `vdndDraggable` value          |
-| `itemTemplate`          | `TemplateRef<VirtualScrollItemContext<T>>`     | **required**            | Row template                                                        |
-| `droppableId`           | `string`                                       | —                       | ID of the enclosing `vdndDroppable`; needed to show the placeholder |
-| `containerHeight`       | `number`                                       | —                       | Height in px. Without it, give the element a CSS height             |
-| `dynamicItemHeight`     | `boolean`                                      | `false`                 | Measure rows                                                        |
-| `trackByFn`             | `(index: number, item: T) => string \| number` | derived from `itemIdFn` | Track-by function                                                   |
-| `overscan`              | `number`                                       | `3`                     | Extra rows rendered above and below                                 |
-| `recycleRows`           | `boolean`                                      | `false`                 | Reuse the views of rows that scroll out. Added in 3.3.0             |
-| `stickyItemIds`         | `string[]`                                     | `[]`                    | IDs of items that stay rendered at any scroll position              |
-| `autoStickyDraggedItem` | `boolean`                                      | `true`                  | Keep the dragged item rendered while it is out of view              |
-| `scrollContainerId`     | `string`                                       | —                       | ID used to register the container for auto-scroll                   |
-| `autoScrollEnabled`     | `boolean`                                      | `true`                  | Scroll when dragging near the edges                                 |
-| `autoScrollConfig`      | `Partial<AutoScrollConfig>`                    | `{}`                    | Auto-scroll tuning                                                  |
-| `scrollInsetTop`        | `number`                                       | `0`                     | Height (px) of content overlaid on the top of the rows              |
-| `scrollInsetBottom`     | `number`                                       | `0`                     | Height (px) of content overlaid on the bottom of the rows           |
+| Input                   | Type                                           | Default                 | Description                                                                                 |
+| ----------------------- | ---------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------- |
+| `items`                 | `T[]`                                          | **required**            | Items to render                                                                             |
+| `itemHeight`            | `number`                                       | **required**            | Row height in px                                                                            |
+| `itemIdFn`              | `(item: T) => string`                          | **required**            | Returns an item's ID; must equal its `vdndDraggable` value                                  |
+| `itemTemplate`          | `TemplateRef<VirtualScrollItemContext<T>>`     | **required**            | Row template                                                                                |
+| `droppableId`           | `string`                                       | —                       | ID of the enclosing `vdndDroppable`; needed to show the placeholder                         |
+| `containerHeight`       | `number`                                       | —                       | Height in px. Without it, give the element a CSS height                                     |
+| `dynamicItemHeight`     | `boolean`                                      | `false`                 | Measure rows                                                                                |
+| `trackByFn`             | `(index: number, item: T) => string \| number` | derived from `itemIdFn` | Track-by function                                                                           |
+| `overscan`              | `number`                                       | `3`                     | Extra rows rendered above and below                                                         |
+| `recycleRows`           | `boolean`                                      | `false`                 | Reuse the views of rows that scroll out. Added in 3.3.0                                     |
+| `stickyItemIds`         | `string[]`                                     | `[]`                    | IDs of items that stay rendered at any scroll position                                      |
+| `autoStickyDraggedItem` | `boolean`                                      | `true`                  | Keep the dragged item rendered while it is out of view                                      |
+| `scrollContainerId`     | `string`                                       | —                       | ID used to register the container for auto-scroll                                           |
+| `autoScrollEnabled`     | `boolean`                                      | `true`                  | Scroll when dragging near the edges                                                         |
+| `autoScrollConfig`      | `Partial<AutoScrollConfig>`                    | `{}`                    | Auto-scroll tuning                                                                          |
+| `scrollInsetTop`        | `number`                                       | `0`                     | Height (px) of content overlaid on the top of the rows; they start below it                 |
+| `scrollInsetBottom`     | `number`                                       | `0`                     | Height (px) of content overlaid on the bottom of the rows; the last one scrolls clear of it |
 
 | Method            | Signature                    | Description                  |
 | ----------------- | ---------------------------- | ---------------------------- |

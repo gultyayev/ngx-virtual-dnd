@@ -41,8 +41,8 @@ High-level component combining droppable, virtual scroll, and placeholder. Defau
 | `recycleRows` | `boolean` | `false` | No | Render rows that scroll in with the views of rows that scroll out. Their components are not re-created (`ngOnInit` runs once) and unbound state carries over, so rows must render only from their item |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling during drag |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
-| `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top of the rows (e.g. an overlaid header); see ScrollableDirective |
-| `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom of the rows |
+| `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top of the rows (e.g. an overlaid header); the rows start below it. See ScrollableDirective |
+| `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom of the rows; the last row scrolls clear of it |
 | `constrainToContainer` | `boolean` | `false` | No | Clamp drag preview and drop position to container boundaries |
 
 **Outputs:**
@@ -72,8 +72,8 @@ Low-level virtual scroll container. Use with `DroppableDirective` for custom lay
 | `scrollContainerId` | `string` | `undefined` | No | ID for auto-scroll registration |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
-| `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top of the rows (e.g. an overlaid header); see ScrollableDirective |
-| `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom of the rows |
+| `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top of the rows (e.g. an overlaid header); the rows start below it. See ScrollableDirective |
+| `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom of the rows; the last row scrolls clear of it |
 | `dynamicItemHeight` | `boolean` | `false` | No | Enable auto-measured variable heights |
 | `containerHeight` | `number` | `undefined` | No | Container height in pixels. Without it, give the element a CSS height (measured via ResizeObserver) |
 | `overscan` | `number` | `3` | No | Items to render beyond visible viewport |

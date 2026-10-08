@@ -7,6 +7,7 @@ import { listDraggables, listVirtualScroll } from '../utils/list-draggables';
 import {
   clipToScrollContainers,
   ownUncoveredRect,
+  readScrollInset,
   revealRange,
   scrollAncestors,
   uncoveredRect,
@@ -48,7 +49,7 @@ export interface DroppableScrollGeometry {
   /**
    * How far the rows are scrolled: a row's offset from the first row (as in
    * `VirtualScrollStrategy.getOffsetForIndex`) is `rowTop - rect.top + scrollTop`. Space reserved
-   * above the rows (`contentOffset`) is already subtracted.
+   * above the rows (`contentOffset`, a `vdnd-virtual-scroll`'s top inset) is already subtracted.
    */
   scrollTop: number;
   /**
@@ -416,6 +417,13 @@ export class DragIndexCalculatorService {
               isVirtual,
             }
           : { rect, scrollTop: 0, isVirtual };
+      case 'virtualScroll':
+        // Its rows start below its top inset (see vdnd-virtual-scroll's scrollInsetTop)
+        return {
+          rect,
+          scrollTop: scrollContainer.scrollTop - readScrollInset(scrollContainer, 'top'),
+          isVirtual,
+        };
       default:
         return { rect, scrollTop: scrollContainer.scrollTop, isVirtual };
     }
@@ -500,8 +508,11 @@ export class DragIndexCalculatorService {
 
       let totalHeight: number;
       if (spacer) {
-        // Get the spacer's explicit height (set via Angular binding)
-        totalHeight = parseFloat(spacer.style.height) || 0;
+        // Get the spacer's explicit height, without the space reserved around the rows
+        totalHeight =
+          (parseFloat(spacer.style.height) || 0) -
+          readScrollInset(virtualScroll, 'top') -
+          readScrollInset(virtualScroll, 'bottom');
       } else {
         // Fallback: use scrollHeight if spacer not found
         totalHeight = (virtualScroll as HTMLElement).scrollHeight;

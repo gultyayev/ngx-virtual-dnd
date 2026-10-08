@@ -49,7 +49,10 @@ test.describe('Scroll insets (nested and overlaid)', () => {
     await expect(sideScroller.locator('[data-draggable-id]').first()).toBeVisible();
   }
 
-  /** Set an element's scrollTop, re-applying it until its content is tall enough. */
+  /**
+   * Set an element's scrollTop, re-applying it until its content is tall enough, and wait for the
+   * rows it scrolls to render (a virtual list renders them on the next animation frame).
+   */
   async function scroll(scroller: Locator, scrollTop: number): Promise<void> {
     await expect(async () => {
       const actual = await scroller.evaluate((el, top) => {
@@ -59,6 +62,7 @@ test.describe('Scroll insets (nested and overlaid)', () => {
       }, scrollTop);
       expect(actual).toBe(scrollTop);
     }).toPass({ timeout: 3000 });
+    await waitForFrames(scroller.page(), 2);
   }
 
   /** Viewport edge of an element */
@@ -341,6 +345,79 @@ test.describe('Scroll insets (nested and overlaid)', () => {
       await poll(
         async () => (await placeholder.boundingBox())?.y ?? Number.NaN,
       ).toBeGreaterThanOrEqual(overlayBottom - 1);
+
+      await page.keyboard.press('Escape');
+      await expect(preview).toBeHidden();
+    });
+
+    test('shows its first and last rows clear of the overlaid header and footer', async ({
+      page,
+    }) => {
+      await open(page);
+      const overlayBottom = await edge(page.getByTestId('side-overlay'), 'bottom');
+      const footerTop = await edge(page.getByTestId('side-overlay-footer'), 'top');
+      const first = page.locator('[data-draggable-id="side-1"]');
+      expect(await edge(first, 'top')).toBeGreaterThanOrEqual(overlayBottom - 1);
+
+      await scroll(
+        sideScroller,
+        await sideScroller.evaluate((el) => el.scrollHeight - el.clientHeight),
+      );
+      const last = page.locator('[data-draggable-id="side-40"]');
+      await expect(last).toBeVisible();
+      await poll(() => edge(last, 'bottom')).toBeLessThanOrEqual(footerTop + 1);
+    });
+
+    test('reveals the first slot below the overlaid header in a keyboard drag', async ({
+      page,
+    }) => {
+      await open(page);
+      await scroll(sideScroller, 150);
+      const overlayBottom = await edge(page.getByTestId('side-overlay'), 'bottom');
+      const [first] = await rowsBetween(
+        sideScroller,
+        overlayBottom,
+        await edge(page.getByTestId('side-overlay-footer'), 'top'),
+      );
+      await page.locator(`[data-draggable-id="${first.id}"]`).focus();
+      await page.keyboard.press('Space');
+      await expect(preview).toBeVisible();
+
+      const placeholder = page.locator('.vdnd-drag-placeholder-visible');
+      for (let i = 0; i < 8; i++) {
+        await page.keyboard.press('ArrowUp');
+      }
+      await poll(() => sideScroller.evaluate((el) => el.scrollTop)).toBe(0);
+      await poll(
+        async () => (await placeholder.boundingBox())?.y ?? Number.NaN,
+      ).toBeGreaterThanOrEqual(overlayBottom - 1);
+
+      await page.keyboard.press('Escape');
+      await expect(preview).toBeHidden();
+    });
+
+    test('reveals the last slot above the overlaid footer in a keyboard drag', async ({ page }) => {
+      await open(page);
+      await scroll(sideScroller, 1500);
+      const footerTop = await edge(page.getByTestId('side-overlay-footer'), 'top');
+      const rows = await rowsBetween(
+        sideScroller,
+        await edge(page.getByTestId('side-overlay'), 'bottom'),
+        footerTop,
+      );
+      await page.locator(`[data-draggable-id="${rows[rows.length - 1].id}"]`).focus();
+      await page.keyboard.press('Space');
+      await expect(preview).toBeVisible();
+
+      const placeholder = page.locator('.vdnd-drag-placeholder-visible');
+      for (let i = 0; i < 12; i++) {
+        await page.keyboard.press('ArrowDown');
+      }
+      await waitForFrames(page, 2);
+      await poll(async () => {
+        const box = await placeholder.boundingBox();
+        return box ? box.y + box.height : Number.NaN;
+      }).toBeLessThanOrEqual(footerTop + 1);
 
       await page.keyboard.press('Escape');
       await expect(preview).toBeHidden();

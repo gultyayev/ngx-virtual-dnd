@@ -1196,6 +1196,16 @@ describe('DragIndexCalculatorService', () => {
     });
   });
 
+  it('measures the rows of a vdnd-virtual-scroll from below its top inset', () => {
+    // The rows start 40px down its scroll area: scrolled 120px, they are scrolled 80px
+    const droppable = createVirtualDroppable('inset-list', { itemHeight: 50, totalItems: 20 });
+    const virtualScroll = droppable.querySelector('vdnd-virtual-scroll')!;
+    virtualScroll.setAttribute('data-scroll-inset-top', '40');
+    virtualScroll.scrollTop = 120;
+
+    expect(service.getScrollGeometry(droppable, 50).scrollTop).toBe(80);
+  });
+
   describe('a plain list whose rows hold virtual lists', () => {
     /** A plain list of 2 rows, each wrapping a nested list that scrolls 100 rows of its own. */
     function createBoard(): HTMLElement {
