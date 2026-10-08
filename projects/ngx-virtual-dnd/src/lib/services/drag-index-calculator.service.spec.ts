@@ -766,6 +766,64 @@ describe('DragIndexCalculatorService', () => {
         ).toBe(47);
       });
     });
+
+    describe('under what a scroll container around it covers', () => {
+      /** The list in a scroll container (its rect 0..400) with the given insets and scrollTop. */
+      function indexInOuter(args: {
+        insetTop?: number;
+        insetBottom?: number;
+        outerScrollTop: number;
+        scrollTop: number;
+        previewTop: number;
+      }): number {
+        const outer = document.createElement('div');
+        outer.classList.add('vdnd-scrollable');
+        if (args.insetTop) outer.setAttribute('data-scroll-inset-top', String(args.insetTop));
+        if (args.insetBottom) {
+          outer.setAttribute('data-scroll-inset-bottom', String(args.insetBottom));
+        }
+        mockRect(outer);
+        mockScroll(outer, args.outerScrollTop);
+        const droppable = createScrolledDroppable('viewport', args.scrollTop);
+        outer.appendChild(droppable);
+        const grabOffset = { x: 20, y: ROW / 2 };
+        return service.calculatePlaceholderIndex({
+          droppableElement: droppable,
+          position: { x: 20, y: args.previewTop + grabOffset.y },
+          previousPosition: null,
+          grabOffset,
+          draggedItemHeight: ROW,
+          sourceDroppableId: null,
+          sourceIndex: null,
+        }).index;
+      }
+
+      it('snaps to the first slot at the top it is clamped to, below the outer header', () => {
+        // The outer header covers the list's top 100px; the preview is clamped 1px below it.
+        // Its probe (126) is in row 2.
+        expect(
+          indexInOuter({ insetTop: 100, outerScrollTop: 0, scrollTop: 0, previewTop: 101 }),
+        ).toBe(0);
+      });
+
+      it('keeps the probe row there while the outer container can still scroll up', () => {
+        expect(
+          indexInOuter({ insetTop: 100, outerScrollTop: 300, scrollTop: 0, previewTop: 101 }),
+        ).toBe(2);
+      });
+
+      it('snaps to the end at the bottom it is clamped to, above the outer footer', () => {
+        // The outer footer covers the list's bottom 100px; the preview's bottom is 1px above it.
+        // Its probe (274 + 2100) is in row 47.
+        const bottom = { insetBottom: 100, scrollTop: MAX_SCROLL, previewTop: 300 - ROW - 1 };
+        expect(indexInOuter({ ...bottom, outerScrollTop: MAX_SCROLL })).toBe(ROWS);
+      });
+
+      it('keeps the probe row there while the outer container can still scroll down', () => {
+        const bottom = { insetBottom: 100, scrollTop: MAX_SCROLL, previewTop: 300 - ROW - 1 };
+        expect(indexInOuter({ ...bottom, outerScrollTop: 0 })).toBe(47);
+      });
+    });
   });
 
   it('uses center probe for dynamic heights regardless of direction', () => {

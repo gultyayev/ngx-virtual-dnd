@@ -4,7 +4,27 @@ import { PositionCalculatorService } from './position-calculator.service';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { closestAcrossShadow } from '../utils/composed-dom';
 import { listDraggables, listVirtualScroll } from '../utils/list-draggables';
-import { ownUncoveredRect, revealRange, uncoveredRect, visibleRect } from '../utils/scroll-insets';
+import {
+  clipToScrollContainers,
+  ownUncoveredRect,
+  revealRange,
+  scrollAncestors,
+  uncoveredRect,
+  visibleRect,
+} from '../utils/scroll-insets';
+
+/**
+ * Whether `element` can't scroll further towards `edge`. scrollTop is fractional on WebKit and at
+ * non-integer zoom/DPR while scrollHeight and clientHeight are rounded integers, so "at the end"
+ * allows a pixel of slack.
+ */
+function isScrolledToEdge(element: Element, edge: 'start' | 'end'): boolean {
+  const tolerance = 1;
+  if (edge === 'start') {
+    return element.scrollTop <= tolerance;
+  }
+  return element.scrollTop >= element.scrollHeight - element.clientHeight - tolerance;
+}
 
 /** The `data-draggable-id` `vdnd-placeholder` marks itself with */
 const PLACEHOLDER_DRAGGABLE_ID = 'placeholder';
@@ -345,20 +365,24 @@ export class DragIndexCalculatorService {
     // using preview bounds so top/bottom drops remain reachable — but only once the list
     // is scrolled to that end. A preview pinned at the edge of a scrolled list (which is
     // how a constrained drag autoscrolls) keeps the probe's index, the visible edge row.
-    // A list that is its own scroll container (or wraps the vdnd-virtual-scroll that scrolls its
-    // rows) pins the preview at the edges of the part content pinned over them doesn't cover.
-    const droppableRect = isConstrainedToContainer ? ownUncoveredRect(droppableElement) : null;
-    if (droppableRect) {
+    // The edges are those the preview is clamped to: of the part of the list that shows (see
+    // `visibleRect`). A scroll container around it that hides an end of it must be scrolled to
+    // that end too, or scrolling it would still bring rows into view there.
+    if (isConstrainedToContainer) {
+      const own = ownUncoveredRect(droppableElement);
+      const ancestors = scrollAncestors(droppableElement);
+      const shown =
+        clipToScrollContainers(own, ancestors) ?? droppableElement.getBoundingClientRect();
       const edgeTolerance = 2;
-      const distanceToTop = Math.abs(previewTopY - droppableRect.top);
-      const distanceToBottom = Math.abs(droppableRect.bottom - previewBottomY);
+      const distanceToTop = Math.abs(previewTopY - shown.top);
+      const distanceToBottom = Math.abs(shown.bottom - previewBottomY);
 
       if (distanceToTop <= edgeTolerance && distanceToTop <= distanceToBottom) {
-        if (this.#isScrolledToEnd(cache, 'start')) {
+        if (this.#isScrolledToEnd(cache, 'start', own, ancestors)) {
           placeholderIndex = 0;
         }
       } else if (distanceToBottom <= edgeTolerance) {
-        if (this.#isScrolledToEnd(cache, 'end')) {
+        if (this.#isScrolledToEnd(cache, 'end', own, ancestors)) {
           placeholderIndex = totalItems;
         }
       }
@@ -398,23 +422,34 @@ export class DragIndexCalculatorService {
   }
 
   /**
-   * Whether a droppable's rows can't scroll further towards `edge`. Page-scroll content
-   * (`vdnd-virtual-content`) always can't: its droppable rect spans all of its rows, so a preview
-   * at that rect's edge is at the first/last row however the page is scrolled.
+   * Whether a droppable's rows can't scroll further towards `edge`: neither its own scroll
+   * element nor a scroll container among `ancestors` that hides that end of its uncovered part
+   * (`own`). Page-scroll content (`vdnd-virtual-content`) always can't: its droppable rect spans
+   * all of its rows, so a preview at that rect's edge is at the first/last row however the page
+   * is scrolled.
    */
-  #isScrolledToEnd(cache: DroppableCache, edge: 'start' | 'end'): boolean {
+  #isScrolledToEnd(
+    cache: DroppableCache,
+    edge: 'start' | 'end',
+    own: DOMRect | null,
+    ancestors: readonly Element[],
+  ): boolean {
     if (cache.containerType === 'virtualContent') {
       return true;
     }
-    // scrollTop is fractional on WebKit and at non-integer zoom/DPR while scrollHeight and
-    // clientHeight are rounded integers, so "at the end" allows a pixel of slack.
-    const tolerance = 1;
-    const { scrollContainer } = cache;
-    if (edge === 'start') {
-      return scrollContainer.scrollTop <= tolerance;
+    if (!isScrolledToEdge(cache.scrollContainer, edge)) {
+      return false;
     }
-    const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-    return scrollContainer.scrollTop >= maxScrollTop - tolerance;
+    if (!own) {
+      return true;
+    }
+    return ancestors.every((ancestor) => {
+      const uncovered = uncoveredRect(ancestor);
+      const hidesEnd =
+        uncovered === null ||
+        (edge === 'start' ? uncovered.top > own.top : uncovered.bottom < own.bottom);
+      return !hidesEnd || isScrolledToEdge(ancestor, edge);
+    });
   }
 
   /** The `data-content-offset` (px reserved above the rows) of a virtual container, or 0. */
