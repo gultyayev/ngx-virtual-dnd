@@ -1,242 +1,359 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aggregate } from './statistics.ts';
 import {
-  percentChange,
-  evaluateMetric,
-  incompatibleBaselineAdvice,
+  compareExperiment,
+  validateExperiment,
+  medianInterval,
   GATED_METRICS,
-  MIN_ABS_DELTA,
+  EXIT_CODES,
 } from './compare-metrics.ts';
-import { SCENARIO_METRICS } from './metric-math.ts';
+import { makeExperiment } from './experiment-fixture.ts';
+import { computeFrameOverBudgetMs, countJankIntervals } from './metric-math.ts';
 
-test('percentChange handles a zero baseline without dividing by zero', () => {
-  assert.equal(percentChange(0, 0), 0);
-  assert.equal(percentChange(0, 1), 100);
-  assert.equal(percentChange(10, 15), 50);
-  assert.equal(percentChange(10, 5), -50);
+function changeHead(experiment: ReturnType<typeof makeExperiment>, delta: number) {
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      if (run.variant === 'head') {
+        run.scenarios[0].raw[0].taskDuration += delta;
+      }
+}
+test('A/A passes every primary budget without trusting stored aggregates', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks)
+    for (const run of block.runs) run.scenarios[0]['taskDuration'] = { median: 1e9 };
+  assert.deepEqual(validateExperiment(experiment), []);
+  const result = compareExperiment(experiment);
+  assert.equal(result.verdict, 'pass');
+  assert.equal(result.rows.length, 15);
+  assert.deepEqual(result.rows[0].interval, [-10, -10]);
 });
-
-test('zero-baseline metric is not gated on a below-floor absolute change', () => {
-  // Issue #42, problem 5: longTaskCount 0 -> 1 is +100% but must not trip the gate.
-  const result = evaluateMetric(
-    'longTaskCount',
-    aggregate([0, 0, 0, 0, 0]),
-    aggregate([1, 1, 0, 0, 1]),
-    25,
+test('a sustained 20% paired slowdown is detected with simultaneous bounds', () => {
+  const experiment = makeExperiment();
+  changeHead(experiment, 20);
+  const result = compareExperiment(experiment);
+  assert.equal(result.verdict, 'regression');
+  assert.deepEqual(result.rows[0].interval, [10, 10]);
+});
+test('balanced means cancel linear environmental drift within each block', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks)
+    for (const [i, run] of block.runs.entries()) run.scenarios[0].raw[0].taskDuration += i * 50;
+  const result = compareExperiment(experiment);
+  assert.equal(result.verdict, 'pass');
+  assert.equal(result.rows[0].delta, 0);
+});
+test('a burst in one head run preserves uncertainty instead of failing or erasing evidence', () => {
+  const experiment = makeExperiment();
+  experiment.blocks[0].runs[1].scenarios[0].raw[0].taskDuration += 1000;
+  experiment.blocks[0].runs[1].scenarios[0].raw[0].counterWindowMs += 1000;
+  const result = compareExperiment(experiment);
+  assert.equal(result.verdict, 'inconclusive');
+  assert.deepEqual(result.rows[0].interval, [-10, 490]);
+});
+test('too few blocks cannot make a confident pass or regression', () => {
+  const experiment = makeExperiment(9);
+  changeHead(experiment, 200);
+  const result = compareExperiment(experiment);
+  assert.equal(result.verdict, 'inconclusive');
+  assert.deepEqual(result.rows[0].interval, [null, null]);
+  assert.match(result.reasons.join(' '), /Too few/);
+});
+test('exact order-statistic interval has the advertised finite-sample binomial coverage', () => {
+  assert.deepEqual(
+    medianInterval(
+      Array.from({ length: 9 }, (_, i) => i),
+      0.05 / 15,
+    ),
+    [null, null],
   );
-  assert.equal(result.percentChange, 100);
-  assert.equal(result.regression, false);
-  assert.equal(result.suppressed, true);
-  assert.equal(result.suppressedReason, 'below-floor');
-});
-
-test('zero-baseline metric IS gated once it clears the absolute floor', () => {
-  // longTaskCount floor is 2, so 0 -> 3 is a real regression.
-  assert.equal(MIN_ABS_DELTA['longTaskCount'], 2);
-  const result = evaluateMetric(
-    'longTaskCount',
-    aggregate([0, 0, 0, 0, 0]),
-    aggregate([3, 3, 3, 3, 3]),
-    25,
+  assert.deepEqual(
+    medianInterval(
+      Array.from({ length: 10 }, (_, i) => i),
+      0.05 / 15,
+    ),
+    [0, 9],
   );
-  assert.equal(result.regression, true);
-  assert.equal(result.suppressed, false);
+  assert.deepEqual(
+    medianInterval(
+      Array.from({ length: 20 }, (_, i) => i),
+      0.05,
+    ),
+    [5, 14],
+  );
+});
+test('absolute budgets handle zero baselines without invented percent changes', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      run.scenarios[0].raw[0].layoutCount = run.variant === 'base' ? 0 : 1;
+  const result = compareExperiment(experiment);
+  assert.equal(result.verdict, 'pass');
+  assert.equal(result.rows[1].changePercent, null);
+  assert.deepEqual(result.rows[1].interval, [0, 0]);
+});
+test('paced metrics remain diagnostic even with a large slowdown', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      if (run.variant === 'head') run.scenarios.at(-1)!.raw[0].taskDuration = 1e6;
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      if (run.variant === 'head') run.scenarios.at(-1)!.raw[0].counterWindowMs = 1e6 + 1;
+  assert.equal(compareExperiment(experiment).verdict, 'pass');
+  assert.deepEqual(GATED_METRICS, ['taskDuration', 'layoutCount', 'recalcStyleCount']);
+});
+test('frame diagnostics use the collector’s exact frame budget and preserve severity', () => {
+  const experiment = makeExperiment();
+  const sample = experiment.blocks[0].runs[0].scenarios[0].raw[0];
+  sample.frameTimes = [16.67, 33.33, 100];
+  sample.frameCount = 3;
+  sample.avgFrameTime = 50;
+  sample.maxFrameGap = 100;
+  sample.jankIntervalCount = countJankIntervals(sample.frameTimes);
+  sample.frameOverBudgetMs = computeFrameOverBudgetMs(sample.frameTimes);
+  assert.deepEqual(validateExperiment(experiment), []);
+  sample.frameOverBudgetMs = 2;
+  assert.equal(compareExperiment(experiment).verdict, 'invalid');
+});
+test('extra overscan rows remain diagnostic when completed checkpoints match', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      if (run.variant === 'head') {
+        const workload = run.scenarios[0].raw[0].workload;
+        workload['visitedRows'] = [
+          'extra-before',
+          ...(workload['visitedRows'] as string[]),
+          'extra-after',
+        ];
+        workload['renderedRanges'] = ['extra-before:extra-after'];
+      }
+  assert.deepEqual(validateExperiment(experiment), []);
+  assert.equal(compareExperiment(experiment).verdict, 'pass');
+  changeHead(experiment, 20);
+  assert.equal(
+    compareExperiment(experiment).verdict,
+    'regression',
+    'extra rendering work may still produce a real cost regression',
+  );
+});
+test('a different completed scroll path cannot hide behind equal operation counts', () => {
+  const experiment = makeExperiment();
+  const workload = experiment.blocks[0].runs[1].scenarios[0].raw[0].workload;
+  workload['checkpointRows'] = ['3', '2'];
+  workload['visitedRows'] = ['0', '1', '2', '3'];
+  assert.equal(compareExperiment(experiment).verdict, 'invalid');
+});
+const invalidCases: [string, (experiment: ReturnType<typeof makeExperiment>) => void][] = [
+  ['empty experiment', (experiment) => (experiment.blocks = [])],
+  ['missing browser metadata', (experiment) => delete experiment.environment['browserVersion']],
+  ['missing viewport', (experiment) => delete experiment.environment['viewport']],
+  ['missing harness identity', (experiment) => (experiment.harnessHash = '')],
+  ['missing dependency identity', (experiment) => (experiment.variants.base.dependencyHash = '')],
+  ['missing library source identity', (experiment) => (experiment.variants.base.libraryHash = '')],
+  ['different dependencies', (experiment) => (experiment.variants.head.dependencyHash = 'other')],
+  ['duplicate index', (experiment) => (experiment.blocks[1].index = 0)],
+  [
+    'nonbalanced order',
+    (experiment) => (experiment.blocks[0].order = ['base', 'base', 'head', 'head']),
+  ],
+  [
+    'reused artifact',
+    (experiment) =>
+      (experiment.blocks[0].runs[1].sourceFile = experiment.blocks[0].runs[0].sourceFile),
+  ],
+  ['missing scenario', (experiment) => experiment.blocks[0].runs[0].scenarios.pop()],
+  [
+    'duplicate scenario',
+    (experiment) =>
+      experiment.blocks[0].runs[0].scenarios.push(experiment.blocks[0].runs[0].scenarios[0]),
+  ],
+  [
+    'missing metric',
+    (experiment) =>
+      delete (
+        experiment.blocks[0].runs[0].scenarios[0].raw[0] as unknown as Record<string, unknown>
+      )['taskDuration'],
+  ],
+  [
+    'NaN metric',
+    (experiment) => (experiment.blocks[0].runs[0].scenarios[0].raw[0].taskDuration = NaN),
+  ],
+  [
+    'negative metric',
+    (experiment) => (experiment.blocks[0].runs[0].scenarios[0].raw[0].taskDuration = -1),
+  ],
+  ['missing raw evidence', (experiment) => (experiment.blocks[0].runs[0].scenarios[0].raw = [])],
+  [
+    'extra sample',
+    (experiment) => {
+      const s = experiment.blocks[0].runs[0].scenarios[0];
+      s.raw.push(s.raw[0]);
+      s.iterations = 2;
+    },
+  ],
+  [
+    'both same unsupported schema',
+    (experiment) => {
+      for (const block of experiment.blocks)
+        for (const run of block.runs) for (const s of run.scenarios) s.metricsSchemaVersion = 999;
+    },
+  ],
+  ['unknown throttle', (experiment) => (experiment.blocks[0].runs[0].scenarios[0].cpuThrottle = 1)],
+  [
+    'hidden page',
+    (experiment) => (experiment.blocks[0].runs[0].scenarios[0].raw[0].visibilityState = 'hidden'),
+  ],
+  [
+    'changed browser',
+    (experiment) => (experiment.blocks[0].runs[0].scenarios[0].raw[0].browserVersion = 'other'),
+  ],
+  [
+    'changed workload definition',
+    (experiment) => (experiment.blocks[0].runs[0].scenarios[0].workload['checkpoints'] = 3),
+  ],
+  [
+    'unequal operations',
+    (experiment) => (experiment.blocks[0].runs[1].scenarios[0].raw[0].workload['operations'] = 1),
+  ],
+  [
+    'unobserved completed checkpoints',
+    (experiment) =>
+      (experiment.blocks[0].runs[1].scenarios[0].raw[0].workload['visitedRows'] = ['99']),
+  ],
+  [
+    'failed work',
+    (experiment) =>
+      (experiment.blocks[0].runs[0].scenarios[0].raw[0].workload['completed'] = false),
+  ],
+  [
+    'unbracketed time',
+    (experiment) => (experiment.blocks[0].runs[0].scenarios[0].raw[0].counterWindowMs = 1),
+  ],
+  [
+    'unordered timestamps',
+    (experiment) => (experiment.blocks[0].runs[1].startedAt = '1970-01-01T00:00:01.000Z'),
+  ],
+];
+for (const [name, mutation] of invalidCases)
+  test(`invalid evidence: ${name}`, () => {
+    const experiment = makeExperiment();
+    mutation(experiment);
+    const result = compareExperiment(experiment);
+    assert.equal(result.verdict, 'invalid');
+    assert.ok(result.reasons.length > 0);
+  });
+test('invalid options fail closed and verdicts have distinct exit codes', () => {
+  assert.equal(compareExperiment(makeExperiment(), { thresholdPercent: NaN }).verdict, 'invalid');
+  assert.equal(compareExperiment(makeExperiment(), { familyAlpha: 0 }).verdict, 'invalid');
+  assert.deepEqual(EXIT_CODES, { pass: 0, regression: 1, inconclusive: 2, invalid: 3 });
 });
 
-test('a lone baseline outlier does NOT suppress a sustained regression (MAD, not stddev)', () => {
-  // Reviewer's case: with stddev (≈224) the +100 shift was suppressed; with MAD
-  // (0, since 4 of 5 deviations are 0) the sustained regression is correctly gated.
-  const baseline = aggregate([0, 0, 0, 0, 500]);
-  const current = aggregate([100, 100, 100, 100, 100]);
-  assert.equal(baseline.median, 0);
-  assert.equal(baseline.mad, 0);
-  assert.ok(baseline.stddev > 200, 'stddev is inflated by the outlier');
-  const result = evaluateMetric('totalBlockingTime', baseline, current, 25);
-  assert.equal(result.regression, true);
-  assert.equal(result.suppressed, false);
-});
-
-test('a change within the MAD noise band is not gated', () => {
-  // Genuinely noisy baseline: median 100, MAD 10 -> band = 3*10 = 30.
-  const baseline = aggregate([80, 100, 90, 110, 100]);
-  const current = aggregate([130, 130, 130, 130, 130]);
-  assert.equal(baseline.median, 100);
-  assert.equal(baseline.mad, 10);
-  const result = evaluateMetric('totalBlockingTime', baseline, current, 25);
-  assert.equal(result.absDelta, 30); // exactly on the band edge -> not "> band"
-  assert.equal(result.regression, false);
-  assert.equal(result.suppressed, true);
-  assert.equal(result.suppressedReason, 'within-noise-band');
-});
-
-test('one unusually fast sample cannot veto a large median regression', () => {
-  // A min-based "sustained" guard was tried and reverted (PR #63): the minimum
-  // is the most outlier-sensitive of the five samples, and a single fast
-  // iteration must not suppress a genuine doubling of the median.
-  const baseline = aggregate([100, 100, 100, 100, 100]);
-  const current = aggregate([210, 200, 205, 210, 95]); // median 205, min below baseline
-  const result = evaluateMetric('totalBlockingTime', baseline, current, 25);
-  assert.equal(result.regression, true);
-  assert.equal(result.suppressed, false);
-});
-
-test('p99FrameTime is not a gated metric (duplicates maxFrameGap at low frame counts)', () => {
-  // Scenarios collect <300 frame intervals, so nearest-rank p99 = max. Gating
-  // it would re-evaluate maxFrameGap with a contradictory floor.
-  assert.equal(GATED_METRICS.includes('p99FrameTime' as never), false);
-  assert.equal('p99FrameTime' in MIN_ABS_DELTA, false);
-  assert.ok(GATED_METRICS.includes('maxFrameGap'));
-  // Every gated metric that can have a small baseline carries a floor.
-  for (const metric of GATED_METRICS) {
-    assert.ok(MIN_ABS_DELTA[metric] > 0, `${metric} has an absolute floor`);
+test('completion and warmup provenance cannot be omitted from both variants', () => {
+  for (const field of ['completed', 'warmupIterations']) {
+    const experiment = makeExperiment();
+    for (const block of experiment.blocks)
+      for (const run of block.runs) for (const scenario of run.scenarios) delete scenario[field];
+    assert.equal(compareExperiment(experiment).verdict, 'invalid');
   }
 });
 
-test('layout/style-recalc floors sit below the smallest baseline medians', () => {
-  // With a floor of 25 a drag-within-list layoutCount doubling (24 -> 48,
-  // delta 24) was suppressed as noise. These counts are near-deterministic, so
-  // the floor only needs to guard tiny baselines. Without the demo's debug panel
-  // (#97) the smallest drag layout baseline is 6 (drag-within-virtual-for-list).
-  assert.equal(MIN_ABS_DELTA['layoutCount'], 3);
-  assert.equal(MIN_ABS_DELTA['recalcStyleCount'], 10);
-  // One forced layout per placeholder move on that scenario's 4 moves: 6 -> 10
-  const result = evaluateMetric(
-    'layoutCount',
-    aggregate([6, 6, 6, 6, 6]),
-    aggregate([10, 10, 10, 10, 10]),
-    25,
+test('finite but physically impossible renderer durations are invalid', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks)
+    for (const run of block.runs) run.scenarios[0].raw[0].taskDuration = 1e6;
+  assert.equal(compareExperiment(experiment).verdict, 'invalid');
+  assert.match(compareExperiment(experiment).reasons.join(' '), /counter window/);
+  const scripts = makeExperiment();
+  scripts.blocks[0].runs[0].scenarios[0].raw[0].scriptDuration = 500;
+  assert.equal(compareExperiment(scripts).verdict, 'invalid');
+});
+
+test('A/A calibration verifies source identity and names false alarms', () => {
+  const experiment = makeExperiment();
+  experiment.mode = 'calibration';
+  experiment.environment['control'] = 'none';
+  experiment.variants.head.commit = experiment.variants.base.commit;
+  assert.equal(
+    compareExperiment(experiment).verdict,
+    'invalid',
+    'matching commits cannot mask different dirty source trees',
   );
-  assert.equal(result.regression, true);
+  experiment.variants.head.libraryHash = experiment.variants.base.libraryHash;
+  changeHead(experiment, 20);
+  const result = compareExperiment(experiment);
+  assert.equal(result.verdict, 'regression');
+  assert.match(result.reasons.join(' '), /false alarm/);
 });
-
-test('a couple of extra layouts on a tiny layout baseline stay below the floor', () => {
-  const result = evaluateMetric(
-    'layoutCount',
-    aggregate([0, 0, 0, 0, 0]),
-    aggregate([2, 2, 2, 2, 2]),
-    25,
+test('cancelled and incomplete experiment prefixes cannot masquerade as complete evidence', () => {
+  const cancelled = makeExperiment(10);
+  cancelled.requestedBlocks = 20;
+  cancelled.completed = false;
+  assert.equal(compareExperiment(cancelled).verdict, 'invalid');
+  cancelled.completed = true;
+  assert.equal(
+    compareExperiment(cancelled).verdict,
+    'invalid',
+    'a forged completion flag cannot override the declared plan',
   );
-  assert.equal(result.regression, false);
-  assert.equal(result.suppressedReason, 'below-floor');
-});
-
-test('a change beyond threshold, floor, and MAD band is gated', () => {
-  const baseline = aggregate([80, 100, 90, 110, 100]); // median 100, MAD 10, band 30
-  const current = aggregate([145, 145, 145, 145, 145]); // +45 > 30
-  const result = evaluateMetric('totalBlockingTime', baseline, current, 25);
-  assert.equal(result.regression, true);
-});
-
-test('improvements (lower is better) are never flagged as regressions', () => {
-  const result = evaluateMetric(
-    'droppedFrames',
-    aggregate([60, 61, 59, 60, 60]),
-    aggregate([10, 9, 11, 10, 10]),
-    25,
+  const unfinished = makeExperiment(10);
+  unfinished.completed = false;
+  assert.equal(
+    compareExperiment(unfinished).verdict,
+    'invalid',
+    'all planned samples still require explicit experiment completion',
   );
-  assert.ok(result.percentChange < 0);
-  assert.equal(result.regression, false);
-  assert.equal(result.suppressed, false);
 });
-
-test('a small percent change under the threshold is neither regression nor suppressed', () => {
-  const result = evaluateMetric(
-    'maxFrameGap',
-    aggregate([20, 20, 20, 20, 20]),
-    aggregate([22, 22, 22, 22, 22]),
-    25,
-  );
-  assert.equal(result.regression, false);
-  assert.equal(result.suppressed, false);
-});
-
-test('main-thread task time is gated (#97)', () => {
-  // Frame metrics only move when a frame misses its budget; task time also counts extra work
-  // that still fits in the frame.
-  assert.ok(GATED_METRICS.includes('taskDuration'));
-  const result = evaluateMetric(
-    'taskDuration',
-    aggregate([340, 350, 360, 355, 345]),
-    aggregate([460, 450, 470, 455, 465]),
-    25,
-  );
-  assert.equal(result.regression, true);
-});
-
-test('script time is reported but not gated (its run-to-run drift exceeds the threshold)', () => {
-  // Two runs of the same code on one machine: drag-within-list script time 70 -> 88 ms (+26%).
-  // Pages reload per iteration, so JIT and GC timing vary; task time drifted at most 19%.
-  assert.equal(GATED_METRICS.includes('scriptDuration' as never), false);
-  assert.equal('scriptDuration' in MIN_ABS_DELTA, false);
-  assert.ok(SCENARIO_METRICS.includes('scriptDuration'));
-});
-
-test('task-time drift between runs of the same code is not gated', () => {
-  // Measured on drag-within-list: 358 -> 426 ms (+19%), under the percent threshold.
-  const drift = evaluateMetric(
-    'taskDuration',
-    aggregate([326, 350, 358, 360, 364]),
-    aggregate([352, 420, 426, 430, 434]),
-    25,
-  );
-  assert.equal(drift.regression, false);
-  // On the smallest baseline (~200 ms, drag-within-virtual-for-list) the floor, not the band,
-  // keeps a +28 ms (+14%) drift from mattering even if the threshold is lowered.
-  assert.equal(MIN_ABS_DELTA['taskDuration'], 50);
-  const small = evaluateMetric(
-    'taskDuration',
-    aggregate([200, 200, 200, 200, 200]),
-    aggregate([228, 228, 228, 228, 228]),
-    10,
-  );
-  assert.equal(small.regression, false);
-  assert.equal(small.suppressedReason, 'below-floor');
-});
-
-test('every gated metric is in the aggregated scenario report', () => {
-  // compare.ts skips a metric the baseline lacks, so a gated metric missing from the scenario
-  // reports would silently never be gated.
-  for (const metric of GATED_METRICS) {
-    assert.ok(
-      (SCENARIO_METRICS as readonly string[]).includes(metric),
-      `${metric} is in SCENARIO_METRICS`,
-    );
+test('requested block provenance must be a positive safe integer', () => {
+  for (const requestedBlocks of [0, -1, 1.5, NaN, Infinity]) {
+    const experiment = makeExperiment();
+    experiment.requestedBlocks = requestedBlocks;
+    assert.equal(compareExperiment(experiment).verdict, 'invalid');
   }
+  const missing = makeExperiment() as unknown as Record<string, unknown>;
+  delete missing['requestedBlocks'];
+  assert.equal(compareExperiment(missing).verdict, 'invalid');
 });
-
-test('a schema mismatch tells CI readers there is no baseline to regenerate', () => {
-  // The PR that bumps the schema fails once: its base commit still runs the old harness. CI
-  // measures every PR's base afresh, so the next PR compares normally.
-  const advice = incompatibleBaselineAdvice({
-    schemaMismatch: true,
-    mixedSchemas: false,
-    playwrightMismatch: false,
-  }).join(' ');
-  assert.match(advice, /no baseline to regenerate/);
-  assert.match(advice, /next PR/);
-  // Regenerating is advice for a saved local baseline only
-  assert.match(advice, /[Ll]ocal.*`npm run perf:baseline`/);
+test('retained warmup observations are required and receive the same integrity checks', () => {
+  const missing = makeExperiment();
+  delete (missing.blocks[0].runs[0].scenarios[0] as unknown as Record<string, unknown>)[
+    'warmupRaw'
+  ];
+  assert.equal(compareExperiment(missing).verdict, 'invalid');
+  const empty = makeExperiment();
+  empty.blocks[0].runs[0].scenarios[0]['warmupRaw'] = [];
+  assert.equal(compareExperiment(empty).verdict, 'invalid');
+  const corrupted = makeExperiment();
+  (
+    corrupted.blocks[0].runs[0].scenarios[0]['warmupRaw'] as { taskDuration: number }[]
+  )[0].taskDuration = -1;
+  assert.equal(compareExperiment(corrupted).verdict, 'invalid');
+  assert.match(compareExperiment(corrupted).reasons.join(' '), /warmup sample/);
 });
-
-test('a Playwright mismatch can only come from a local baseline', () => {
-  // perf.yml measures the base with the head's Playwright
-  const advice = incompatibleBaselineAdvice({
-    schemaMismatch: false,
-    mixedSchemas: false,
-    playwrightMismatch: true,
-  }).join(' ');
-  assert.match(advice, /`npm run perf:baseline`/);
-  assert.doesNotMatch(advice, /next PR/);
+test('warmup costs remain diagnostic and do not enter primary inference', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      if (run.variant === 'head')
+        (run.scenarios[0]['warmupRaw'] as { taskDuration: number }[])[0].taskDuration = 500;
+  assert.equal(compareExperiment(experiment).verdict, 'pass');
+  const noWarmup = makeExperiment();
+  for (const block of noWarmup.blocks)
+    for (const run of block.runs)
+      for (const scenario of run.scenarios) {
+        scenario['warmupIterations'] = 0;
+        scenario['warmupRaw'] = [];
+      }
+  assert.equal(compareExperiment(noWarmup).verdict, 'pass');
 });
-
-test('a results file mixing collector outputs asks for a fresh run', () => {
-  const advice = incompatibleBaselineAdvice({
-    schemaMismatch: true,
-    mixedSchemas: true,
-    playwrightMismatch: false,
-  }).join(' ');
-  assert.match(advice, /`npm run perf`/);
-  // A mixed file is broken on its own; it is not the expected schema-bump case
-  assert.doesNotMatch(advice, /next PR/);
+test('setup CPU throttling must be explicit and use the same unthrottled preparation protocol', () => {
+  const missing = makeExperiment();
+  delete (missing.blocks[0].runs[0].scenarios[0] as unknown as Record<string, unknown>)[
+    'setupCpuThrottle'
+  ];
+  assert.equal(compareExperiment(missing).verdict, 'invalid');
+  const wrong = makeExperiment();
+  wrong.blocks[0].runs[0].scenarios[0].setupCpuThrottle = 4;
+  assert.equal(compareExperiment(wrong).verdict, 'invalid');
+  assert.match(compareExperiment(wrong).reasons.join(' '), /setup CPU throttle/);
 });
