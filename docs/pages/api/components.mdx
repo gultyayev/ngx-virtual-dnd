@@ -83,16 +83,16 @@ Get the instance with `viewChild(VirtualScrollContainerComponent)`.
 
 Self-scrolling container for `*vdndVirtualFor`. Positions all rows with one GPU-accelerated transform. Children inherit `itemHeight` and `dynamicItemHeight`. Needs a CSS height.
 
-| Input               | Type                        | Default      | Description                                        |
-| ------------------- | --------------------------- | ------------ | -------------------------------------------------- |
-| `itemHeight`        | `number`                    | **required** | Row height in px                                   |
-| `dynamicItemHeight` | `boolean`                   | `false`      | Measure rows                                       |
-| `contentOffset`     | `number`                    | `0`          | Space in px reserved above the rows                |
-| `scrollContainerId` | `string`                    | —            | ID used to register for auto-scroll                |
-| `autoScrollEnabled` | `boolean`                   | `true`       | Scroll when dragging near the edges                |
-| `autoScrollConfig`  | `Partial<AutoScrollConfig>` | `{}`         | Auto-scroll tuning                                 |
-| `scrollInsetTop`    | `number`                    | `0`          | Height (px) of content pinned over the top edge    |
-| `scrollInsetBottom` | `number`                    | `0`          | Height (px) of content pinned over the bottom edge |
+| Input               | Type                        | Default      | Description                                                                                                         |
+| ------------------- | --------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `itemHeight`        | `number`                    | **required** | Row height in px                                                                                                    |
+| `dynamicItemHeight` | `boolean`                   | `false`      | Measure rows                                                                                                        |
+| `contentOffset`     | `number`                    | `0`          | Space in px reserved above the rows                                                                                 |
+| `scrollContainerId` | `string`                    | —            | ID used to register for auto-scroll                                                                                 |
+| `autoScrollEnabled` | `boolean`                   | `true`       | Scroll when dragging near the edges                                                                                 |
+| `autoScrollConfig`  | `Partial<AutoScrollConfig>` | `{}`         | Auto-scroll tuning                                                                                                  |
+| `scrollInsetTop`    | `number`                    | `0`          | Height (px) of content pinned over the top edge; the rows start below it, or `contentOffset` down when that is more |
+| `scrollInsetBottom` | `number`                    | `0`          | Height (px) of content pinned over the bottom edge; the last row scrolls clear of it                                |
 
 ## VirtualContentComponent
 

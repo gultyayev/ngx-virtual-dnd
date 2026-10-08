@@ -42,6 +42,7 @@ function emulateScrollableLayout(element: HTMLElement, scrollHeight: number, cli
       [scrollContainerId]="scrollContainerId()"
       [autoScrollEnabled]="autoScrollEnabled()"
       [autoScrollConfig]="autoScrollConfig()"
+      [contentOffset]="contentOffset()"
       [scrollInsetTop]="scrollInsetTop()"
       [scrollInsetBottom]="scrollInsetBottom()"
     />
@@ -52,6 +53,7 @@ class TestHostComponent {
   scrollContainerId = signal<string | undefined>('viewport-scroll');
   autoScrollEnabled = signal(false);
   autoScrollConfig = signal<Partial<AutoScrollConfig>>({});
+  contentOffset = signal(0);
   scrollInsetTop = signal(0);
   scrollInsetBottom = signal(0);
 }
@@ -153,6 +155,46 @@ describe('VirtualViewportComponent', () => {
 
       expect(element.getAttribute('data-scroll-inset-top')).toBe('64');
       expect(element.getAttribute('data-scroll-inset-bottom')).toBe('48');
+    });
+
+    /** The spacer and the content wrapper of the viewport's template */
+    const parts = (): { spacer: HTMLElement; content: HTMLElement } => {
+      const element = component.nativeElement;
+      return {
+        spacer: element.querySelector<HTMLElement>('.vdnd-viewport-spacer')!,
+        content: element.querySelector<HTMLElement>('.vdnd-viewport-content')!,
+      };
+    };
+
+    it('should start the rows below the top inset when it covers more than the content offset', () => {
+      hostComponent.contentOffset.set(24);
+      hostComponent.scrollInsetTop.set(64);
+      fixture.detectChanges();
+
+      const { spacer, content } = parts();
+      expect(spacer.style.top).toBe('64px');
+      expect(content.style.top).toBe('64px');
+      // The drag index calculator measures the rows from there
+      expect(component.nativeElement.getAttribute('data-content-offset')).toBe('64');
+    });
+
+    it('should keep the content offset when it reserves more than the top inset covers', () => {
+      hostComponent.contentOffset.set(80);
+      hostComponent.scrollInsetTop.set(64);
+      fixture.detectChanges();
+
+      expect(parts().content.style.top).toBe('80px');
+      expect(component.nativeElement.getAttribute('data-content-offset')).toBe('80');
+    });
+
+    it('should reserve the bottom inset below the rows', () => {
+      hostComponent.scrollInsetBottom.set(48);
+      fixture.detectChanges();
+
+      const { spacer, content } = parts();
+      expect(spacer.style.height).toBe(`${component.totalHeight() + 48}px`);
+      // Below the last rendered row, so a placeholder after it is followed by the space too
+      expect(content.style.paddingBottom).toBe('48px');
     });
   });
 

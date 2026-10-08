@@ -120,8 +120,8 @@ Self-scrolling viewport for `*vdndVirtualFor` content, positioned with a single 
 | `scrollContainerId` | `string` | `undefined` | No | ID for auto-scroll registration |
 | `autoScrollEnabled` | `boolean` | `true` | No | Enable edge auto-scrolling |
 | `autoScrollConfig` | `Partial<AutoScrollConfig>` | `{}` | No | Auto-scroll configuration |
-| `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top of the rows (e.g. an overlaid header); see ScrollableDirective |
-| `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom of the rows |
+| `scrollInsetTop` | `number` | `0` | No | Height (px) of content pinned over the top of the rows (e.g. an overlaid header); the rows start below it, or `contentOffset` down when that is more. See ScrollableDirective |
+| `scrollInsetBottom` | `number` | `0` | No | Height (px) of content pinned over the bottom of the rows; the last row scrolls clear of it |
 
 **Outputs:** None
 
