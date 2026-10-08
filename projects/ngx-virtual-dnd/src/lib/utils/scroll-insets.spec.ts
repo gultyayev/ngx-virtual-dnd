@@ -116,6 +116,7 @@ describe('visible part of an element', () => {
   it('should take the covered space of the vdnd-virtual-scroll inside it', () => {
     // vdnd-sortable-list's droppable wraps the vdnd-virtual-scroll that scrolls its rows
     const droppable = box(document.body, 0, 400);
+    droppable.setAttribute('data-droppable-id', 'list');
     box(droppable, 0, 400, { tag: 'vdnd-virtual-scroll', insetTop: 40 });
 
     expect(edges(visibleRect(droppable))).toEqual([40, 400]);
@@ -128,6 +129,39 @@ describe('visible part of an element', () => {
     box(layout, 0, 400, { tag: 'vdnd-virtual-scroll', insetTop: 40 });
 
     expect(edges(visibleRect(droppable))).toEqual([40, 400]);
+  });
+
+  it('should ignore the covered space of a vdnd-virtual-scroll inside one of its rows', () => {
+    // A plain list of cards, one of which scrolls content of its own
+    const board = box(document.body, 0, 1000);
+    board.setAttribute('data-droppable-id', 'board');
+    const card = box(board, 300, 400);
+    card.setAttribute('data-draggable-id', 'card-3');
+    box(card, 300, 400, { tag: 'vdnd-virtual-scroll', insetTop: 40 });
+
+    expect(edges(visibleRect(board))).toEqual([0, 1000]);
+  });
+
+  it('should ignore the covered space of a vdnd-virtual-scroll in no list at all', () => {
+    // A vdndScrollable is no list: a scroller in it covers nothing of it
+    const scroller = box(document.body, 0, 800, { scroller: true });
+    box(scroller, 0, 200, { tag: 'vdnd-virtual-scroll', insetTop: 40 });
+
+    expect(edges(visibleRect(scroller))).toEqual([0, 800]);
+  });
+
+  it('should move only the edges its vdnd-virtual-scroll covers', () => {
+    // A droppable with a title bar (0..100) above the vdnd-virtual-scroll (100..500) it wraps
+    const droppable = box(document.body, 0, 500);
+    droppable.setAttribute('data-droppable-id', 'list');
+    const scroller = box(droppable, 100, 500, { tag: 'vdnd-virtual-scroll', insetBottom: 20 });
+
+    // A footer over the rows covers nothing of the title bar
+    expect(edges(visibleRect(droppable))).toEqual([0, 480]);
+
+    // A header over the rows covers the droppable down to its lower edge
+    scroller.setAttribute('data-scroll-inset-top', '40');
+    expect(edges(visibleRect(droppable))).toEqual([140, 480]);
   });
 
   it('should ignore the covered space of a vdnd-virtual-scroll in a list nested inside it', () => {

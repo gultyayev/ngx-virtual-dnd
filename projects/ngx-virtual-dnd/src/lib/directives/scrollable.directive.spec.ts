@@ -142,6 +142,15 @@ describe('ScrollableDirective', () => {
       expect(scrollableEl.getAttribute('data-scroll-inset-bottom')).toBe('48.5');
     });
 
+    it.each([-30, Number.NaN])('should not mark the element with an inset of %p', (inset) => {
+      hostComponent.scrollInsetTop.set(inset);
+      hostComponent.scrollInsetBottom.set(inset);
+      fixture.detectChanges();
+
+      expect(scrollableEl.hasAttribute('data-scroll-inset-top')).toBe(false);
+      expect(scrollableEl.hasAttribute('data-scroll-inset-bottom')).toBe(false);
+    });
+
     it('should remove the mark when the space goes back to 0', () => {
       hostComponent.scrollInsetTop.set(64);
       fixture.detectChanges();

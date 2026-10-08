@@ -127,9 +127,11 @@ export function clipToScrollContainers(
 
 /**
  * The part of `element` the space covered in it leaves: its rect (`rect`, read when not given)
- * minus its own scroll insets and those of a `vdnd-virtual-scroll` inside it, through any layout
- * wrappers (the droppable of `vdnd-sortable-list` wraps the one that scrolls its rows), but not
- * one in a list nested inside it. The rect itself without any, null when they cover all of it.
+ * minus its own scroll insets and those of the `vdnd-virtual-scroll` that scrolls its rows when it
+ * is a list (see `listVirtualScroll`: the droppable of `vdnd-sortable-list` wraps it). That
+ * scroller's insets move only the edges they cover: a header over its rows covers the list down
+ * to its lower edge, and leaves what the list shows below the rows. The rect itself without any,
+ * null when they cover all of it.
  */
 export function ownUncoveredRect(
   element: Element,
@@ -138,9 +140,21 @@ export function ownUncoveredRect(
 ): DOMRect | null {
   const uncovered = uncoveredRect(element, rect ?? read(element));
   const scroller = listVirtualScroll(element);
-  return scroller && hasScrollInsets(scroller)
-    ? intersectRects(uncovered, uncoveredRect(scroller, read(scroller)))
-    : uncovered;
+  if (!uncovered || !scroller || !hasScrollInsets(scroller)) {
+    return uncovered;
+  }
+  const scrollerRect = read(scroller);
+  const insetTop = readScrollInset(scroller, 'top');
+  const insetBottom = readScrollInset(scroller, 'bottom');
+  const top = insetTop > 0 ? Math.max(uncovered.top, scrollerRect.top + insetTop) : uncovered.top;
+  const bottom =
+    insetBottom > 0
+      ? Math.min(uncovered.bottom, scrollerRect.bottom - insetBottom)
+      : uncovered.bottom;
+  if (bottom <= top) {
+    return null;
+  }
+  return new DOMRect(uncovered.left, top, uncovered.right - uncovered.left, bottom - top);
 }
 
 /**

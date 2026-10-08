@@ -74,8 +74,8 @@ import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
     // data-content-offset px below the top of the scroll area
     'data-virtual-viewport': '',
     '[attr.data-content-offset]': 'rowsOffset()',
-    '[attr.data-scroll-inset-top]': 'scrollInsetTop() || null',
-    '[attr.data-scroll-inset-bottom]': 'scrollInsetBottom() || null',
+    '[attr.data-scroll-inset-top]': 'rowsTopSpace() || null',
+    '[attr.data-scroll-inset-bottom]': 'rowsBottomSpace() || null',
   },
   styles: `
     :host {
@@ -188,11 +188,14 @@ export class VirtualViewportComponent
 
   /**
    * How far down the scroll area the rows start: `contentOffset`, or `scrollInsetTop` when that
-   * covers more.
+   * covers more. Public for `*vdndVirtualFor` (through an internal token), not for consumers.
+   *
+   * @internal
    */
-  readonly rowsOffset = computed(() =>
-    Math.max(this.contentOffset(), validScrollInset(this.scrollInsetTop())),
-  );
+  readonly rowsOffset = computed(() => Math.max(this.contentOffset(), this.rowsTopSpace()));
+
+  /** The space covered above the rows: `scrollInsetTop`, or 0 when negative or invalid. */
+  protected readonly rowsTopSpace = computed(() => validScrollInset(this.scrollInsetTop()));
 
   /** The space reserved below the rows: `scrollInsetBottom`, or 0 when negative or invalid. */
   protected readonly rowsBottomSpace = computed(() => validScrollInset(this.scrollInsetBottom()));

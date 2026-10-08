@@ -4,8 +4,8 @@ import { PositionCalculatorService } from './position-calculator.service';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { closestAcrossShadow } from '../utils/composed-dom';
 import { listDraggables, listVirtualScroll } from '../utils/list-draggables';
+import { constraintElementOf, constraintRectOf } from '../utils/constraint-rect';
 import {
-  clipToScrollContainers,
   ownUncoveredRect,
   readScrollInset,
   revealRange,
@@ -366,14 +366,14 @@ export class DragIndexCalculatorService {
     // using preview bounds so top/bottom drops remain reachable — but only once the list
     // is scrolled to that end. A preview pinned at the edge of a scrolled list (which is
     // how a constrained drag autoscrolls) keeps the probe's index, the visible edge row.
-    // The edges are those the preview is clamped to: of the part of the list that shows (see
-    // `visibleRect`). A scroll container around it that hides an end of it must be scrolled to
-    // that end too, or scrolling it would still bring rows into view there.
+    // The edges are those the preview is clamped to (see `constraintRectOf`): of the part of the
+    // list, or of the vdndScrollable around it, that shows. A scroll container around the list
+    // that hides an end of it must be scrolled to that end too, or scrolling it would still bring
+    // rows into view there.
     if (isConstrainedToContainer) {
       const own = ownUncoveredRect(droppableElement);
       const ancestors = scrollAncestors(droppableElement);
-      const shown =
-        clipToScrollContainers(own, ancestors) ?? droppableElement.getBoundingClientRect();
+      const shown = constraintRectOf(constraintElementOf(droppableElement));
       const edgeTolerance = 2;
       const distanceToTop = Math.abs(previewTopY - shown.top);
       const distanceToBottom = Math.abs(shown.bottom - previewBottomY);

@@ -819,6 +819,32 @@ describe('DragIndexCalculatorService', () => {
         expect(indexInOuter({ ...bottom, outerScrollTop: MAX_SCROLL })).toBe(ROWS);
       });
 
+      it('snaps at the edges of the vdndScrollable it is clamped to, not at its own', () => {
+        // The list (0..400, scrolled to its end) in a taller vdndScrollable (0..800) that doesn't
+        // scroll: a constrained preview is clamped to the vdndScrollable
+        const page = document.createElement('div');
+        page.classList.add('vdnd-scrollable');
+        jest.spyOn(page, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 800));
+        const droppable = createScrolledDroppable('viewport', MAX_SCROLL);
+        page.appendChild(droppable);
+        const indexAt = (previewTop: number): number =>
+          service.calculatePlaceholderIndex({
+            droppableElement: droppable,
+            position: { x: 20, y: previewTop + 120 },
+            previousPosition: null,
+            grabOffset: { x: 20, y: 120 },
+            draggedItemHeight: 240,
+            sourceDroppableId: null,
+            sourceIndex: null,
+          }).index;
+
+        // A 240px preview whose bottom is 1px above the list's: free to move on, so its probe
+        // row (279 + 2100 → row 47), not the end
+        expect(indexAt(400 - 240 - 1)).toBe(47);
+        // At the bottom it is clamped to: the end
+        expect(indexAt(800 - 240 - 1)).toBe(ROWS);
+      });
+
       it('keeps the probe row there while the outer container can still scroll down', () => {
         const bottom = { insetBottom: 100, scrollTop: MAX_SCROLL, previewTop: 300 - ROW - 1 };
         expect(indexInOuter({ ...bottom, outerScrollTop: 0 })).toBe(47);
@@ -1243,6 +1269,49 @@ describe('DragIndexCalculatorService', () => {
           draggedItemHeight: 50,
         }),
       ).toBe(2);
+    });
+
+    it('measures the list itself when a row scrolls content of its own', () => {
+      // A card that is no list but scrolls its content in a vdnd-virtual-scroll
+      const board = createDroppable('cards', 3);
+      const card = board.querySelector('[data-draggable-id="item-1"]')!;
+      const scroller = document.createElement('vdnd-virtual-scroll');
+      scroller.setAttribute('data-total-items', '100');
+      scroller.scrollTop = 30;
+      card.appendChild(scroller);
+
+      expect(service.getScrollGeometry(board, 50)).toEqual(
+        expect.objectContaining({ scrollTop: 0, isVirtual: false }),
+      );
+      expect(
+        service.getTotalItemCount({
+          droppableElement: board,
+          isSameList: false,
+          draggedItemHeight: 50,
+        }),
+      ).toBe(3);
+    });
+
+    it('counts the rows of a vdnd-virtual-scroll from its spacer without its insets', () => {
+      // No item count to read: 40 + 20 rows of 50px + 30
+      const droppable = createDroppable('spacer-list', 0);
+      const scroller = document.createElement('vdnd-virtual-scroll');
+      scroller.setAttribute('data-item-height', '50');
+      scroller.setAttribute('data-scroll-inset-top', '40');
+      scroller.setAttribute('data-scroll-inset-bottom', '30');
+      const spacer = document.createElement('div');
+      spacer.className = 'vdnd-virtual-scroll-spacer';
+      spacer.style.height = '1070px';
+      scroller.appendChild(spacer);
+      droppable.appendChild(scroller);
+
+      expect(
+        service.getTotalItemCount({
+          droppableElement: droppable,
+          isSameList: false,
+          draggedItemHeight: 50,
+        }),
+      ).toBe(20);
     });
 
     it('still finds its own vdnd-virtual-scroll inside layout wrappers', () => {

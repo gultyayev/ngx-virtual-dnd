@@ -1,4 +1,5 @@
 import {
+  computed,
   Directive,
   ElementRef,
   inject,
@@ -16,6 +17,7 @@ import {
 } from '../utils/dom-signal-bindings';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
 import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
+import { validScrollInset } from '../utils/scroll-insets';
 
 /**
  * Directive that marks an element as a scrollable container for virtual scrolling.
@@ -78,8 +80,8 @@ import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
   host: {
     class: 'vdnd-scrollable',
     '[style.overflow-anchor]': '"none"',
-    '[attr.data-scroll-inset-top]': 'scrollInsetTop() || null',
-    '[attr.data-scroll-inset-bottom]': 'scrollInsetBottom() || null',
+    '[attr.data-scroll-inset-top]': 'coveredTop() || null',
+    '[attr.data-scroll-inset-bottom]': 'coveredBottom() || null',
   },
 })
 export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestroy {
@@ -125,6 +127,12 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
    * sticky footer or button inside it. The bottom counterpart of `scrollInsetTop`.
    */
   scrollInsetBottom = input<number>(0);
+
+  /** The space covered at the top, as the drag reads it: 0 when negative or invalid */
+  protected readonly coveredTop = computed(() => validScrollInset(this.scrollInsetTop()));
+
+  /** The space covered at the bottom, as the drag reads it: 0 when negative or invalid */
+  protected readonly coveredBottom = computed(() => validScrollInset(this.scrollInsetBottom()));
 
   // ========== VdndScrollContainer Implementation ==========
 

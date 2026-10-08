@@ -29,12 +29,11 @@ import {
 } from '../models/drag-drop.models';
 import { VDND_GROUP_TOKEN } from './droppable-group.directive';
 import { createEffectiveGroupSignal } from '../utils/group-resolution';
-import { closestAcrossShadow } from '../utils/composed-dom';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
 import { listDraggables } from '../utils/list-draggables';
-import { visibleRect } from '../utils/scroll-insets';
+import { constraintElementOf, constraintRectOf } from '../utils/constraint-rect';
 import {
   findNestedControl,
   findNoDragElement,
@@ -263,18 +262,6 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
    */
   #setPending(pending: boolean): void {
     this.#pendingId.set(pending ? this.vdndDraggable() : null);
-  }
-
-  /**
-   * Find the element to use for container constraint clamping.
-   * If the droppable is inside a scrollable container, use that container's rect
-   * (which represents the visible viewport) instead of the droppable's rect
-   * (which may extend far beyond the viewport in virtual scroll scenarios).
-   */
-  #findConstraintElement(droppableElement: HTMLElement | null): HTMLElement | null {
-    if (!droppableElement) return null;
-    const scrollable = closestAcrossShadow(droppableElement, '.vdnd-scrollable');
-    return (scrollable as HTMLElement) ?? droppableElement;
   }
 
   ngOnInit(): void {
@@ -563,9 +550,8 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     const constraintSource = parentDroppableElement ?? droppableElement;
     this.#constrainToContainer =
       constraintSource?.hasAttribute('data-constrain-to-container') ?? false;
-    this.#constraintElement = this.#constrainToContainer
-      ? this.#findConstraintElement(constraintSource)
-      : null;
+    this.#constraintElement =
+      this.#constrainToContainer && constraintSource ? constraintElementOf(constraintSource) : null;
 
     const activeDroppableId = droppableElement
       ? this.#positionCalculator.getDroppableId(droppableElement)
@@ -747,7 +733,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       return position;
     }
 
-    const containerRect = this.#constraintRect(this.#constraintElement);
+    const containerRect = constraintRectOf(this.#constraintElement);
     const grabOffset = this.#dragState.grabOffset();
     if (!grabOffset) {
       return position;
@@ -766,15 +752,6 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       x: Math.max(minX, Math.min(position.x, maxX)),
       y: Math.max(minY, Math.min(position.y, maxY)),
     };
-  }
-
-  /**
-   * The rect a constrained drag stays in: the part of the container that shows. When nothing of
-   * it shows (scrolled out of view, or all behind sticky content), the whole container, as
-   * without scroll insets: autoscroll at its edge brings it back into view.
-   */
-  #constraintRect(element: HTMLElement): DOMRect {
-    return visibleRect(element) ?? element.getBoundingClientRect();
   }
 
   /**
@@ -812,7 +789,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     // of where the user grabbed the item. Like the preview, it stays in the part of the
     // container that shows.
     if (this.#constrainToContainer && this.#constraintElement && this.#lastRawPosition) {
-      const rect = this.#constraintRect(this.#constraintElement);
+      const rect = constraintRectOf(this.#constraintElement);
       let scrollCursor: CursorPosition = this.#lastRawPosition;
       if (axisLock && startPos) {
         scrollCursor = {

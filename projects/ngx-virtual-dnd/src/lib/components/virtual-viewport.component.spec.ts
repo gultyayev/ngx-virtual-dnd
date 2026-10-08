@@ -157,6 +157,15 @@ describe('VirtualViewportComponent', () => {
       expect(element.getAttribute('data-scroll-inset-bottom')).toBe('48');
     });
 
+    it.each([-30, Number.NaN])('should not mark its element with an inset of %p', (inset) => {
+      hostComponent.scrollInsetTop.set(inset);
+      hostComponent.scrollInsetBottom.set(inset);
+      fixture.detectChanges();
+
+      expect(component.nativeElement.hasAttribute('data-scroll-inset-top')).toBe(false);
+      expect(component.nativeElement.hasAttribute('data-scroll-inset-bottom')).toBe(false);
+    });
+
     /** The spacer and the content wrapper of the viewport's template */
     const parts = (): { spacer: HTMLElement; content: HTMLElement } => {
       const element = component.nativeElement;

@@ -179,8 +179,8 @@ function longestIncreasingRun(values: number[]): boolean[] {
     '[style.height.px]': 'containerHeight() ?? null',
     '[attr.data-item-height]': 'itemHeight()',
     '[attr.data-total-items]': 'items().length',
-    '[attr.data-scroll-inset-top]': 'scrollInsetTop() || null',
-    '[attr.data-scroll-inset-bottom]': 'scrollInsetBottom() || null',
+    '[attr.data-scroll-inset-top]': 'rowsTop() || null',
+    '[attr.data-scroll-inset-bottom]': 'rowsBottomSpace() || null',
   },
   // No bindings: the effects render the rows, the placeholder, the spacer height and the content
   // offset (see #render). A signal read here would re-render every row whenever it changes.
@@ -334,10 +334,10 @@ export class VirtualScrollContainerComponent<T>
   scrollInsetBottom = input<number>(0);
 
   /** The space reserved above the rows: `scrollInsetTop`, or 0 when negative or invalid. */
-  readonly #rowsTop = computed(() => validScrollInset(this.scrollInsetTop()));
+  protected readonly rowsTop = computed(() => validScrollInset(this.scrollInsetTop()));
 
   /** The space reserved below the rows: `scrollInsetBottom`, or 0 when negative or invalid. */
-  readonly #rowsBottomSpace = computed(() => validScrollInset(this.scrollInsetBottom()));
+  protected readonly rowsBottomSpace = computed(() => validScrollInset(this.scrollInsetBottom()));
 
   /** Array of items to render */
   items = input.required<T[]>();
@@ -468,14 +468,14 @@ export class VirtualScrollContainerComponent<T>
     const count = this.items().length;
     const strategy = this.#strategy();
     strategy.version();
-    return this.#rowsTop() + strategy.getTotalHeight(count) + this.#rowsBottomSpace();
+    return this.rowsTop() + strategy.getTotalHeight(count) + this.rowsBottomSpace();
   });
 
   /** First visible item index */
   readonly #firstVisibleIndex = computed(() => {
     const strategy = this.#strategy();
     strategy.version();
-    return strategy.getFirstVisibleIndex(Math.max(0, this.#scrollTop() - this.#rowsTop()));
+    return strategy.getFirstVisibleIndex(Math.max(0, this.#scrollTop() - this.rowsTop()));
   });
 
   /** Number of items visible in the viewport */
@@ -505,7 +505,7 @@ export class VirtualScrollContainerComponent<T>
     const strategy = this.#strategy();
     strategy.version();
 
-    const offset = this.#rowsTop() + strategy.getOffsetForIndex(start);
+    const offset = this.rowsTop() + strategy.getOffsetForIndex(start);
     return `translateY(${offset}px)`;
   });
 
@@ -877,7 +877,7 @@ export class VirtualScrollContainerComponent<T>
     const currentScrollTop = element.scrollTop;
 
     // Calculate placeholder position using strategy (rows start below the top inset)
-    const targetTop = this.#rowsTop() + strategy.getOffsetForIndex(placeholderIndex);
+    const targetTop = this.rowsTop() + strategy.getOffsetForIndex(placeholderIndex);
     const targetBottom = targetTop + this.placeholderHeight();
 
     // Calculate visible range: the part content pinned over the edges doesn't cover (read
@@ -908,8 +908,8 @@ export class VirtualScrollContainerComponent<T>
    * leave less than the placeholder of it.
    */
   #hiddenEdges(element: HTMLElement, height: number): { hiddenTop: number; hiddenBottom: number } {
-    const hiddenTop = this.scrollInsetTop();
-    const hiddenBottom = this.scrollInsetBottom();
+    const hiddenTop = this.rowsTop();
+    const hiddenBottom = this.rowsBottomSpace();
     const ancestors = scrollAncestors(element);
     const uncoveredHeight = height - hiddenTop - hiddenBottom;
     if (ancestors.length === 0 || uncoveredHeight <= 0) {
@@ -965,7 +965,7 @@ export class VirtualScrollContainerComponent<T>
     const transform = this.contentTransform();
     // The space reserved below the rows follows the last one rendered, the placeholder after it
     // too: in a drag from another list it renders past the spacer's end
-    const padding = `${this.#rowsBottomSpace()}px`;
+    const padding = `${this.rowsBottomSpace()}px`;
     const slot = this.#placeholderSlot();
     const placeholderHeight = slot >= 0 ? this.placeholderHeight() : null;
 
@@ -1327,8 +1327,8 @@ export class VirtualScrollContainerComponent<T>
           const strategy = this.#strategy();
           const rowHeight = unmeasuredHeight > 0 ? unmeasuredHeight : strategy.getItemHeight(index);
           // In the part of the list its insets leave uncovered (rows start below the top one)
-          const insetTop = this.#rowsTop();
-          const shownHeight = Math.max(0, height - insetTop - this.#rowsBottomSpace());
+          const insetTop = this.rowsTop();
+          const shownHeight = Math.max(0, height - insetTop - this.rowsBottomSpace());
           const top = strategy.getOffsetForIndex(index);
           const bottom = top + rowHeight;
           const element = this.#elementRef.nativeElement;

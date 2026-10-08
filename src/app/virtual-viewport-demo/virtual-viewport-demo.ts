@@ -27,7 +27,8 @@ function createRows(prefix: string, label: string, count: number): Row[] {
 /**
  * E2E fixture: two self-scrolling `vdnd-virtual-viewport` lists that are also the droppables,
  * rendering their rows with `*vdndVirtualFor`. The second one reserves space above its rows with
- * `contentOffset`: 80px, or the `?contentOffset=` query parameter.
+ * `contentOffset`: 80px, or the `?contentOffset=` query parameter. `?insets=true` overlays a
+ * 40px header and a 30px footer on the first one's rows (`scrollInsetTop` / `scrollInsetBottom`).
  */
 @Component({
   selector: 'app-virtual-viewport-demo',
@@ -61,20 +62,34 @@ function createRows(prefix: string, label: string, count: number): Row[] {
             <span class="list-title">Tasks</span>
             <span class="count-badge" data-testid="viewport-a-count">{{ tasks().length }}</span>
           </div>
-          <vdnd-virtual-viewport
-            class="vvd-viewport"
-            vdndDroppable="viewport-a"
-            [itemHeight]="50"
-            (drop)="onDrop($event)"
-          >
-            <ng-container *vdndVirtualFor="let row of tasks(); trackBy: trackById">
-              <div class="item" [vdndDraggable]="row.id" [vdndDraggableData]="row">
-                <div class="item-inner">
-                  <span class="item-text">{{ row.name }}</span>
-                </div>
+          <div class="vvd-frame">
+            @if (insets) {
+              <div class="vvd-overlay vvd-overlay-top" data-testid="viewport-a-header">
+                Overlaid header
               </div>
-            </ng-container>
-          </vdnd-virtual-viewport>
+            }
+            <vdnd-virtual-viewport
+              class="vvd-viewport"
+              vdndDroppable="viewport-a"
+              [itemHeight]="50"
+              [scrollInsetTop]="insets ? 40 : 0"
+              [scrollInsetBottom]="insets ? 30 : 0"
+              (drop)="onDrop($event)"
+            >
+              <ng-container *vdndVirtualFor="let row of tasks(); trackBy: trackById">
+                <div class="item" [vdndDraggable]="row.id" [vdndDraggableData]="row">
+                  <div class="item-inner">
+                    <span class="item-text">{{ row.name }}</span>
+                  </div>
+                </div>
+              </ng-container>
+            </vdnd-virtual-viewport>
+            @if (insets) {
+              <div class="vvd-overlay vvd-overlay-bottom" data-testid="viewport-a-footer">
+                Overlaid footer
+              </div>
+            }
+          </div>
         </div>
 
         <div class="listcard">
@@ -138,6 +153,34 @@ function createRows(prefix: string, label: string, count: number): Row[] {
         box-shadow 0.15s;
     }
 
+    .vvd-frame {
+      position: relative;
+    }
+
+    .vvd-overlay {
+      position: absolute;
+      left: 0;
+      right: 0;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      background: var(--surface-2);
+    }
+
+    .vvd-overlay-top {
+      top: 0;
+      height: 40px;
+    }
+
+    .vvd-overlay-bottom {
+      bottom: 0;
+      height: 30px;
+    }
+
     .vvd-viewport.vdnd-droppable-active {
       background: var(--accent-soft);
       box-shadow: inset 0 0 0 1.5px var(--accent-soft-bd);
@@ -149,6 +192,9 @@ export class VirtualViewportDemoComponent {
   readonly contentOffset = Number(
     inject(ActivatedRoute).snapshot.queryParamMap.get('contentOffset') ?? 80,
   );
+
+  /** A header and a footer overlaid on the Tasks rows (`?insets=true`) */
+  readonly insets = inject(ActivatedRoute).snapshot.queryParamMap.get('insets') === 'true';
 
   readonly tasks = signal<Row[]>(createRows('a', 'Task', 60));
   readonly backlog = signal<Row[]>(createRows('b', 'Backlog item', 30));

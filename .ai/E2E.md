@@ -125,7 +125,8 @@ example the `vdnd-draggable-disabled` class) before interacting.
 `TaskDemoPage.goto('/page-scroll', { ... })` does the same for the page-scroll demo (`count`;
 `sticky` adds a sticky header and "Add task" button with measured scroll insets; `constrain`).
 Scroll insets in nested scrollers, list components and plain `@for` lists are tested on
-`/nested-scroll` (`?constrain=true`).
+`/nested-scroll` (`?constrain=true`), and overlaid content on a `vdnd-virtual-viewport` on
+`/virtual-viewport?insets=true`.
 
 ### 9) Scrub animations instead of waiting for them
 
