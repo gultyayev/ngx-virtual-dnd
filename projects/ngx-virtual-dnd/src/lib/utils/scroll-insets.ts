@@ -120,9 +120,9 @@ export function clipToScrollContainers(
 
 /**
  * The part of `element` the space covered in it leaves: its rect (`rect`, read when not given)
- * minus its own scroll insets and those of a `vdnd-virtual-scroll` child (the droppable of
- * `vdnd-sortable-list` wraps the one that scrolls its rows). The rect itself without any, null
- * when they cover all of it.
+ * minus its own scroll insets and those of a `vdnd-virtual-scroll` inside it, through any layout
+ * wrappers (the droppable of `vdnd-sortable-list` wraps the one that scrolls its rows), but not
+ * one in a list nested inside it. The rect itself without any, null when they cover all of it.
  */
 export function ownUncoveredRect(
   element: Element,
@@ -130,9 +130,11 @@ export function ownUncoveredRect(
   read: RectReader = readRect,
 ): DOMRect | null {
   let uncovered = uncoveredRect(element, rect ?? read(element));
-  for (const child of Array.from(element.children)) {
-    if (child.tagName === 'VDND-VIRTUAL-SCROLL' && hasScrollInsets(child)) {
-      uncovered = intersectRects(uncovered, uncoveredRect(child, read(child)));
+  for (const scroller of Array.from(element.querySelectorAll('vdnd-virtual-scroll'))) {
+    const owner = scroller.closest('[data-droppable-id]');
+    const nestedList = owner !== null && owner !== element && element.contains(owner);
+    if (!nestedList && hasScrollInsets(scroller)) {
+      uncovered = intersectRects(uncovered, uncoveredRect(scroller, read(scroller)));
     }
   }
   return uncovered;

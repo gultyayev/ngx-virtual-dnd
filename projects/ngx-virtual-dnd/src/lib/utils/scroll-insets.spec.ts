@@ -121,6 +121,28 @@ describe('visible part of an element', () => {
     expect(edges(visibleRect(droppable))).toEqual([40, 400]);
   });
 
+  it('should take the covered space of a vdnd-virtual-scroll inside layout wrappers', () => {
+    const droppable = box(document.body, 0, 400);
+    droppable.setAttribute('data-droppable-id', 'list');
+    const layout = box(droppable, 0, 400);
+    box(layout, 0, 400, { tag: 'vdnd-virtual-scroll', insetTop: 40 });
+
+    expect(edges(visibleRect(droppable))).toEqual([40, 400]);
+  });
+
+  it('should ignore the covered space of a vdnd-virtual-scroll in a list nested inside it', () => {
+    const droppable = box(document.body, 0, 400);
+    droppable.setAttribute('data-droppable-id', 'outer');
+    const row = box(droppable, 0, 200);
+    const nested = box(row, 0, 200);
+    nested.setAttribute('data-droppable-id', 'inner');
+    box(nested, 0, 200, { tag: 'vdnd-virtual-scroll', insetTop: 40 });
+    const nestedScroller = box(row, 0, 200, { tag: 'vdnd-virtual-scroll', insetTop: 30 });
+    nestedScroller.setAttribute('data-droppable-id', 'scroller');
+
+    expect(edges(visibleRect(droppable))).toEqual([0, 400]);
+  });
+
   it('should clip to a scroll container outside the shadow root it renders in', () => {
     const page = box(document.body, 0, 800, { scroller: true, insetTop: 100 });
     const host = box(page, 0, 800);
