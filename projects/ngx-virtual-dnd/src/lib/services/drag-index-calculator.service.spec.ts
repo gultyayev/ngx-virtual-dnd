@@ -677,7 +677,7 @@ describe('DragIndexCalculatorService', () => {
       }).index;
     }
 
-    it('snaps page-scroll content to the first slot whatever its scroll parent scrollTop', () => {
+    it('snaps page-scroll content to the first slot once its first row shows, whatever its scroll parent scrollTop', () => {
       // vdnd-virtual-content in a vdndScrollable parent scrolled by 900px of content above the
       // list: the droppable rect spans all rows, so a preview at its top is at the first row.
       const scrollable = document.createElement('div');
@@ -722,6 +722,76 @@ describe('DragIndexCalculatorService', () => {
         sourceIndex: null,
       }).index;
       expect(index).toBe(0);
+    });
+
+    describe('page-scroll content scrolled to the middle of its rows', () => {
+      // 100 rows of 50px below a 100px header (contentOffset) in a 400px vdndScrollable with a
+      // 100px sticky header and a 50px sticky footer over it, scrolled by 1000px: the rows show
+      // from 100 to 350, rows 20 to 24.
+      const PAGE_ROWS = 100;
+
+      function pageScrollIndex(scrollTop: number, previewTop: number): number {
+        const scrollable = document.createElement('div');
+        scrollable.classList.add('vdnd-scrollable');
+        scrollable.setAttribute('data-scroll-inset-top', '100');
+        scrollable.setAttribute('data-scroll-inset-bottom', '50');
+        mockRect(scrollable);
+        Object.defineProperty(scrollable, 'scrollTop', { value: scrollTop });
+        Object.defineProperty(scrollable, 'clientHeight', { value: LIST_HEIGHT });
+        Object.defineProperty(scrollable, 'scrollHeight', { value: 100 + PAGE_ROWS * ROW });
+        const content = document.createElement('vdnd-virtual-content');
+        content.setAttribute('data-content-offset', '100');
+        const droppable = document.createElement('div');
+        droppable.setAttribute('data-droppable-id', 'page-list');
+        droppable.setAttribute('data-droppable-group', 'test-group');
+        droppable.setAttribute('data-constrain-to-container', '');
+        const top = 100 - scrollTop;
+        jest
+          .spyOn(droppable, 'getBoundingClientRect')
+          .mockReturnValue(new DOMRect(0, top, 300, PAGE_ROWS * ROW));
+        content.appendChild(droppable);
+        scrollable.appendChild(content);
+        document.body.appendChild(scrollable);
+        const offsets = Array.from({ length: PAGE_ROWS + 1 }, (_, i) => i * ROW);
+        service.registerStrategy(
+          'page-list',
+          new MockStrategy(offsets, (offset) =>
+            Math.max(0, Math.min(PAGE_ROWS - 1, Math.floor(offset / ROW))),
+          ),
+        );
+
+        try {
+          return service.calculatePlaceholderIndex({
+            droppableElement: droppable,
+            position: { x: 20, y: previewTop + 25 },
+            previousPosition: null,
+            grabOffset: { x: 20, y: 25 },
+            draggedItemHeight: ROW,
+            sourceDroppableId: null,
+            sourceIndex: null,
+          }).index;
+        } finally {
+          scrollable.remove();
+        }
+      }
+
+      it('keeps the visible top row when the preview is pinned below the header', () => {
+        expect(pageScrollIndex(1000, 100)).toBe(20);
+      });
+
+      it('keeps the visible bottom row when the preview is pinned above the footer', () => {
+        expect(pageScrollIndex(1000, 300)).toBe(24);
+      });
+
+      it('still snaps to the first slot once its first row shows below the header', () => {
+        // Scrolled by 0: the rows start at 100, right below the header
+        expect(pageScrollIndex(0, 100)).toBe(0);
+      });
+
+      it('still snaps to the end once its last row shows above the footer', () => {
+        // Scrolled by 4750: the rows end at 100 - 4750 + 5000 = 350, right above the footer
+        expect(pageScrollIndex(4750, 300)).toBe(PAGE_ROWS);
+      });
     });
 
     describe.each(['viewport', 'virtualScroll'] as const)('in a %s', (container) => {

@@ -379,11 +379,11 @@ export class DragIndexCalculatorService {
       const distanceToBottom = Math.abs(shown.bottom - previewBottomY);
 
       if (distanceToTop <= edgeTolerance && distanceToTop <= distanceToBottom) {
-        if (this.#isScrolledToEnd(cache, 'start', own, ancestors)) {
+        if (this.#isScrolledToEnd(cache, 'start', own, shown, ancestors)) {
           placeholderIndex = 0;
         }
       } else if (distanceToBottom <= edgeTolerance) {
-        if (this.#isScrolledToEnd(cache, 'end', own, ancestors)) {
+        if (this.#isScrolledToEnd(cache, 'end', own, shown, ancestors)) {
           placeholderIndex = totalItems;
         }
       }
@@ -432,18 +432,26 @@ export class DragIndexCalculatorService {
   /**
    * Whether a droppable's rows can't scroll further towards `edge`: neither its own scroll
    * element nor a scroll container among `ancestors` that hides that end of its uncovered part
-   * (`own`). Page-scroll content (`vdnd-virtual-content`) always can't: its droppable rect spans
-   * all of its rows, so a preview at that rect's edge is at the first/last row however the page
-   * is scrolled.
+   * (`own`). Page-scroll content (`vdnd-virtual-content`) is at that end once the edge of its
+   * droppable rect, which spans all of its rows, shows in `shown` (the rect the preview is clamped
+   * to): before, the rows past the preview are only scrolled out of view.
    */
   #isScrolledToEnd(
     cache: DroppableCache,
     edge: 'start' | 'end',
     own: DOMRect | null,
+    shown: DOMRect,
     ancestors: readonly Element[],
   ): boolean {
     if (cache.containerType === 'virtualContent') {
-      return true;
+      // A pixel of slack, as in isScrolledToEdge (fractional scroll positions)
+      const tolerance = 1;
+      return (
+        own === null ||
+        (edge === 'start'
+          ? own.top >= shown.top - tolerance
+          : own.bottom <= shown.bottom + tolerance)
+      );
     }
     if (!isScrolledToEdge(cache.scrollContainer, edge)) {
       return false;

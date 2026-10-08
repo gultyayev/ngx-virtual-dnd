@@ -242,6 +242,28 @@ test.describe('Scroll insets (sticky header and footer)', () => {
       await expect(taskDemo.dragPreview).toBeHidden();
     });
 
+    test('keeps a visible slot while the preview is pinned below the sticky header mid-list', async ({
+      page,
+    }) => {
+      await scrollTo(1500);
+      const layout = await stickyLayout(page);
+      const rows = await waitForUncoveredRows(page);
+      await startDrag(page, rows[Math.floor(rows.length / 2)]);
+
+      await moveTo(page, layout.centerX, layout.containerTop + 5);
+      await poll(async () => (await previewEdges(page)).top - layout.headerBottom).toBeCloseTo(
+        1,
+        0,
+      );
+      // It autoscrolls up from 1500 meanwhile, but the first rows are still scrolled out of view
+      const [state, scrollTop] = await Promise.all([debugState(page), taskDemo.getScrollTop()]);
+      expect(scrollTop).toBeGreaterThan(500);
+      expect(state.placeholderIndex).toBeGreaterThan(0);
+
+      await page.mouse.up();
+      await expect(taskDemo.dragPreview).toBeHidden();
+    });
+
     test('drops at the start of the list under the sticky header', async ({ page }) => {
       const layout = await stickyLayout(page);
       const rows = await waitForUncoveredRows(page);
