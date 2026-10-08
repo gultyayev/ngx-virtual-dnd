@@ -1138,6 +1138,67 @@ describe('DragIndexCalculatorService', () => {
     });
   });
 
+  describe('a plain list whose rows hold virtual lists', () => {
+    /** A plain list of 2 rows, each wrapping a nested list that scrolls 100 rows of its own. */
+    function createBoard(): HTMLElement {
+      const board = createDroppable('board', 0);
+      for (let i = 0; i < 2; i++) {
+        const row = document.createElement('div');
+        row.setAttribute('data-draggable-id', `column-${i}`);
+        const column = document.createElement('div');
+        column.setAttribute('data-droppable-id', `column-list-${i}`);
+        const nested = document.createElement('vdnd-virtual-scroll');
+        nested.setAttribute('data-item-height', '20');
+        nested.setAttribute('data-total-items', '100');
+        nested.scrollTop = 30;
+        const card = document.createElement('div');
+        card.setAttribute('data-draggable-id', `card-${i}`);
+        nested.appendChild(card);
+        column.appendChild(nested);
+        row.appendChild(column);
+        board.appendChild(row);
+      }
+      return board;
+    }
+
+    it('measures the list itself, not the virtual list in a row', () => {
+      expect(service.getScrollGeometry(createBoard(), 50)).toEqual(
+        expect.objectContaining({ scrollTop: 0, isVirtual: false }),
+      );
+    });
+
+    it('counts its own rows, not those of the lists nested in them', () => {
+      expect(
+        service.getTotalItemCount({
+          droppableElement: createBoard(),
+          isSameList: false,
+          draggedItemHeight: 50,
+        }),
+      ).toBe(2);
+    });
+
+    it('still finds its own vdnd-virtual-scroll inside layout wrappers', () => {
+      const droppable = createDroppable('wrapped', 0);
+      const layout = document.createElement('div');
+      const scroller = document.createElement('vdnd-virtual-scroll');
+      scroller.setAttribute('data-total-items', '40');
+      scroller.scrollTop = 120;
+      layout.appendChild(scroller);
+      droppable.appendChild(layout);
+
+      expect(service.getScrollGeometry(droppable, 50)).toEqual(
+        expect.objectContaining({ scrollTop: 120, isVirtual: true }),
+      );
+      expect(
+        service.getTotalItemCount({
+          droppableElement: droppable,
+          isSameList: false,
+          draggedItemHeight: 50,
+        }),
+      ).toBe(40);
+    });
+  });
+
   it('reads the scroll offset of a vdndScrollable ancestor outside the shadow root of a vdnd-virtual-content list', () => {
     const scrollable = document.createElement('div');
     scrollable.className = 'vdnd-scrollable';

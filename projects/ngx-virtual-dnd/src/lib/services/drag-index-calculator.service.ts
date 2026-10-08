@@ -3,7 +3,7 @@ import { type CursorPosition, END_OF_LIST, type GrabOffset } from '../models/dra
 import { PositionCalculatorService } from './position-calculator.service';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { closestAcrossShadow } from '../utils/composed-dom';
-import { listDraggables } from '../utils/list-draggables';
+import { listDraggables, listVirtualScroll } from '../utils/list-draggables';
 import { ownUncoveredRect, revealRange, uncoveredRect, visibleRect } from '../utils/scroll-insets';
 
 /** The `data-draggable-id` `vdnd-placeholder` marks itself with */
@@ -83,9 +83,7 @@ export class DragIndexCalculatorService {
     if (cached) return cached;
 
     const isViewport = droppableElement.hasAttribute('data-virtual-viewport');
-    const virtualScrollElement = droppableElement.querySelector(
-      'vdnd-virtual-scroll',
-    ) as HTMLElement | null;
+    const virtualScrollElement = listVirtualScroll(droppableElement);
     const virtualContentElement = this.#findVirtualContent(droppableElement);
 
     let containerType: DroppableCache['containerType'];
@@ -444,9 +442,7 @@ export class DragIndexCalculatorService {
     }
 
     // Check for embedded virtual scroll component
-    const virtualScroll = cache
-      ? cache.virtualScrollElement
-      : droppableElement.querySelector('vdnd-virtual-scroll');
+    const virtualScroll = cache ? cache.virtualScrollElement : listVirtualScroll(droppableElement);
     if (virtualScroll) {
       // Use data-total-items attribute if available (always the true N)
       const totalItemsAttr = virtualScroll.getAttribute('data-total-items');
@@ -515,10 +511,9 @@ export class DragIndexCalculatorService {
       }
     }
 
-    // Fallback for non-virtual scroll — querySelectorAll finds all N items
-    // (including the hidden dragged item), so no adjustment needed
-    const items = droppableElement.querySelectorAll('[data-draggable-id]');
-    return items.length;
+    // Fallback for non-virtual scroll — all N items are rendered (the hidden dragged item too),
+    // so no adjustment needed. Not those of a list nested in a row.
+    return listDraggables(droppableElement).length;
   }
 
   /** The `vdnd-virtual-content` the droppable is or is inside (page-level scroll), if any. */

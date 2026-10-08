@@ -1,4 +1,5 @@
 import { closestAcrossShadow, parentAcrossShadow } from './composed-dom';
+import { listVirtualScroll } from './list-draggables';
 
 /**
  * The space (px) content pinned over a scroll container's top and bottom edges covers, such as a
@@ -129,15 +130,11 @@ export function ownUncoveredRect(
   rect?: DOMRect,
   read: RectReader = readRect,
 ): DOMRect | null {
-  let uncovered = uncoveredRect(element, rect ?? read(element));
-  for (const scroller of Array.from(element.querySelectorAll('vdnd-virtual-scroll'))) {
-    const owner = scroller.closest('[data-droppable-id]');
-    const nestedList = owner !== null && owner !== element && element.contains(owner);
-    if (!nestedList && hasScrollInsets(scroller)) {
-      uncovered = intersectRects(uncovered, uncoveredRect(scroller, read(scroller)));
-    }
-  }
-  return uncovered;
+  const uncovered = uncoveredRect(element, rect ?? read(element));
+  const scroller = listVirtualScroll(element);
+  return scroller && hasScrollInsets(scroller)
+    ? intersectRects(uncovered, uncoveredRect(scroller, read(scroller)))
+    : uncovered;
 }
 
 /**
