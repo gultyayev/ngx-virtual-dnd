@@ -2,6 +2,9 @@ import { TestBed } from '@angular/core/testing';
 import { KeyboardDragService } from './keyboard-drag.service';
 import { DragStateService } from './drag-state.service';
 import { DraggedItem, END_OF_LIST } from '../models/drag-drop.models';
+import { DroppableRegistryService } from './droppable-registry.service';
+import { DragIndexCalculatorService } from './drag-index-calculator.service';
+import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 
 describe('KeyboardDragService', () => {
   let service: KeyboardDragService;
@@ -613,6 +616,80 @@ describe('KeyboardDragService', () => {
 
       expect(service.isActive()).toBe(false);
       expect(dragState.wasCancelled()).toBe(true);
+    });
+  });
+
+  describe('placeholder reveal for a list without its own', () => {
+    // A 300px scroll container whose sticky header covers its top 40px and footer its bottom 30px,
+    // holding 100 rows of 50px (an element that is its own list, as *vdndVirtualFor in one)
+    let list: HTMLElement;
+    let unregister: () => void;
+
+    beforeEach(() => {
+      list = document.createElement('div');
+      list.className = 'vdnd-scrollable';
+      list.setAttribute('data-droppable-id', 'list');
+      list.setAttribute('data-droppable-group', 'g');
+      list.setAttribute('data-scroll-inset-top', '40');
+      list.setAttribute('data-scroll-inset-bottom', '30');
+      list.getBoundingClientRect = () => new DOMRect(0, 0, 200, 300);
+      let scrollTop = 0;
+      Object.defineProperty(list, 'scrollHeight', { value: 5000 });
+      Object.defineProperty(list, 'clientHeight', { value: 300 });
+      Object.defineProperty(list, 'scrollTop', {
+        get: () => scrollTop,
+        set: (value: number) => (scrollTop = Math.max(0, Math.min(value, 4700))),
+      });
+      document.body.appendChild(list);
+      unregister = TestBed.inject(DroppableRegistryService).register(list, 'list', 'g');
+      const strategy = new FixedHeightStrategy(50);
+      strategy.setItemCount(100);
+      TestBed.inject(DragIndexCalculatorService).registerStrategy('list', strategy);
+    });
+
+    afterEach(() => {
+      TestBed.inject(DragIndexCalculatorService).unregisterStrategy('list');
+      unregister();
+      list.remove();
+    });
+
+    const start = (sourceIndex: number): void =>
+      service.startKeyboardDrag(
+        createMockItem({ droppableId: 'list', element: createMockElement() }),
+        sourceIndex,
+        100,
+        'list',
+      );
+
+    it('should scroll the placeholder above the space covered at the bottom', () => {
+      start(0);
+
+      // Target 10: the placeholder before row 11 at [550, 600); 230px show above the footer
+      service.moveToIndex(10);
+
+      expect(list.scrollTop).toBe(600 - 270);
+    });
+
+    it('should scroll the placeholder below the space covered at the top', () => {
+      list.scrollTop = 2000;
+      start(50);
+
+      // Target 10 (above the source): the placeholder before row 10 at [500, 550)
+      service.moveToIndex(10);
+
+      expect(list.scrollTop).toBe(500 - 40);
+    });
+
+    it('should leave a list with its own reveal to it', () => {
+      const reveal = jest.fn();
+      service.registerRevealer('list', reveal);
+      start(0);
+
+      service.moveToIndex(10);
+
+      expect(reveal).toHaveBeenCalled();
+      expect(list.scrollTop).toBe(0);
+      service.unregisterRevealer('list', reveal);
     });
   });
 });

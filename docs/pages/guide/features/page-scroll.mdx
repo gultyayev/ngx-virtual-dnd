@@ -27,6 +27,49 @@ The element marked `vdndScrollable` must be the one that scrolls, so give it a h
 - `vdndContentHeader` marks a header inside the component. Its height is measured and used as the list's top offset. If the header lives outside the component, pass its height with `[contentOffset]` instead.
 - Auto-scroll uses the `vdndScrollable` element, so dragging near the top or bottom of the page scrolls it.
 
+## Sticky headers and footers
+
+A header or footer with `position: sticky` inside the scroll container stays on screen while the rows scroll behind it. The drag can't tell it covers the container, so tell it with `scrollInsetTop` and `scrollInsetBottom`: the height in pixels each covers. Measure them however suits your layout:
+
+```angular-html
+<div
+  vdndScrollable
+  [scrollInsetTop]="headerHeight()"
+  [scrollInsetBottom]="footerHeight()"
+>
+  <header class="sticky-header">...</header>
+  <vdnd-virtual-content [itemHeight]="72" [contentOffset]="headerHeight()" vdndDroppable="tasks">
+    ...
+  </vdnd-virtual-content>
+  <footer class="sticky-footer">...</footer>
+</div>
+```
+
+```css
+.sticky-header {
+  position: sticky;
+  top: 0;
+}
+.sticky-footer {
+  position: sticky;
+  bottom: 0;
+}
+```
+
+The drag then treats the part of the container between them as the container:
+
+- With `constrainToContainer`, the preview stays between the header and the footer.
+- Auto-scroll starts at the header's lower edge and the footer's upper edge. A pointer over either scrolls at full speed.
+- The pointer over the header or footer is not over the list, as outside the container. The drop position still follows the preview's top edge, as at any edge of the container, so without `constrainToContainer` a preview pulled over the header can point at a row behind it.
+- A keyboard drag scrolls the list to keep the placeholder between the header and the footer.
+- A list in a scroll container nested inside this one is treated the same way where it scrolls under the header or footer: it is not targeted there, auto-scroll over them scrolls the outer container, and its constrained preview and keyboard placeholder stay clear of them.
+
+When the header collapses or grows while the page scrolls, keep the height you pass up to date: a drag in progress measures again when it changes, and a keyboard drag scrolls its placeholder clear of them again.
+
+Measure the insets from the container's outer (border) edges: a border on the container adds its width, and a horizontal scrollbar under a `bottom: 0` footer adds its height.
+
+`<vdnd-sortable-list>`, `<vdnd-virtual-scroll>` and `<vdnd-virtual-viewport>` take the same inputs for content overlaid on their own rows, such as a header positioned over the top of the list. They also leave that space around their rows: the first row starts below the top inset, and the list scrolls far enough for the last row to clear the bottom one. In `<vdnd-virtual-viewport>`, the rows start `contentOffset` down when that is more than the top inset.
+
 ## Ionic
 
 `<ion-content>` scrolls an element inside its shadow DOM, so `vdndScrollable` cannot go on `ion-content` itself. Turn off its scrolling and add a scroll host in the light DOM:

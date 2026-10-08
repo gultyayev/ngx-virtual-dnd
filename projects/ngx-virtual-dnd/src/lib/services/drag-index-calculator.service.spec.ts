@@ -267,6 +267,327 @@ describe('DragIndexCalculatorService', () => {
     expect(index).toBe(0);
   });
 
+  it('snaps to the edges of the part of a constrained list that nothing pinned over it covers', () => {
+    const strategy = new MockStrategy(
+      [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600],
+      (offset) => Math.floor(offset / 50),
+    );
+    // The list is its own vdndScrollable: a sticky header covers its top 100px of 500, a sticky
+    // footer its bottom 60px
+    const droppable = createDroppable('list-1', 12, true);
+    droppable.setAttribute('data-scroll-inset-top', '100');
+    droppable.setAttribute('data-scroll-inset-bottom', '60');
+    service.registerStrategy('list-1', strategy);
+    const indexAt = (y: number): number =>
+      service.calculatePlaceholderIndex({
+        droppableElement: droppable,
+        position: { x: 20, y },
+        previousPosition: null,
+        grabOffset: { x: 20, y: 120 },
+        draggedItemHeight: 240,
+        sourceDroppableId: null,
+        sourceIndex: null,
+      }).index;
+
+    // Clamped below the header: preview top 101
+    expect(indexAt(221)).toBe(0);
+    // Clamped above the footer: preview bottom 439
+    expect(indexAt(319)).toBe(12);
+  });
+
+  it('snaps to the end near the bottom edge of the part of the list nothing covers', () => {
+    // 8 rows of 50px fill 0..400 of a 500px list whose bottom 100px a sticky footer covers
+    const strategy = new MockStrategy([0, 50, 100, 150, 200, 250, 300, 350, 400], (offset) =>
+      Math.floor(offset / 50),
+    );
+    const droppable = createDroppable('list-1', 8);
+    droppable.setAttribute('data-scroll-inset-bottom', '100');
+    service.registerStrategy('list-1', strategy);
+
+    const index = service.calculatePlaceholderIndex({
+      droppableElement: droppable,
+      // Preview 360..410: its center (385) is 15px above the footer, over the last row
+      position: { x: 20, y: 360 },
+      previousPosition: null,
+      grabOffset: { x: 20, y: 0 },
+      draggedItemHeight: 50,
+      sourceDroppableId: null,
+      sourceIndex: null,
+    }).index;
+
+    expect(index).toBe(8);
+  });
+
+  it('snaps to the top of the part of a constrained sortable list its rows are not covered in', () => {
+    // vdnd-sortable-list: the droppable wraps the vdnd-virtual-scroll, which a header overlaid on
+    // its rows covers 100px of
+    const droppable = createVirtualDroppable('list-1', { itemHeight: 50, totalItems: 12 });
+    droppable.setAttribute('data-constrain-to-container', '');
+    jest.spyOn(droppable, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 500));
+    droppable.querySelector('vdnd-virtual-scroll')!.setAttribute('data-scroll-inset-top', '100');
+    service.registerStrategy(
+      'list-1',
+      new MockStrategy([0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600], (offset) =>
+        Math.floor(offset / 50),
+      ),
+    );
+
+    const index = service.calculatePlaceholderIndex({
+      droppableElement: droppable,
+      // Clamped below the header: preview top 101
+      position: { x: 20, y: 221 },
+      previousPosition: null,
+      grabOffset: { x: 20, y: 120 },
+      draggedItemHeight: 240,
+      sourceDroppableId: null,
+      sourceIndex: null,
+    }).index;
+
+    expect(index).toBe(0);
+  });
+
+  describe('revealSlot', () => {
+    /** A vdnd-virtual-viewport (0..300) whose rows start 80px down, scrolled to `scrollTop` */
+    function createViewport(scrollTop: number): HTMLElement {
+      const viewport = document.createElement('div');
+      viewport.setAttribute('data-droppable-id', 'list-1');
+      viewport.setAttribute('data-virtual-viewport', '');
+      viewport.setAttribute('data-content-offset', '80');
+      viewport.setAttribute('data-scroll-inset-top', '40');
+      viewport.setAttribute('data-scroll-inset-bottom', '30');
+      viewport.getBoundingClientRect = () => new DOMRect(0, 0, 300, 300);
+      viewport.scrollTop = scrollTop;
+      service.registerStrategy(
+        'list-1',
+        new MockStrategy(
+          Array.from({ length: 101 }, (_, i) => i * 50),
+          (offset) => Math.floor(offset / 50),
+        ),
+      );
+      return viewport;
+    }
+
+    it('should scroll a slot above the uncovered part down to its top edge', () => {
+      const viewport = createViewport(1000);
+
+      service.revealSlot(viewport, 10, 50);
+
+      // Row 10 starts 500px into the rows, 580px into the viewport: 40px below its top
+      expect(viewport.scrollTop).toBe(580 - 40);
+    });
+
+    it('should scroll a slot below the uncovered part up to its bottom edge', () => {
+      const viewport = createViewport(0);
+
+      service.revealSlot(viewport, 10, 50);
+
+      // The slot ends 630px into the viewport; 270px show above the 30px covered at the bottom
+      expect(viewport.scrollTop).toBe(630 - 270);
+    });
+
+    it('should leave a slot that shows in full where it is', () => {
+      const viewport = createViewport(500);
+
+      service.revealSlot(viewport, 10, 50);
+
+      expect(viewport.scrollTop).toBe(500);
+    });
+
+    describe('in a list of plain rows', () => {
+      // A 300px scroll container (0..300) holding a list of 20 rows of 50px, laid out from its
+      // scroll position (no strategy: the rows are all rendered)
+      let scroller: HTMLElement;
+      let list: HTMLElement;
+      let rows: HTMLElement[];
+
+      beforeEach(() => {
+        scroller = document.createElement('div');
+        scroller.style.overflowY = 'auto';
+        scroller.getBoundingClientRect = () => new DOMRect(0, 0, 300, 300);
+        let scrollTop = 0;
+        Object.defineProperty(scroller, 'scrollHeight', { value: 1100 });
+        Object.defineProperty(scroller, 'clientHeight', { value: 300 });
+        Object.defineProperty(scroller, 'scrollTop', {
+          get: () => scrollTop,
+          set: (value: number) => (scrollTop = Math.max(0, Math.min(value, 800))),
+        });
+        list = document.createElement('div');
+        list.setAttribute('data-droppable-id', 'plain');
+        scroller.appendChild(list);
+        rows = Array.from({ length: 20 }, (_, i) => {
+          const row = document.createElement('div');
+          row.setAttribute('data-draggable-id', `row-${i}`);
+          row.getBoundingClientRect = () => new DOMRect(0, i * 50 - scroller.scrollTop, 300, 50);
+          list.appendChild(row);
+          return row;
+        });
+        document.body.appendChild(scroller);
+      });
+
+      afterEach(() => scroller.remove());
+
+      it('should scroll a slot below the visible part up to its bottom edge', () => {
+        // The slot before row 11: 550..600
+        service.revealSlot(list, 11, 50);
+
+        expect(scroller.scrollTop).toBe(600 - 300);
+      });
+
+      it('should scroll a slot above the visible part down below the space covered at the top', () => {
+        scroller.setAttribute('data-scroll-inset-top', '40');
+        scroller.scrollTop = 800;
+
+        // The slot before row 10: 500..550, to start 40px below the top edge
+        service.revealSlot(list, 10, 50);
+
+        expect(scroller.scrollTop).toBe(500 - 40);
+      });
+
+      it('should reveal the slot after the last row shown, past a hidden dragged row', () => {
+        // The dragged row is hidden (display: none): the slot follows row 18, at 950..1000
+        rows[19].getBoundingClientRect = () => new DOMRect(0, 0, 0, 0);
+
+        service.revealSlot(list, 20, 50);
+
+        expect(scroller.scrollTop).toBe(1000 - 300);
+      });
+
+      it('should reveal the placeholder the list renders itself', () => {
+        // A vdnd-placeholder rendered before row 11, pushing it down: 550..600
+        const placeholder = document.createElement('vdnd-placeholder');
+        placeholder.setAttribute('data-draggable-id', 'placeholder');
+        placeholder.getBoundingClientRect = () => new DOMRect(0, 550 - scroller.scrollTop, 300, 50);
+        list.insertBefore(placeholder, rows[11]);
+
+        service.revealSlot(list, 11, 50);
+
+        expect(scroller.scrollTop).toBe(600 - 300);
+      });
+
+      it('should reveal the slot below a header an ancestor that does not scroll lays over it', () => {
+        // A container (0..400, too short to scroll) whose 40px header covers the top of the inner one
+        const outer = document.createElement('div');
+        outer.setAttribute('data-scroll-inset-top', '40');
+        outer.getBoundingClientRect = () => new DOMRect(0, 0, 300, 400);
+        document.body.appendChild(outer);
+        outer.appendChild(scroller);
+        scroller.scrollTop = 200;
+
+        try {
+          // The slot before row 4: 200..250, at the inner container's top edge, under the header
+          service.revealSlot(list, 4, 50);
+
+          expect(scroller.scrollTop).toBe(200 - 40);
+        } finally {
+          outer.remove();
+        }
+      });
+
+      describe('in a vdndScrollable', () => {
+        // A vdndScrollable (0..400) scrolling 2000px of content, holding the 300px container
+        let outer: HTMLElement;
+
+        beforeEach(() => {
+          outer = document.createElement('div');
+          outer.classList.add('vdnd-scrollable');
+          outer.style.overflowY = 'auto';
+          outer.getBoundingClientRect = () => new DOMRect(0, 0, 300, 400);
+          let scrollTop = 0;
+          Object.defineProperty(outer, 'scrollHeight', { value: 2000 });
+          Object.defineProperty(outer, 'clientHeight', { value: 400 });
+          Object.defineProperty(outer, 'scrollTop', {
+            get: () => scrollTop,
+            set: (value: number) => (scrollTop = Math.max(0, Math.min(value, 1600))),
+          });
+          document.body.appendChild(outer);
+        });
+
+        afterEach(() => outer.remove());
+
+        /** Place the container `top` px down in the vdndScrollable's content */
+        function placeScroller(top: number): void {
+          scroller.getBoundingClientRect = () => new DOMRect(0, top - outer.scrollTop, 300, 300);
+          rows.forEach((row, i) => {
+            row.getBoundingClientRect = () =>
+              new DOMRect(0, top - outer.scrollTop + i * 50 - scroller.scrollTop, 300, 50);
+          });
+        }
+
+        it('should leave the slot to the vdndScrollable when it can scroll it into view', () => {
+          // Only the container's top 60px show (340..400); the slot before row 2 is at 440..490
+          outer.appendChild(scroller);
+          placeScroller(340);
+
+          service.revealSlot(list, 2, 50);
+
+          expect(scroller.scrollTop).toBe(0);
+          expect(outer.scrollTop).toBe(490 - 400);
+        });
+
+        it('should reveal the slot below a header over the vdndScrollable scrolled to its top', () => {
+          // A 40px header overlaid on the vdndScrollable's top covers the container's (0..40)
+          outer.setAttribute('data-scroll-inset-top', '40');
+          outer.appendChild(scroller);
+          placeScroller(0);
+          scroller.scrollTop = 200;
+
+          // The slot before row 4: 200..250, at the container's top edge, under the header
+          service.revealSlot(list, 4, 50);
+
+          expect(scroller.scrollTop).toBe(200 - 40);
+          expect(outer.scrollTop).toBe(0);
+        });
+
+        it('should keep the slot clear of a header that does not scroll while the vdndScrollable scrolls', () => {
+          // A box that does not scroll, 370px down, whose 40px header covers the container's top
+          const box = document.createElement('div');
+          box.setAttribute('data-scroll-inset-top', '40');
+          box.getBoundingClientRect = () => new DOMRect(0, 370 - outer.scrollTop, 300, 300);
+          outer.appendChild(box);
+          box.appendChild(scroller);
+          placeScroller(370);
+          scroller.scrollTop = 200;
+
+          // The slot before row 4: 370..420, under the header (370..410) and past the bottom edge
+          service.revealSlot(list, 4, 50);
+
+          // The container moves it below the header (410..460), the vdndScrollable up into view
+          expect(scroller.scrollTop).toBe(200 - 40);
+          expect(outer.scrollTop).toBe(460 - 400);
+        });
+      });
+
+      it('should scroll an outer container when the inner one has no room left', () => {
+        // The page (0..400) scrolls the 300px container, which sits 600px down in it
+        const page = document.createElement('div');
+        page.style.overflowY = 'auto';
+        page.getBoundingClientRect = () => new DOMRect(0, 0, 300, 400);
+        let pageScrollTop = 0;
+        Object.defineProperty(page, 'scrollHeight', { value: 2000 });
+        Object.defineProperty(page, 'clientHeight', { value: 400 });
+        Object.defineProperty(page, 'scrollTop', {
+          get: () => pageScrollTop,
+          set: (value: number) => (pageScrollTop = Math.max(0, Math.min(value, 1600))),
+        });
+        scroller.getBoundingClientRect = () => new DOMRect(0, 600 - page.scrollTop, 300, 300);
+        rows[2].getBoundingClientRect = () =>
+          new DOMRect(0, 600 - page.scrollTop + 100 - scroller.scrollTop, 300, 50);
+        document.body.appendChild(page);
+        page.appendChild(scroller);
+
+        try {
+          // The slot before row 2 shows in the container, which is below the page's bottom edge
+          service.revealSlot(list, 2, 50);
+
+          expect(scroller.scrollTop).toBe(0);
+          expect(page.scrollTop).toBe(750 - 400);
+        } finally {
+          page.remove();
+        }
+      });
+    });
+  });
+
   describe('constrained edge snap on a scrollable list', () => {
     // 50 rows of 50px in a 400px list: max scrollTop = 2500 - 400 = 2100.
     const ROW = 50;
@@ -356,7 +677,7 @@ describe('DragIndexCalculatorService', () => {
       }).index;
     }
 
-    it('snaps page-scroll content to the first slot whatever its scroll parent scrollTop', () => {
+    it('snaps page-scroll content to the first slot once its first row shows, whatever its scroll parent scrollTop', () => {
       // vdnd-virtual-content in a vdndScrollable parent scrolled by 900px of content above the
       // list: the droppable rect spans all rows, so a preview at its top is at the first row.
       const scrollable = document.createElement('div');
@@ -403,6 +724,76 @@ describe('DragIndexCalculatorService', () => {
       expect(index).toBe(0);
     });
 
+    describe('page-scroll content scrolled to the middle of its rows', () => {
+      // 100 rows of 50px below a 100px header (contentOffset) in a 400px vdndScrollable with a
+      // 100px sticky header and a 50px sticky footer over it, scrolled by 1000px: the rows show
+      // from 100 to 350, rows 20 to 24.
+      const PAGE_ROWS = 100;
+
+      function pageScrollIndex(scrollTop: number, previewTop: number): number {
+        const scrollable = document.createElement('div');
+        scrollable.classList.add('vdnd-scrollable');
+        scrollable.setAttribute('data-scroll-inset-top', '100');
+        scrollable.setAttribute('data-scroll-inset-bottom', '50');
+        mockRect(scrollable);
+        Object.defineProperty(scrollable, 'scrollTop', { value: scrollTop });
+        Object.defineProperty(scrollable, 'clientHeight', { value: LIST_HEIGHT });
+        Object.defineProperty(scrollable, 'scrollHeight', { value: 100 + PAGE_ROWS * ROW });
+        const content = document.createElement('vdnd-virtual-content');
+        content.setAttribute('data-content-offset', '100');
+        const droppable = document.createElement('div');
+        droppable.setAttribute('data-droppable-id', 'page-list');
+        droppable.setAttribute('data-droppable-group', 'test-group');
+        droppable.setAttribute('data-constrain-to-container', '');
+        const top = 100 - scrollTop;
+        jest
+          .spyOn(droppable, 'getBoundingClientRect')
+          .mockReturnValue(new DOMRect(0, top, 300, PAGE_ROWS * ROW));
+        content.appendChild(droppable);
+        scrollable.appendChild(content);
+        document.body.appendChild(scrollable);
+        const offsets = Array.from({ length: PAGE_ROWS + 1 }, (_, i) => i * ROW);
+        service.registerStrategy(
+          'page-list',
+          new MockStrategy(offsets, (offset) =>
+            Math.max(0, Math.min(PAGE_ROWS - 1, Math.floor(offset / ROW))),
+          ),
+        );
+
+        try {
+          return service.calculatePlaceholderIndex({
+            droppableElement: droppable,
+            position: { x: 20, y: previewTop + 25 },
+            previousPosition: null,
+            grabOffset: { x: 20, y: 25 },
+            draggedItemHeight: ROW,
+            sourceDroppableId: null,
+            sourceIndex: null,
+          }).index;
+        } finally {
+          scrollable.remove();
+        }
+      }
+
+      it('keeps the visible top row when the preview is pinned below the header', () => {
+        expect(pageScrollIndex(1000, 100)).toBe(20);
+      });
+
+      it('keeps the visible bottom row when the preview is pinned above the footer', () => {
+        expect(pageScrollIndex(1000, 300)).toBe(24);
+      });
+
+      it('still snaps to the first slot once its first row shows below the header', () => {
+        // Scrolled by 0: the rows start at 100, right below the header
+        expect(pageScrollIndex(0, 100)).toBe(0);
+      });
+
+      it('still snaps to the end once its last row shows above the footer', () => {
+        // Scrolled by 4750: the rows end at 100 - 4750 + 5000 = 350, right above the footer
+        expect(pageScrollIndex(4750, 300)).toBe(PAGE_ROWS);
+      });
+    });
+
     describe.each(['viewport', 'virtualScroll'] as const)('in a %s', (container) => {
       it('keeps the visible top row when the preview is pinned at the top of a scrolled list', () => {
         // Preview top 1px below the list top at scrollTop 900: the capped probe is at
@@ -443,6 +834,90 @@ describe('DragIndexCalculatorService', () => {
         expect(
           indexFor({ container, scrollTop: MAX_SCROLL - 100, previewTop: LIST_HEIGHT - ROW - 1 }),
         ).toBe(47);
+      });
+    });
+
+    describe('under what a scroll container around it covers', () => {
+      /** The list in a scroll container (its rect 0..400) with the given insets and scrollTop. */
+      function indexInOuter(args: {
+        insetTop?: number;
+        insetBottom?: number;
+        outerScrollTop: number;
+        scrollTop: number;
+        previewTop: number;
+      }): number {
+        const outer = document.createElement('div');
+        outer.classList.add('vdnd-scrollable');
+        if (args.insetTop) outer.setAttribute('data-scroll-inset-top', String(args.insetTop));
+        if (args.insetBottom) {
+          outer.setAttribute('data-scroll-inset-bottom', String(args.insetBottom));
+        }
+        mockRect(outer);
+        mockScroll(outer, args.outerScrollTop);
+        const droppable = createScrolledDroppable('viewport', args.scrollTop);
+        outer.appendChild(droppable);
+        const grabOffset = { x: 20, y: ROW / 2 };
+        return service.calculatePlaceholderIndex({
+          droppableElement: droppable,
+          position: { x: 20, y: args.previewTop + grabOffset.y },
+          previousPosition: null,
+          grabOffset,
+          draggedItemHeight: ROW,
+          sourceDroppableId: null,
+          sourceIndex: null,
+        }).index;
+      }
+
+      it('snaps to the first slot at the top it is clamped to, below the outer header', () => {
+        // The outer header covers the list's top 100px; the preview is clamped 1px below it.
+        // Its probe (126) is in row 2.
+        expect(
+          indexInOuter({ insetTop: 100, outerScrollTop: 0, scrollTop: 0, previewTop: 101 }),
+        ).toBe(0);
+      });
+
+      it('keeps the probe row there while the outer container can still scroll up', () => {
+        expect(
+          indexInOuter({ insetTop: 100, outerScrollTop: 300, scrollTop: 0, previewTop: 101 }),
+        ).toBe(2);
+      });
+
+      it('snaps to the end at the bottom it is clamped to, above the outer footer', () => {
+        // The outer footer covers the list's bottom 100px; the preview's bottom is 1px above it.
+        // Its probe (274 + 2100) is in row 47.
+        const bottom = { insetBottom: 100, scrollTop: MAX_SCROLL, previewTop: 300 - ROW - 1 };
+        expect(indexInOuter({ ...bottom, outerScrollTop: MAX_SCROLL })).toBe(ROWS);
+      });
+
+      it('snaps at the edges of the vdndScrollable it is clamped to, not at its own', () => {
+        // The list (0..400, scrolled to its end) in a taller vdndScrollable (0..800) that doesn't
+        // scroll: a constrained preview is clamped to the vdndScrollable
+        const page = document.createElement('div');
+        page.classList.add('vdnd-scrollable');
+        jest.spyOn(page, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 800));
+        const droppable = createScrolledDroppable('viewport', MAX_SCROLL);
+        page.appendChild(droppable);
+        const indexAt = (previewTop: number): number =>
+          service.calculatePlaceholderIndex({
+            droppableElement: droppable,
+            position: { x: 20, y: previewTop + 120 },
+            previousPosition: null,
+            grabOffset: { x: 20, y: 120 },
+            draggedItemHeight: 240,
+            sourceDroppableId: null,
+            sourceIndex: null,
+          }).index;
+
+        // A 240px preview whose bottom is 1px above the list's: free to move on, so its probe
+        // row (279 + 2100 → row 47), not the end
+        expect(indexAt(400 - 240 - 1)).toBe(47);
+        // At the bottom it is clamped to: the end
+        expect(indexAt(800 - 240 - 1)).toBe(ROWS);
+      });
+
+      it('keeps the probe row there while the outer container can still scroll down', () => {
+        const bottom = { insetBottom: 100, scrollTop: MAX_SCROLL, previewTop: 300 - ROW - 1 };
+        expect(indexInOuter({ ...bottom, outerScrollTop: 0 })).toBe(47);
       });
     });
   });
@@ -814,6 +1289,120 @@ describe('DragIndexCalculatorService', () => {
       viewport.appendChild(nested);
 
       expect(service.getScrollGeometry(viewport, 50).scrollTop).toBe(200);
+    });
+  });
+
+  it('measures the rows of a vdnd-virtual-scroll from below its top inset', () => {
+    // The rows start 40px down its scroll area: scrolled 120px, they are scrolled 80px
+    const droppable = createVirtualDroppable('inset-list', { itemHeight: 50, totalItems: 20 });
+    const virtualScroll = droppable.querySelector('vdnd-virtual-scroll')!;
+    virtualScroll.setAttribute('data-scroll-inset-top', '40');
+    virtualScroll.scrollTop = 120;
+
+    expect(service.getScrollGeometry(droppable, 50).scrollTop).toBe(80);
+  });
+
+  describe('a plain list whose rows hold virtual lists', () => {
+    /** A plain list of 2 rows, each wrapping a nested list that scrolls 100 rows of its own. */
+    function createBoard(): HTMLElement {
+      const board = createDroppable('board', 0);
+      for (let i = 0; i < 2; i++) {
+        const row = document.createElement('div');
+        row.setAttribute('data-draggable-id', `column-${i}`);
+        const column = document.createElement('div');
+        column.setAttribute('data-droppable-id', `column-list-${i}`);
+        const nested = document.createElement('vdnd-virtual-scroll');
+        nested.setAttribute('data-item-height', '20');
+        nested.setAttribute('data-total-items', '100');
+        nested.scrollTop = 30;
+        const card = document.createElement('div');
+        card.setAttribute('data-draggable-id', `card-${i}`);
+        nested.appendChild(card);
+        column.appendChild(nested);
+        row.appendChild(column);
+        board.appendChild(row);
+      }
+      return board;
+    }
+
+    it('measures the list itself, not the virtual list in a row', () => {
+      expect(service.getScrollGeometry(createBoard(), 50)).toEqual(
+        expect.objectContaining({ scrollTop: 0, isVirtual: false }),
+      );
+    });
+
+    it('counts its own rows, not those of the lists nested in them', () => {
+      expect(
+        service.getTotalItemCount({
+          droppableElement: createBoard(),
+          isSameList: false,
+          draggedItemHeight: 50,
+        }),
+      ).toBe(2);
+    });
+
+    it('measures the list itself when a row scrolls content of its own', () => {
+      // A card that is no list but scrolls its content in a vdnd-virtual-scroll
+      const board = createDroppable('cards', 3);
+      const card = board.querySelector('[data-draggable-id="item-1"]')!;
+      const scroller = document.createElement('vdnd-virtual-scroll');
+      scroller.setAttribute('data-total-items', '100');
+      scroller.scrollTop = 30;
+      card.appendChild(scroller);
+
+      expect(service.getScrollGeometry(board, 50)).toEqual(
+        expect.objectContaining({ scrollTop: 0, isVirtual: false }),
+      );
+      expect(
+        service.getTotalItemCount({
+          droppableElement: board,
+          isSameList: false,
+          draggedItemHeight: 50,
+        }),
+      ).toBe(3);
+    });
+
+    it('counts the rows of a vdnd-virtual-scroll from its spacer without its insets', () => {
+      // No item count to read: 40 + 20 rows of 50px + 30
+      const droppable = createDroppable('spacer-list', 0);
+      const scroller = document.createElement('vdnd-virtual-scroll');
+      scroller.setAttribute('data-item-height', '50');
+      scroller.setAttribute('data-scroll-inset-top', '40');
+      scroller.setAttribute('data-scroll-inset-bottom', '30');
+      const spacer = document.createElement('div');
+      spacer.className = 'vdnd-virtual-scroll-spacer';
+      spacer.style.height = '1070px';
+      scroller.appendChild(spacer);
+      droppable.appendChild(scroller);
+
+      expect(
+        service.getTotalItemCount({
+          droppableElement: droppable,
+          isSameList: false,
+          draggedItemHeight: 50,
+        }),
+      ).toBe(20);
+    });
+
+    it('still finds its own vdnd-virtual-scroll inside layout wrappers', () => {
+      const droppable = createDroppable('wrapped', 0);
+      const layout = document.createElement('div');
+      const scroller = document.createElement('vdnd-virtual-scroll');
+      scroller.setAttribute('data-total-items', '40');
+      scroller.scrollTop = 120;
+      layout.appendChild(scroller);
+      droppable.appendChild(layout);
+
+      expect(service.getScrollGeometry(droppable, 50)).toEqual(
+        expect.objectContaining({ scrollTop: 120, isVirtual: true }),
+      );
+      expect(
+        service.getTotalItemCount({
+          droppableElement: droppable,
+          isSameList: false,
+          draggedItemHeight: 50,
+        }),
+      ).toBe(40);
     });
   });
 

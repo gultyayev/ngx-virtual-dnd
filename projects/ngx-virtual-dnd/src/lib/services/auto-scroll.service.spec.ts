@@ -420,6 +420,185 @@ describe('AutoScrollService', () => {
   // ---------------------------------------------------------------------------
   // Boundary clamping
   // ---------------------------------------------------------------------------
+  describe('scroll insets', () => {
+    // Container rect: top=100, bottom=500 (scrollTop 200 of 600); threshold 50, maxSpeed 15
+    afterEach(() => {
+      mockElement.removeAttribute('data-scroll-inset-top');
+      mockElement.removeAttribute('data-scroll-inset-bottom');
+    });
+
+    function scrollTopAfterTick(cursor: { x: number; y: number }): number {
+      setupDrag(cursor);
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+      flushRAF();
+      return mockElement.scrollTop;
+    }
+
+    it('should scroll up from the inner edge of the space covered at the top', () => {
+      mockElement.setAttribute('data-scroll-inset-top', '100');
+
+      // 20px below the covered space (top edge 200), 120px below the container's top edge
+      expect(scrollTopAfterTick({ x: 150, y: 220 })).toBeLessThan(200);
+    });
+
+    it('should scroll down from the inner edge of the space covered at the bottom', () => {
+      mockElement.setAttribute('data-scroll-inset-bottom', '80');
+
+      // 20px above the covered space (bottom edge 420), 100px above the container's bottom edge
+      expect(scrollTopAfterTick({ x: 150, y: 400 })).toBeGreaterThan(200);
+    });
+
+    it('should scroll at full speed while the cursor is over the covered space', () => {
+      mockElement.setAttribute('data-scroll-inset-top', '100');
+
+      // Over the covered space: deeper in the edge zone than its inner edge
+      expect(scrollTopAfterTick({ x: 150, y: 150 })).toBe(185);
+    });
+
+    it('should not scroll while the cursor is away from the uncovered edges', () => {
+      mockElement.setAttribute('data-scroll-inset-top', '100');
+      mockElement.setAttribute('data-scroll-inset-bottom', '80');
+
+      expect(scrollTopAfterTick({ x: 150, y: 300 })).toBe(200);
+    });
+
+    it('should scroll towards the nearer edge when the uncovered part is shorter than the threshold', () => {
+      // Uncovered: 250..290, 40px (less than the 50px threshold), so both edge zones overlap
+      mockElement.setAttribute('data-scroll-inset-top', '150');
+      mockElement.setAttribute('data-scroll-inset-bottom', '210');
+
+      // Over the bottom covered space: 45px below the top edge, 5px past the bottom one
+      expect(scrollTopAfterTick({ x: 150, y: 295 })).toBeGreaterThan(200);
+    });
+
+    it('should scroll up when the cursor is nearer the top edge of a short uncovered part', () => {
+      mockElement.setAttribute('data-scroll-inset-top', '150');
+      mockElement.setAttribute('data-scroll-inset-bottom', '210');
+
+      expect(scrollTopAfterTick({ x: 150, y: 260 })).toBeLessThan(200);
+    });
+
+    it('should check a resting cursor again after refresh() (the covered space changed)', () => {
+      setupDrag({ x: 150, y: 300 });
+      service.registerContainer('test-container', mockElement);
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(mockElement.scrollTop).toBe(200);
+
+      // A header grows over the resting cursor
+      mockElement.setAttribute('data-scroll-inset-top', '200');
+      flushRAF();
+      expect(mockElement.scrollTop).toBe(200);
+      service.refresh();
+      flushRAF();
+
+      expect(mockElement.scrollTop).toBeLessThan(200);
+    });
+
+    it('should leave a nested container alone while the cursor is over what its outer one covers', () => {
+      // The outer container's sticky header covers 100..200; the inner one (150..450) scrolls
+      // under it
+      mockElement.setAttribute('data-scroll-inset-top', '100');
+      document.body.appendChild(mockElement);
+      const inner = document.createElement('div');
+      Object.defineProperty(inner, 'scrollHeight', { value: 1000 });
+      Object.defineProperty(inner, 'clientHeight', { value: 300 });
+      Object.defineProperty(inner, 'scrollWidth', { value: 200 });
+      Object.defineProperty(inner, 'clientWidth', { value: 200 });
+      inner.scrollTop = 200;
+      inner.getBoundingClientRect = () => new DOMRect(50, 150, 200, 300);
+      mockElement.appendChild(inner);
+      service.registerContainer('inner', inner);
+
+      try {
+        // Over the header, inside the inner container's rect: the outer container scrolls up
+        expect(scrollTopAfterTick({ x: 150, y: 170 })).toBeLessThan(200);
+        expect(inner.scrollTop).toBe(200);
+      } finally {
+        service.unregisterContainer('inner');
+        mockElement.remove();
+      }
+    });
+
+    it("should start a nested container's edge zone at what its outer one leaves uncovered", () => {
+      mockElement.setAttribute('data-scroll-inset-top', '100');
+      document.body.appendChild(mockElement);
+      const inner = document.createElement('div');
+      Object.defineProperty(inner, 'scrollHeight', { value: 1000 });
+      Object.defineProperty(inner, 'clientHeight', { value: 300 });
+      Object.defineProperty(inner, 'scrollWidth', { value: 200 });
+      Object.defineProperty(inner, 'clientWidth', { value: 200 });
+      inner.scrollTop = 200;
+      inner.getBoundingClientRect = () => new DOMRect(50, 150, 200, 300);
+      mockElement.appendChild(inner);
+      service.registerContainer('inner', inner);
+
+      try {
+        // 20px below the outer header (200), 70px below the inner container's own top edge
+        scrollTopAfterTick({ x: 150, y: 220 });
+        expect(inner.scrollTop).toBeLessThan(200);
+      } finally {
+        service.unregisterContainer('inner');
+        mockElement.remove();
+      }
+    });
+
+    it('should hand a nested container over to an outer one that gets insets during the drag', () => {
+      // The outer container (100..500) is no scroll container until its header covers 100..200
+      document.body.appendChild(mockElement);
+      const inner = document.createElement('div');
+      Object.defineProperty(inner, 'scrollHeight', { value: 1000 });
+      Object.defineProperty(inner, 'clientHeight', { value: 300 });
+      Object.defineProperty(inner, 'scrollWidth', { value: 200 });
+      Object.defineProperty(inner, 'clientWidth', { value: 200 });
+      inner.scrollTop = 200;
+      inner.getBoundingClientRect = () => new DOMRect(50, 150, 200, 300);
+      mockElement.appendChild(inner);
+      service.registerContainer('inner', inner);
+
+      try {
+        // Away from both edge zones: nothing scrolls
+        setupDrag({ x: 150, y: 300 });
+        service.registerContainer('test-container', mockElement);
+        startMonitoringWithScheduler();
+        flushRAF();
+        expect(inner.scrollTop).toBe(200);
+
+        // The header appears over the inner container's top; the pointer moves over it
+        mockElement.setAttribute('data-scroll-inset-top', '100');
+        service.refresh();
+        dragStateService.updateDragPosition({
+          cursorPosition: { x: 150, y: 170 },
+          activeDroppableId: null,
+          placeholderId: null,
+          placeholderIndex: null,
+        });
+        flushRAF();
+
+        expect(inner.scrollTop).toBe(200);
+        expect(mockElement.scrollTop).toBeLessThan(200);
+      } finally {
+        service.unregisterContainer('inner');
+        mockElement.remove();
+      }
+    });
+
+    it('should not scroll a container its insets cover all over', () => {
+      // 250 + 250 covers all of the 400px container
+      mockElement.setAttribute('data-scroll-inset-top', '250');
+      mockElement.setAttribute('data-scroll-inset-bottom', '250');
+
+      expect(scrollTopAfterTick({ x: 150, y: 300 })).toBe(200);
+    });
+
+    it('should not scroll from a cursor outside the container', () => {
+      mockElement.setAttribute('data-scroll-inset-top', '100');
+
+      expect(scrollTopAfterTick({ x: 150, y: 90 })).toBe(200);
+    });
+  });
+
   describe('boundary checking', () => {
     it('should not scroll past top boundary (scrollTop = 0)', () => {
       mockElement.scrollTop = 0;

@@ -1,43 +1,6 @@
 import { expect, type Locator, test } from '@playwright/test';
 import { DemoPage } from './fixtures/demo.page';
-
-type TouchEventType = 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel';
-
-async function dispatchTouch(
-  locator: Locator,
-  type: TouchEventType,
-  clientX: number,
-  clientY: number,
-): Promise<boolean> {
-  return locator.evaluate(
-    (el, payload) => {
-      const { type, clientX, clientY } = payload;
-
-      const touch = {
-        identifier: 1,
-        target: el,
-        clientX,
-        clientY,
-        pageX: clientX,
-        pageY: clientY,
-        screenX: clientX,
-        screenY: clientY,
-      };
-
-      const touches = type === 'touchend' ? [] : [touch];
-      const changedTouches = [touch];
-
-      const event = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, 'touches', { value: touches, configurable: true });
-      Object.defineProperty(event, 'targetTouches', { value: touches, configurable: true });
-      Object.defineProperty(event, 'changedTouches', { value: changedTouches, configurable: true });
-
-      el.dispatchEvent(event);
-      return event.defaultPrevented;
-    },
-    { type, clientX, clientY },
-  );
-}
+import { dispatchTouch, type TouchEventType } from './fixtures/touch';
 
 interface TouchPoint {
   identifier: number;

@@ -122,6 +122,12 @@ They measure real autoscroll throughput, so they need spare CPU: CI runs 2 worke
 changing a setting at runtime, and then wait for a render that proves the change applied (for
 example the `vdnd-draggable-disabled` class) before interacting.
 
+`TaskDemoPage.goto('/page-scroll', { ... })` does the same for the page-scroll demo (`count`;
+`sticky` adds a sticky header and "Add task" button with measured scroll insets; `constrain`).
+Scroll insets in nested scrollers, list components and plain `@for` lists are tested on
+`/nested-scroll` (`?constrain=true`), and overlaid content on a `vdnd-virtual-viewport` on
+`/virtual-viewport?insets=true`.
+
 ### 9) Scrub animations instead of waiting for them
 
 Shift animations are WAAPI animations: start them with a long duration
@@ -186,7 +192,8 @@ Preferred assertions:
 - Before delay: touchmove events should not be `defaultPrevented`, and drag preview should not appear
 - After delay: pending class appears; moving starts drag and touchmove becomes `defaultPrevented`
 
-This directly targets `DraggableDirective` touch-delay logic.
+This directly targets `DraggableDirective` touch-delay logic. Dispatch touches with `dispatchTouch`
+(`e2e/fixtures/touch.ts`), which returns whether a listener called `preventDefault()`.
 
 ---
 

@@ -62,6 +62,29 @@ ion-content::part(scroll) {
   margin-bottom: 0;
 }
 
+/* ?sticky=true: the header and the "Add task" button stay pinned inside the scroll container,
+   over the rows scrolling under them. No bottom padding, so the button is pinned at every scroll
+   position (it would rest above the padding at the end). */
+.tm-stage.is-sticky {
+  padding-bottom: 0;
+}
+.is-sticky .page-header,
+.is-sticky .tm-add {
+  position: sticky;
+  z-index: 2;
+  background: var(--bg);
+}
+.is-sticky .page-header {
+  top: 0;
+}
+.is-sticky .tm-add {
+  bottom: 0;
+}
+/* The hover tint over the opaque background (the global hover rule loses to the one above) */
+.is-sticky .tm-add:hover {
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg);
+}
+
 /* Fixed-height virtual mode: every row must render at exactly itemHeight (72px). */
 .tm-fixed .task {
   height: 72px;

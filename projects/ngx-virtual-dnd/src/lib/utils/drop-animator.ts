@@ -4,6 +4,7 @@ import {
   type VdndAnimationConfig,
 } from '../tokens/animation-config.token';
 import { queryByAttribute } from './attribute-selectors';
+import { visibleRect } from './scroll-insets';
 
 /** Where the ghost should land, and the element that stands there. */
 export interface DropAnimationTarget {
@@ -167,13 +168,16 @@ export function findDropTarget(
     const rect = element.getBoundingClientRect();
     // Hidden, or virtualized/scrolled out of the list's visible box: nowhere to land.
     if (rect.width === 0 && rect.height === 0) return null;
-    const bounds = droppable.getBoundingClientRect();
-    const visible =
-      rect.bottom > bounds.top &&
-      rect.top < bounds.bottom &&
-      rect.right > bounds.left &&
-      rect.left < bounds.right;
+    // Only where the list shows: scroll containers around it, and content pinned over their
+    // edges (a sticky header), can hide part of it.
+    const shown = visibleRect(droppable);
+    const visible = shown !== null && overlaps(rect, shown);
     return visible ? { element, rect } : null;
   }
   return null;
+}
+
+/** Whether two rects overlap. */
+function overlaps(a: DOMRect, b: DOMRect): boolean {
+  return a.bottom > b.top && a.top < b.bottom && a.right > b.left && a.left < b.right;
 }

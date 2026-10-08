@@ -12,6 +12,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DraggableDirective } from './draggable.directive';
 import { DroppableDirective } from './droppable.directive';
+import { ScrollableDirective } from './scrollable.directive';
 import { VirtualViewportComponent } from '../components/virtual-viewport.component';
 import { DragStateService } from '../services/drag-state.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
@@ -336,6 +337,40 @@ class ShadowListComponent {}
   imports: [ShadowListComponent],
 })
 class ShadowListHostComponent {}
+
+// A constrained list in a `vdndScrollable` whose top and bottom sticky content covers
+@Component({
+  template: `
+    <div vdndScrollable [scrollInsetTop]="insetTop()" [scrollInsetBottom]="40">
+      <div vdndDroppable="inset-list" vdndDroppableGroup="test-group" [constrainToContainer]="true">
+        <div vdndDraggable="inset-item" vdndDraggableGroup="test-group"></div>
+      </div>
+    </div>
+  `,
+  imports: [ScrollableDirective, DroppableDirective, DraggableDirective],
+})
+class InsetScrollableHostComponent {
+  readonly insetTop = signal(60);
+}
+
+// A constrained list in a column scroller, inside a page scroller whose sticky header covers its top
+@Component({
+  template: `
+    <div vdndScrollable [scrollInsetTop]="60" data-testid="page">
+      <div vdndScrollable data-testid="column">
+        <div
+          vdndDroppable="nested-list"
+          vdndDroppableGroup="test-group"
+          [constrainToContainer]="true"
+        >
+          <div vdndDraggable="nested-item" vdndDraggableGroup="test-group"></div>
+        </div>
+      </div>
+    </div>
+  `,
+  imports: [ScrollableDirective, DroppableDirective, DraggableDirective],
+})
+class NestedInsetScrollableHostComponent {}
 
 // A draggable an `@if` inside its list removes, while the list itself stays
 @Component({
@@ -2224,6 +2259,164 @@ describe('DraggableDirective', () => {
       // Clamped to the scrollable's bottom (300), not the list's (2000)
       expect(cursorOverride).toHaveBeenLastCalledWith({ x: 100, y: 300 });
       shadowFixture.destroy();
+    });
+  });
+
+  describe('in a scrollable with scroll insets', () => {
+    /** A rect at the top left of the page */
+    const rect = (top: number, right: number, bottom: number): DOMRect =>
+      ({
+        top,
+        left: 0,
+        right,
+        bottom,
+        width: right,
+        height: bottom - top,
+        x: 0,
+        y: top,
+      }) as DOMRect;
+
+    let insetFixture: ComponentFixture<InsetScrollableHostComponent>;
+    let item: HTMLElement;
+
+    beforeEach(() => {
+      insetFixture = TestBed.createComponent(InsetScrollableHostComponent);
+      insetFixture.detectChanges();
+      const host: HTMLElement = insetFixture.nativeElement;
+      // A 300px tall viewport (60px covered at its top, 40px at its bottom) on a taller list
+      host.querySelector<HTMLElement>('.vdnd-scrollable')!.getBoundingClientRect = () =>
+        rect(0, 300, 300);
+      host.querySelector<HTMLElement>('[data-droppable-id]')!.getBoundingClientRect = () =>
+        rect(0, 300, 2000);
+      item = host.querySelector<HTMLElement>('[data-draggable-id]')!;
+      // Pressed at y 100, 20px below its top edge
+      item.getBoundingClientRect = () => rect(80, 200, 130);
+    });
+
+    afterEach(() => insetFixture.destroy());
+
+    /** Drag the item to `y`, release there, and return the clamped positions */
+    function dragTo(y: number): { cursor: unknown; autoScrollCursor: unknown } {
+      const cursorOverride = jest.spyOn(TestBed.inject(AutoScrollService), 'setCursorOverride');
+      const updateDragPosition = jest.spyOn(dragStateService, 'updateDragPosition');
+      attemptPointerDrag(item);
+      expect(dragStateService.isDragging()).toBe(true);
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: y }));
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 150, clientY: y }));
+      return {
+        cursor: updateDragPosition.mock.lastCall?.[0].cursorPosition,
+        autoScrollCursor: cursorOverride.mock.lastCall?.[0],
+      };
+    }
+
+    it('should keep the constrained preview above the space covered at the bottom', () => {
+      const { cursor, autoScrollCursor } = dragTo(1000);
+
+      // The preview's bottom edge 1px above 260 (300 - 40): 260 - (50 - 20) - 1
+      expect(cursor).toEqual({ x: 150, y: 229 });
+      // The autoscroll cursor stops at the uncovered bottom edge, deep in its edge zone
+      expect(autoScrollCursor).toEqual({ x: 150, y: 260 });
+    });
+
+    it('should keep the constrained preview below the space covered at the top', () => {
+      const { cursor, autoScrollCursor } = dragTo(-500);
+
+      // The preview's top edge 1px below 60: 60 + 20 + 1
+      expect(cursor).toEqual({ x: 150, y: 81 });
+      expect(autoScrollCursor).toEqual({ x: 150, y: 60 });
+    });
+
+    it('should not clamp a pointer inside the uncovered part', () => {
+      const { cursor, autoScrollCursor } = dragTo(150);
+
+      expect(cursor).toEqual({ x: 150, y: 150 });
+      expect(autoScrollCursor).toEqual({ x: 150, y: 150 });
+    });
+
+    it('should clamp to the whole container when the space covered in it hides all of it', () => {
+      // 280px at the top and 40px at the bottom cover all of the 300px container
+      insetFixture.componentInstance.insetTop.set(280);
+      insetFixture.detectChanges();
+
+      const { cursor } = dragTo(-500);
+
+      // Its top edge, as without insets: 0 + 20 + 1
+      expect(cursor).toEqual({ x: 150, y: 21 });
+    });
+
+    it('should keep constraining a drag whose first move lands on the covered space', () => {
+      const updateDragPosition = jest.spyOn(dragStateService, 'updateDragPosition');
+      item.dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 100, clientY: 100, button: 0, bubbles: true }),
+      );
+      // Pulled up fast: the move that starts the drag is already over the space covered at the top
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: 40 }));
+      expect(dragStateService.isDragging()).toBe(true);
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: -500 }));
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 150, clientY: -500 }));
+
+      expect(updateDragPosition.mock.lastCall?.[0].cursorPosition).toEqual({ x: 150, y: 81 });
+    });
+
+    it("should keep a list in a nested scroller below what its outer scroller's header covers", () => {
+      const nested = TestBed.createComponent(NestedInsetScrollableHostComponent);
+      nested.detectChanges();
+      const host: HTMLElement = nested.nativeElement;
+      for (const id of ['page', 'column']) {
+        host.querySelector<HTMLElement>(`[data-testid="${id}"]`)!.getBoundingClientRect = () =>
+          rect(0, 300, 300);
+      }
+      host.querySelector<HTMLElement>('[data-droppable-id]')!.getBoundingClientRect = () =>
+        rect(0, 300, 2000);
+      const nestedItem = host.querySelector<HTMLElement>('[data-draggable-id]')!;
+      nestedItem.getBoundingClientRect = () => rect(80, 200, 130);
+      const updateDragPosition = jest.spyOn(dragStateService, 'updateDragPosition');
+
+      attemptPointerDrag(nestedItem);
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: -500 }));
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 150, clientY: -500 }));
+
+      // The column is the container, but the page's header covers its top 60px: 60 + 20 + 1
+      expect(updateDragPosition.mock.lastCall?.[0].cursorPosition).toEqual({ x: 150, y: 81 });
+      nested.destroy();
+    });
+
+    describe('when the covered space changes mid-drag', () => {
+      const nextFrame = (): Promise<void> =>
+        new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+      afterEach(() => {
+        document.dispatchEvent(new MouseEvent('mouseup', { clientX: 150, clientY: 150 }));
+      });
+
+      it('should stop targeting the rows it grows over', () => {
+        const positionCalculator = TestBed.inject(PositionCalculatorService);
+        attemptPointerDrag(item);
+        expect(
+          positionCalculator.findDroppableAtPoint(150, 100, item, 'test-group'),
+        ).not.toBeNull();
+
+        // A collapsed header expands over y 60..150
+        insetFixture.componentInstance.insetTop.set(150);
+        insetFixture.detectChanges();
+
+        expect(positionCalculator.findDroppableAtPoint(150, 100, item, 'test-group')).toBeNull();
+      });
+
+      it('should clamp the resting pointer again', async () => {
+        const updateDragPosition = jest.spyOn(dragStateService, 'updateDragPosition');
+        attemptPointerDrag(item);
+        document.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: -500 }));
+        await nextFrame();
+        expect(updateDragPosition.mock.lastCall?.[0].cursorPosition).toEqual({ x: 150, y: 81 });
+
+        insetFixture.componentInstance.insetTop.set(100);
+        insetFixture.detectChanges();
+        await nextFrame();
+
+        // The preview's top edge 1px below the new covered space: 100 + 20 + 1
+        expect(updateDragPosition.mock.lastCall?.[0].cursorPosition).toEqual({ x: 150, y: 121 });
+      });
     });
   });
 

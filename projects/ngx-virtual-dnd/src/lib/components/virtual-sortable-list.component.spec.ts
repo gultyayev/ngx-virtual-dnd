@@ -95,6 +95,31 @@ class RecyclingHostComponent {
   getId = (item: Item): string => item.id;
 }
 
+// A list with content pinned over the top and bottom of its rows
+@Component({
+  template: `
+    <vdnd-sortable-list
+      droppableId="list"
+      group="g"
+      [items]="items"
+      [itemHeight]="50"
+      [containerHeight]="200"
+      [itemIdFn]="getId"
+      [itemTemplate]="tpl"
+      [scrollInsetTop]="40"
+      [scrollInsetBottom]="30"
+    />
+    <ng-template #tpl let-item>
+      <div [attr.data-draggable-id]="item.id">{{ item.id }}</div>
+    </ng-template>
+  `,
+  imports: [VirtualSortableListComponent],
+})
+class InsetHostComponent {
+  items = ITEMS;
+  getId = (item: Item): string => item.id;
+}
+
 describe('VirtualSortableListComponent', () => {
   let dragState: DragStateService;
 
@@ -202,5 +227,15 @@ describe('VirtualSortableListComponent', () => {
 
     expect(host.moves.length).toBe(1);
     expect(host.drops).toEqual([]);
+  });
+
+  it('should pass the space covered over its rows to the scroll element', () => {
+    const fixture = TestBed.createComponent(InsetHostComponent);
+    fixture.detectChanges();
+    const scroller = (fixture.nativeElement as HTMLElement).querySelector('vdnd-virtual-scroll')!;
+
+    expect(scroller.getAttribute('data-scroll-inset-top')).toBe('40');
+    expect(scroller.getAttribute('data-scroll-inset-bottom')).toBe('30');
+    fixture.destroy();
   });
 });

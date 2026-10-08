@@ -130,7 +130,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
    */
   readonly #viewport = inject(VDND_VIRTUAL_VIEWPORT, { optional: true });
 
-  /** A vdnd-virtual-viewport, whose rows start contentOffset px down (see #rowsScrollTop) */
+  /** A vdnd-virtual-viewport, whose rows start rowsOffset() px down (see #rowsScrollTop) */
   readonly #offsetRowsViewport = inject(VDND_OFFSET_ROWS_VIEWPORT, { optional: true });
 
   /**
@@ -290,17 +290,17 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   }
 
   /**
-   * How far the rows are scrolled. A vdnd-virtual-viewport's rows start contentOffset px down its
-   * scroll area, but its scrollTop() is the raw position, so subtract the
-   * offset here. vdnd-virtual-content's scrollTop() already excludes its offset.
+   * How far the rows are scrolled. A vdnd-virtual-viewport's rows start rowsOffset() px down its
+   * scroll area (its content offset or top scroll inset), but its scrollTop() is the raw position,
+   * so subtract the offset here. vdnd-virtual-content's scrollTop() already excludes its offset.
    */
   #rowsScrollTop(): number {
     const scrollTop = this.#scrollContainer.scrollTop();
-    const viewport = this.#viewport;
-    if (viewport === null || viewport !== this.#offsetRowsViewport) {
+    const viewport = this.#offsetRowsViewport;
+    if (viewport === null || viewport !== this.#viewport) {
       return scrollTop;
     }
-    return Math.max(0, scrollTop - viewport.contentOffset());
+    return Math.max(0, scrollTop - viewport.rowsOffset());
   }
 
   /**

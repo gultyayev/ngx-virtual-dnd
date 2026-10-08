@@ -55,6 +55,11 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'nested-scroll',
+    loadComponent: () =>
+      import('./nested-scroll-demo/nested-scroll-demo').then((m) => m.NestedScrollDemoComponent),
+  },
+  {
     path: 'examples',
     loadComponent: () => import('./examples/examples-shell').then((m) => m.ExamplesShellComponent),
     loadChildren: () => import('./examples/examples.routes').then((m) => m.EXAMPLE_ROUTES),

@@ -3,6 +3,33 @@ import { type CursorPosition, END_OF_LIST, type GrabOffset } from '../models/dra
 import { PositionCalculatorService } from './position-calculator.service';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { closestAcrossShadow } from '../utils/composed-dom';
+import { listDraggables, listVirtualScroll } from '../utils/list-draggables';
+import { constraintElementOf, constraintRectOf } from '../utils/constraint-rect';
+import {
+  ownUncoveredRect,
+  readScrollInset,
+  revealRange,
+  revealRangeAround,
+  scrollAncestors,
+  uncoveredRect,
+  visibleRect,
+} from '../utils/scroll-insets';
+
+/**
+ * Whether `element` can't scroll further towards `edge`. scrollTop is fractional on WebKit and at
+ * non-integer zoom/DPR while scrollHeight and clientHeight are rounded integers, so "at the end"
+ * allows a pixel of slack.
+ */
+function isScrolledToEdge(element: Element, edge: 'start' | 'end'): boolean {
+  const tolerance = 1;
+  if (edge === 'start') {
+    return element.scrollTop <= tolerance;
+  }
+  return element.scrollTop >= element.scrollHeight - element.clientHeight - tolerance;
+}
+
+/** The `data-draggable-id` `vdnd-placeholder` marks itself with */
+const PLACEHOLDER_DRAGGABLE_ID = 'placeholder';
 
 interface DroppableCache {
   droppableId: string | null;
@@ -23,7 +50,7 @@ export interface DroppableScrollGeometry {
   /**
    * How far the rows are scrolled: a row's offset from the first row (as in
    * `VirtualScrollStrategy.getOffsetForIndex`) is `rowTop - rect.top + scrollTop`. Space reserved
-   * above the rows (`contentOffset`) is already subtracted.
+   * above the rows (`contentOffset`, a `vdnd-virtual-scroll`'s top inset) is already subtracted.
    */
   scrollTop: number;
   /**
@@ -78,9 +105,7 @@ export class DragIndexCalculatorService {
     if (cached) return cached;
 
     const isViewport = droppableElement.hasAttribute('data-virtual-viewport');
-    const virtualScrollElement = droppableElement.querySelector(
-      'vdnd-virtual-scroll',
-    ) as HTMLElement | null;
+    const virtualScrollElement = listVirtualScroll(droppableElement);
     const virtualContentElement = this.#findVirtualContent(droppableElement);
 
     let containerType: DroppableCache['containerType'];
@@ -153,6 +178,83 @@ export class DragIndexCalculatorService {
     draggedItemHeight: number,
   ): DroppableScrollGeometry {
     return this.#getScrollGeometry(this.#resolveDroppable(droppableElement, draggedItemHeight));
+  }
+
+  /**
+   * Scroll a droppable's rows so the slot of `height` px at `index` (where the placeholder renders
+   * before the item at that index) shows in full: inside the part of its scroll element that
+   * shows (see `visibleRect`), below and above the content pinned over its edges. For lists that
+   * have no reveal of their own (`vdnd-virtual-scroll` has one), during a keyboard drag. The list
+   * itself doesn't scroll when less than the slot shows of it; the scroll containers around it
+   * then reveal the slot, and whatever of it the list's scroll range leaves hidden (see
+   * `revealRangeAround`). A list without a registered strategy renders all its rows: see
+   * #revealRenderedSlot.
+   */
+  revealSlot(droppableElement: HTMLElement, index: number, height: number): void {
+    const cache = this.#resolveDroppable(droppableElement, height);
+    const strategy = cache.droppableId ? this.#strategies.get(cache.droppableId) : undefined;
+    if (!strategy) {
+      this.#revealRenderedSlot(droppableElement, index, height);
+      return;
+    }
+
+    // Rows are placed relative to where the list starts in its scroll element (scrollTop below
+    // has the space reserved above them subtracted), so offsets compare to it directly
+    const { rect, scrollTop } = this.#getScrollGeometry(cache);
+    const slotTop = strategy.getOffsetForIndex(index);
+    const slotBottom = slotTop + height;
+    const shown = visibleRect(cache.scrollContainer, rect);
+    if (shown) {
+      const shownTop = scrollTop + (shown.top - rect.top);
+      const shownBottom = scrollTop + (shown.bottom - rect.top);
+      if (shownBottom - shownTop >= height) {
+        if (slotTop < shownTop) {
+          cache.scrollContainer.scrollTop += slotTop - shownTop;
+        } else if (slotBottom > shownBottom) {
+          cache.scrollContainer.scrollTop += slotBottom - shownBottom;
+        }
+      }
+    }
+
+    // The list scrolls the slot no further than its own scroll range: at its first slot, a
+    // page's sticky header can still cover it. The containers around it reveal the rest.
+    const after = this.#getScrollGeometry(cache);
+    const top = after.rect.top + slotTop - after.scrollTop;
+    revealRangeAround(cache.scrollContainer, top, top + height);
+  }
+
+  /**
+   * revealSlot for a list of plain rows (an `@for` of draggables), which renders all of them and
+   * no placeholder of its own: the slot starts where row `index` does, or below the last row shown
+   * before it (the dragged row is hidden), or is the `vdnd-placeholder` the list renders itself.
+   * Scrolls the containers around the list, nearest first and the page last (see `revealRange`).
+   */
+  #revealRenderedSlot(list: HTMLElement, index: number, height: number): void {
+    const draggables = listDraggables(list);
+    const placeholder = draggables.find(
+      (draggable) => draggable.getAttribute('data-draggable-id') === PLACEHOLDER_DRAGGABLE_ID,
+    );
+    const placeholderRect = placeholder?.getBoundingClientRect();
+    if (placeholderRect && placeholderRect.height > 0) {
+      revealRange(list, placeholderRect.top, placeholderRect.bottom);
+      return;
+    }
+
+    const rows = placeholder ? draggables.filter((row) => row !== placeholder) : draggables;
+    let top = list.getBoundingClientRect().top;
+    const atIndex = rows[index]?.getBoundingClientRect();
+    if (atIndex && atIndex.height > 0) {
+      top = atIndex.top;
+    } else {
+      for (let i = Math.min(index, rows.length) - 1; i >= 0; i--) {
+        const row = rows[i].getBoundingClientRect();
+        if (row.height > 0) {
+          top = row.bottom;
+          break;
+        }
+      }
+    }
+    revealRange(list, top, top + height);
   }
 
   calculatePlaceholderIndex(args: {
@@ -258,8 +360,9 @@ export class DragIndexCalculatorService {
     // Due to max scroll limits, the math alone can't reach totalItems when the list is longer
     // than the viewport. If cursor is in the bottom portion of the container and we're at
     // or past the last visible slot, snap to totalItems.
-    const cursorRelativeToBottom = rect.bottom - previewCenterY;
-    const isNearBottomEdge = cursorRelativeToBottom < itemHeight;
+    // The bottom edge is that of the part of the container nothing pinned over it covers.
+    const uncovered = uncoveredRect(cache.scrollContainer, rect);
+    const isNearBottomEdge = uncovered !== null && uncovered.bottom - previewCenterY < itemHeight;
     if (isNearBottomEdge && placeholderIndex >= totalItems - 1) {
       placeholderIndex = totalItems;
     }
@@ -269,18 +372,24 @@ export class DragIndexCalculatorService {
     // using preview bounds so top/bottom drops remain reachable — but only once the list
     // is scrolled to that end. A preview pinned at the edge of a scrolled list (which is
     // how a constrained drag autoscrolls) keeps the probe's index, the visible edge row.
+    // The edges are those the preview is clamped to (see `constraintRectOf`): of the part of the
+    // list, or of the vdndScrollable around it, that shows. A scroll container around the list
+    // that hides an end of it must be scrolled to that end too, or scrolling it would still bring
+    // rows into view there.
     if (isConstrainedToContainer) {
-      const droppableRect = droppableElement.getBoundingClientRect();
+      const own = ownUncoveredRect(droppableElement);
+      const ancestors = scrollAncestors(droppableElement);
+      const shown = constraintRectOf(constraintElementOf(droppableElement));
       const edgeTolerance = 2;
-      const distanceToTop = Math.abs(previewTopY - droppableRect.top);
-      const distanceToBottom = Math.abs(droppableRect.bottom - previewBottomY);
+      const distanceToTop = Math.abs(previewTopY - shown.top);
+      const distanceToBottom = Math.abs(shown.bottom - previewBottomY);
 
       if (distanceToTop <= edgeTolerance && distanceToTop <= distanceToBottom) {
-        if (this.#isScrolledToEnd(cache, 'start')) {
+        if (this.#isScrolledToEnd(cache, 'start', own, shown, ancestors)) {
           placeholderIndex = 0;
         }
       } else if (distanceToBottom <= edgeTolerance) {
-        if (this.#isScrolledToEnd(cache, 'end')) {
+        if (this.#isScrolledToEnd(cache, 'end', own, shown, ancestors)) {
           placeholderIndex = totalItems;
         }
       }
@@ -314,29 +423,55 @@ export class DragIndexCalculatorService {
               isVirtual,
             }
           : { rect, scrollTop: 0, isVirtual };
+      case 'virtualScroll':
+        // Its rows start below its top inset (see vdnd-virtual-scroll's scrollInsetTop)
+        return {
+          rect,
+          scrollTop: scrollContainer.scrollTop - readScrollInset(scrollContainer, 'top'),
+          isVirtual,
+        };
       default:
         return { rect, scrollTop: scrollContainer.scrollTop, isVirtual };
     }
   }
 
   /**
-   * Whether a droppable's rows can't scroll further towards `edge`. Page-scroll content
-   * (`vdnd-virtual-content`) always can't: its droppable rect spans all of its rows, so a preview
-   * at that rect's edge is at the first/last row however the page is scrolled.
+   * Whether a droppable's rows can't scroll further towards `edge`: neither its own scroll
+   * element nor a scroll container among `ancestors` that hides that end of its uncovered part
+   * (`own`). Page-scroll content (`vdnd-virtual-content`) is at that end once the edge of its
+   * droppable rect, which spans all of its rows, shows in `shown` (the rect the preview is clamped
+   * to): before, the rows past the preview are only scrolled out of view.
    */
-  #isScrolledToEnd(cache: DroppableCache, edge: 'start' | 'end'): boolean {
+  #isScrolledToEnd(
+    cache: DroppableCache,
+    edge: 'start' | 'end',
+    own: DOMRect | null,
+    shown: DOMRect,
+    ancestors: readonly Element[],
+  ): boolean {
     if (cache.containerType === 'virtualContent') {
+      // A pixel of slack, as in isScrolledToEdge (fractional scroll positions)
+      const tolerance = 1;
+      return (
+        own === null ||
+        (edge === 'start'
+          ? own.top >= shown.top - tolerance
+          : own.bottom <= shown.bottom + tolerance)
+      );
+    }
+    if (!isScrolledToEdge(cache.scrollContainer, edge)) {
+      return false;
+    }
+    if (!own) {
       return true;
     }
-    // scrollTop is fractional on WebKit and at non-integer zoom/DPR while scrollHeight and
-    // clientHeight are rounded integers, so "at the end" allows a pixel of slack.
-    const tolerance = 1;
-    const { scrollContainer } = cache;
-    if (edge === 'start') {
-      return scrollContainer.scrollTop <= tolerance;
-    }
-    const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-    return scrollContainer.scrollTop >= maxScrollTop - tolerance;
+    return ancestors.every((ancestor) => {
+      const uncovered = uncoveredRect(ancestor);
+      const hidesEnd =
+        uncovered === null ||
+        (edge === 'start' ? uncovered.top > own.top : uncovered.bottom < own.bottom);
+      return !hidesEnd || isScrolledToEdge(ancestor, edge);
+    });
   }
 
   /** The `data-content-offset` (px reserved above the rows) of a virtual container, or 0. */
@@ -364,9 +499,7 @@ export class DragIndexCalculatorService {
     }
 
     // Check for embedded virtual scroll component
-    const virtualScroll = cache
-      ? cache.virtualScrollElement
-      : droppableElement.querySelector('vdnd-virtual-scroll');
+    const virtualScroll = cache ? cache.virtualScrollElement : listVirtualScroll(droppableElement);
     if (virtualScroll) {
       // Use data-total-items attribute if available (always the true N)
       const totalItemsAttr = virtualScroll.getAttribute('data-total-items');
@@ -389,8 +522,11 @@ export class DragIndexCalculatorService {
 
       let totalHeight: number;
       if (spacer) {
-        // Get the spacer's explicit height (set via Angular binding)
-        totalHeight = parseFloat(spacer.style.height) || 0;
+        // Get the spacer's explicit height, without the space reserved around the rows
+        totalHeight =
+          (parseFloat(spacer.style.height) || 0) -
+          readScrollInset(virtualScroll, 'top') -
+          readScrollInset(virtualScroll, 'bottom');
       } else {
         // Fallback: use scrollHeight if spacer not found
         totalHeight = (virtualScroll as HTMLElement).scrollHeight;
@@ -435,10 +571,9 @@ export class DragIndexCalculatorService {
       }
     }
 
-    // Fallback for non-virtual scroll — querySelectorAll finds all N items
-    // (including the hidden dragged item), so no adjustment needed
-    const items = droppableElement.querySelectorAll('[data-draggable-id]');
-    return items.length;
+    // Fallback for non-virtual scroll — all N items are rendered (the hidden dragged item too),
+    // so no adjustment needed. Not those of a list nested in a row.
+    return listDraggables(droppableElement).length;
   }
 
   /** The `vdnd-virtual-content` the droppable is or is inside (page-level scroll), if any. */

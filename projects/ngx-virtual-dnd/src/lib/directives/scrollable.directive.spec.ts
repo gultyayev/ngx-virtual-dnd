@@ -3,6 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { ScrollableDirective } from './scrollable.directive';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
+import { DragIndexCalculatorService } from '../services/drag-index-calculator.service';
+import { DroppableRegistryService } from '../services/droppable-registry.service';
+import { KeyboardDragService } from '../services/keyboard-drag.service';
+import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 
 class MockResizeObserver {
   observe = jest.fn();
@@ -42,6 +46,8 @@ function emulateScrollableLayout(element: HTMLElement, scrollHeight: number, cli
       [scrollContainerId]="scrollContainerId()"
       [autoScrollEnabled]="autoScrollEnabled()"
       [autoScrollConfig]="autoScrollConfig()"
+      [scrollInsetTop]="scrollInsetTop()"
+      [scrollInsetBottom]="scrollInsetBottom()"
     >
       Content
     </div>
@@ -52,6 +58,8 @@ class TestHostComponent {
   scrollContainerId = signal<string | undefined>('scrollable-container');
   autoScrollEnabled = signal(false);
   autoScrollConfig = signal<Partial<AutoScrollConfig>>({});
+  scrollInsetTop = signal(0);
+  scrollInsetBottom = signal(0);
 }
 
 describe('ScrollableDirective', () => {
@@ -119,6 +127,85 @@ describe('ScrollableDirective', () => {
     expect(unregisterSpy).toHaveBeenCalledWith('scrollable-container');
     expect(registerSpy).toHaveBeenCalledWith('updated-scrollable-container', scrollableEl, {});
   });
+  describe('scroll insets', () => {
+    it('should not mark the element while nothing covers its edges', () => {
+      expect(scrollableEl.hasAttribute('data-scroll-inset-top')).toBe(false);
+      expect(scrollableEl.hasAttribute('data-scroll-inset-bottom')).toBe(false);
+    });
+
+    it('should mark the element with the space covered at its edges, for the drag to read', () => {
+      hostComponent.scrollInsetTop.set(64);
+      hostComponent.scrollInsetBottom.set(48.5);
+      fixture.detectChanges();
+
+      expect(scrollableEl.getAttribute('data-scroll-inset-top')).toBe('64');
+      expect(scrollableEl.getAttribute('data-scroll-inset-bottom')).toBe('48.5');
+    });
+
+    it.each([-30, Number.NaN])('should not mark the element with an inset of %p', (inset) => {
+      hostComponent.scrollInsetTop.set(inset);
+      hostComponent.scrollInsetBottom.set(inset);
+      fixture.detectChanges();
+
+      expect(scrollableEl.hasAttribute('data-scroll-inset-top')).toBe(false);
+      expect(scrollableEl.hasAttribute('data-scroll-inset-bottom')).toBe(false);
+    });
+
+    it('should remove the mark when the space goes back to 0', () => {
+      hostComponent.scrollInsetTop.set(64);
+      fixture.detectChanges();
+      hostComponent.scrollInsetTop.set(0);
+      fixture.detectChanges();
+
+      expect(scrollableEl.hasAttribute('data-scroll-inset-top')).toBe(false);
+    });
+
+    it('should keep a keyboard placeholder in view when the space covered at the top grows', async () => {
+      // The element is its own list (as *vdndVirtualFor in it): 100 rows of 50px in 300px
+      emulateScrollableLayout(scrollableEl, 5000, 300);
+      scrollableEl.getBoundingClientRect = () => new DOMRect(0, 0, 200, 300);
+      scrollableEl.setAttribute('data-droppable-id', 'list');
+      const unregister = TestBed.inject(DroppableRegistryService).register(
+        scrollableEl,
+        'list',
+        'g',
+      );
+      const strategy = new FixedHeightStrategy(50);
+      strategy.setItemCount(100);
+      const indexCalculator = TestBed.inject(DragIndexCalculatorService);
+      indexCalculator.registerStrategy('list', strategy);
+      const keyboardDrag = TestBed.inject(KeyboardDragService);
+      try {
+        hostComponent.scrollInsetTop.set(40);
+        fixture.detectChanges();
+        scrollableEl.scrollTop = 2000;
+        const element = document.createElement('div');
+        element.getBoundingClientRect = () => new DOMRect(0, 0, 200, 50);
+        keyboardDrag.startKeyboardDrag(
+          { draggableId: 'row-50', droppableId: 'list', element, height: 50, width: 200 },
+          50,
+          100,
+          'list',
+        );
+        // Target 10 (above the source): the placeholder before row 10 at [500, 550)
+        keyboardDrag.moveToIndex(10);
+        await fixture.whenStable();
+        expect(scrollableEl.scrollTop).toBe(460);
+
+        // The header grows over the placeholder while the keyboard drag rests
+        hostComponent.scrollInsetTop.set(100);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(scrollableEl.scrollTop).toBe(400);
+      } finally {
+        keyboardDrag.cancelKeyboardDrag();
+        indexCalculator.unregisterStrategy('list');
+        unregister();
+      }
+    });
+  });
+
   describe('scrollBy', () => {
     let element: HTMLElement;
 

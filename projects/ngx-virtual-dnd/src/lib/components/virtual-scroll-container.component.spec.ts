@@ -116,6 +116,8 @@ interface TestItem {
       [autoScrollEnabled]="autoScrollEnabled()"
       [autoScrollConfig]="autoScrollConfig()"
       [recycleRows]="recycleRows()"
+      [scrollInsetTop]="scrollInsetTop()"
+      [scrollInsetBottom]="scrollInsetBottom()"
     >
     </vdnd-virtual-scroll>
   `,
@@ -126,6 +128,8 @@ class TestHostComponent {
 
   items = signal<TestItem[]>([]);
   containerHeight = signal<number | undefined>(300);
+  scrollInsetTop = signal(0);
+  scrollInsetBottom = signal(0);
   overscan = signal(3);
   stickyItemIds = signal<string[]>([]);
   scrollContainerId = signal<string | undefined>('test-scroll');
@@ -889,6 +893,130 @@ describe('VirtualScrollContainerComponent', () => {
       expect(virtualScrollComponent.getScrollTop()).toBe(500);
     });
 
+    it('should mark its element with the space covered at its edges', () => {
+      component.scrollInsetTop.set(40);
+      component.scrollInsetBottom.set(30);
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.getAttribute('data-scroll-inset-top')).toBe('40');
+      expect(virtualScrollEl.getAttribute('data-scroll-inset-bottom')).toBe('30');
+    });
+
+    it('should keep the placeholder above the space covered at the bottom', () => {
+      component.scrollInsetBottom.set(30);
+      startSameListKeyboardDrag(0);
+
+      // Placeholder at [500, 550): the 270px left uncovered must end at its bottom edge
+      dragStateService.setKeyboardTargetIndex(10);
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.scrollTop).toBe(550 - 270);
+    });
+
+    it('should keep the placeholder below the space covered at the top', () => {
+      component.scrollInsetTop.set(40);
+      virtualScrollComponent.scrollTo(2000);
+      startSameListKeyboardDrag(50);
+
+      // Placeholder at [500, 550) of the rows, which start below the 40px: it must start 40px
+      // below the top edge
+      dragStateService.setKeyboardTargetIndex(10);
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.scrollTop).toBe(40 + 500 - 40);
+    });
+
+    it.each([Number.NaN, -30])('should treat a bottom inset of %p as none', (inset) => {
+      component.scrollInsetBottom.set(inset);
+      startSameListKeyboardDrag(0);
+
+      // Placeholder at [500, 550): the 300px viewport must end at its bottom edge
+      dragStateService.setKeyboardTargetIndex(10);
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.scrollTop).toBe(550 - 300);
+      expect(virtualScrollEl.hasAttribute('data-scroll-inset-bottom')).toBe(false);
+    });
+
+    it.each([Number.NaN, -30])('should treat a top inset of %p as none', (inset) => {
+      component.scrollInsetTop.set(inset);
+      virtualScrollComponent.scrollTo(2000);
+      startSameListKeyboardDrag(50);
+
+      // Placeholder at [500, 550): the viewport must start at its top edge
+      dragStateService.setKeyboardTargetIndex(10);
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.scrollTop).toBe(500);
+      expect(virtualScrollEl.hasAttribute('data-scroll-inset-top')).toBe(false);
+    });
+
+    it('should reserve the space covered at its edges around the rows', () => {
+      component.scrollInsetTop.set(40);
+      component.scrollInsetBottom.set(30);
+      fixture.detectChanges();
+
+      const spacer = virtualScrollEl.querySelector<HTMLElement>('.vdnd-virtual-scroll-spacer')!;
+      const wrapper = virtualScrollEl.querySelector<HTMLElement>(
+        '.vdnd-virtual-scroll-content-wrapper',
+      )!;
+      expect(spacer.style.height).toBe(`${40 + 5000 + 30}px`);
+      expect(virtualScrollComponent.getScrollHeight()).toBe(40 + 5000 + 30);
+      // The first row starts below the top inset; the bottom one follows the last rendered row
+      expect(wrapper.style.transform).toBe('translateY(40px)');
+      expect(wrapper.style.paddingBottom).toBe('30px');
+    });
+
+    it('should render the rows its top inset scrolls into view', () => {
+      component.overscan.set(0);
+      component.scrollInsetTop.set(40);
+      fixture.detectChanges();
+
+      // 40 + 10 rows down: row 10 is the first one at the top of the scroll area
+      virtualScrollComponent.scrollTo(540);
+      fixture.detectChanges();
+
+      expect(virtualScrollEl.querySelector('.item')?.getAttribute('data-draggable-id')).toBe(
+        'item-10',
+      );
+    });
+
+    describe('under what a scroll container around it covers', () => {
+      // The list (100..400) scrolls under a page whose sticky header covers it down to 160
+      let page: HTMLElement;
+
+      beforeEach(() => {
+        page = fixture.nativeElement as HTMLElement;
+        page.getBoundingClientRect = () => new DOMRect(0, 0, 200, 800);
+        virtualScrollEl.getBoundingClientRect = () => new DOMRect(0, 100, 200, 300);
+      });
+
+      afterEach(() => page.removeAttribute('data-scroll-inset-top'));
+
+      it('should keep the placeholder below it', () => {
+        page.setAttribute('data-scroll-inset-top', '160');
+        virtualScrollComponent.scrollTo(2000);
+        startSameListKeyboardDrag(50);
+
+        // Placeholder at [500, 550): it must start 60px below the list's top edge
+        dragStateService.setKeyboardTargetIndex(10);
+        fixture.detectChanges();
+
+        expect(virtualScrollEl.scrollTop).toBe(500 - 60);
+      });
+
+      it('should keep the placeholder in its own uncovered part while all of it is covered', () => {
+        page.setAttribute('data-scroll-inset-top', '400');
+        virtualScrollComponent.scrollTo(2000);
+        startSameListKeyboardDrag(50);
+
+        dragStateService.setKeyboardTargetIndex(10);
+        fixture.detectChanges();
+
+        expect(virtualScrollEl.scrollTop).toBe(500);
+      });
+    });
+
     it('should scroll on the arrow key itself, before change detection runs', () => {
       component.droppableId.set('list');
       fixture.detectChanges();
@@ -1210,6 +1338,16 @@ describe('VirtualScrollContainerComponent', () => {
         await dropFromOtherListAt(19, { scrollTop: 680 });
 
         expect(virtualScrollEl.scrollTop).toBe(1000 - 300);
+      });
+
+      it('should show a dropped row clear of the space covered at its edges', async () => {
+        // 230px of the 300px show between the insets: rows [750, 980) at scrollTop 750. The
+        // row dropped at [1000, 1050) renders under the footer.
+        component.scrollInsetTop.set(40);
+        component.scrollInsetBottom.set(30);
+        await dropFromOtherListAt(20, { scrollTop: 750 });
+
+        expect(virtualScrollEl.scrollTop).toBe(1050 - 230);
       });
 
       it('should leave the list alone when the dropped row renders far outside the visible area', async () => {

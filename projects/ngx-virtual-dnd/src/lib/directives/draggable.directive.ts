@@ -29,11 +29,11 @@ import {
 } from '../models/drag-drop.models';
 import { VDND_GROUP_TOKEN } from './droppable-group.directive';
 import { createEffectiveGroupSignal } from '../utils/group-resolution';
-import { closestAcrossShadow } from '../utils/composed-dom';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
 import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
 import { listDraggables } from '../utils/list-draggables';
+import { constraintElementOf, constraintRectOf } from '../utils/constraint-rect';
 import {
   findNestedControl,
   findNoDragElement,
@@ -262,18 +262,6 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
    */
   #setPending(pending: boolean): void {
     this.#pendingId.set(pending ? this.vdndDraggable() : null);
-  }
-
-  /**
-   * Find the element to use for container constraint clamping.
-   * If the droppable is inside a scrollable container, use that container's rect
-   * (which represents the visible viewport) instead of the droppable's rect
-   * (which may extend far beyond the viewport in virtual scroll scenarios).
-   */
-  #findConstraintElement(droppableElement: HTMLElement | null): HTMLElement | null {
-    if (!droppableElement) return null;
-    const scrollable = closestAcrossShadow(droppableElement, '.vdnd-scrollable');
-    return (scrollable as HTMLElement) ?? droppableElement;
   }
 
   ngOnInit(): void {
@@ -556,12 +544,14 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       groupName,
     );
 
-    // Cache constraint flag and element for clamping during drag
+    // Cache constraint flag and element for clamping during drag. The item's own list decides:
+    // the move that starts the drag can already be outside it, or over content pinned over its
+    // scroll container's edge, which is not part of any list.
+    const constraintSource = parentDroppableElement ?? droppableElement;
     this.#constrainToContainer =
-      droppableElement?.hasAttribute('data-constrain-to-container') ?? false;
-    this.#constraintElement = this.#constrainToContainer
-      ? this.#findConstraintElement(droppableElement)
-      : null;
+      constraintSource?.hasAttribute('data-constrain-to-container') ?? false;
+    this.#constraintElement =
+      this.#constrainToContainer && constraintSource ? constraintElementOf(constraintSource) : null;
 
     const activeDroppableId = droppableElement
       ? this.#positionCalculator.getDroppableId(droppableElement)
@@ -735,13 +725,15 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
 
   /**
    * Clamp cursor position to source container boundaries when constrainToContainer is enabled.
+   * The boundaries are those of the part of the container that shows: content pinned over its
+   * edges (scroll insets) and the scroll containers around it can hide part of it.
    */
   #clampToContainer(position: CursorPosition): CursorPosition {
     if (!this.#constrainToContainer || !this.#constraintElement) {
       return position;
     }
 
-    const containerRect = this.#constraintElement.getBoundingClientRect();
+    const containerRect = constraintRectOf(this.#constraintElement);
     const grabOffset = this.#dragState.grabOffset();
     if (!grabOffset) {
       return position;
@@ -794,9 +786,10 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
 
     // Update autoscroll cursor: use raw pointer position clamped to container
     // edges (without grabOffset) so autoscroll threshold is reachable regardless
-    // of where the user grabbed the item.
+    // of where the user grabbed the item. Like the preview, it stays in the part of the
+    // container that shows.
     if (this.#constrainToContainer && this.#constraintElement && this.#lastRawPosition) {
-      const rect = this.#constraintElement.getBoundingClientRect();
+      const rect = constraintRectOf(this.#constraintElement);
       let scrollCursor: CursorPosition = this.#lastRawPosition;
       if (axisLock && startPos) {
         scrollCursor = {

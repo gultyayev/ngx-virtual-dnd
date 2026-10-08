@@ -6,6 +6,7 @@ import {
   parentAcrossShadow,
   shadowRootsAround,
 } from '../utils/composed-dom';
+import { visibleRect } from '../utils/scroll-insets';
 
 /**
  * Snapshot of the candidate droppables for an active drag session.
@@ -17,8 +18,8 @@ interface DragSessionSnapshot {
   groupName: string;
   /** Candidate droppables in document order (document order === default paint order). */
   candidates: HTMLElement[];
-  /** Cached bounding rects, parallel to `candidates`. */
-  rects: DOMRect[];
+  /** Cached hit-test rects, parallel to `candidates`: null where nothing of it shows. */
+  rects: (DOMRect | null)[];
   /** When true, rects are re-read on the next hit-test (set on scroll/resize). */
   dirty: boolean;
   /**
@@ -273,42 +274,27 @@ export class PositionCalculatorService {
   }
 
   /**
-   * The ancestor that clips a candidate's hit-test rect: its nearest `.vdnd-scrollable`
-   * ancestor (looking past shadow roots), or null when it has none or is one itself. Without clipping a droppable scrolled
-   * mostly out of a clipping container still hit-tests over its full unclipped rect (issue #23
-   * case 3).
+   * Measure the candidates' hit-test rects into `rects`: the part of each that shows (see
+   * `visibleRect`), clipped to every scroll container around it (looking past shadow roots) minus
+   * the space content pinned over their edges covers. Without clipping, a droppable scrolled mostly
+   * out of a clipping container still hit-tests over its full unclipped rect (issue #23 case 3),
+   * and rows behind a sticky header would be drop targets. Each element is read once per pass, so
+   * lists side by side in one scroller share its rect. The containers are looked up on each pass:
+   * a list moved to another scroller mid-drag keeps its registration. A candidate nothing of which
+   * shows (scrolled out of view, or all behind sticky content) gets null, which never matches.
    */
-  #clipOf(el: HTMLElement): Element | null {
-    const scrollable = closestAcrossShadow(el, '.vdnd-scrollable');
-    return scrollable === el ? null : scrollable;
-  }
-
-  /**
-   * Measure the candidates' hit-test rects into `rects`, each clipped to its clip ancestor (see
-   * `#clipOf`). Consecutive candidates in one scroller (lists side by side in it) read its rect
-   * once. The ancestor is looked up on each pass: a list moved to another scroller mid-drag keeps
-   * its registration. The intersection is built as a plain DOMRect; an empty intersection yields
-   * a negative width/height so the `#hitTest` bounds check can never match it.
-   */
-  #measureRects(candidates: readonly HTMLElement[], rects: DOMRect[]): DOMRect[] {
-    let lastClip: Element | null = null;
-    let lastClipRect: DOMRect | null = null;
+  #measureRects(candidates: readonly HTMLElement[], rects: (DOMRect | null)[]): (DOMRect | null)[] {
+    const measured = new Map<Element, DOMRect>();
+    const read = (element: Element): DOMRect => {
+      let rect = measured.get(element);
+      if (!rect) {
+        rect = element.getBoundingClientRect();
+        measured.set(element, rect);
+      }
+      return rect;
+    };
     for (let i = 0; i < candidates.length; i++) {
-      const rect = candidates[i].getBoundingClientRect();
-      const clip = this.#clipOf(candidates[i]);
-      if (!clip) {
-        rects[i] = rect;
-        continue;
-      }
-      if (clip !== lastClip || !lastClipRect) {
-        lastClip = clip;
-        lastClipRect = clip.getBoundingClientRect();
-      }
-      const top = Math.max(rect.top, lastClipRect.top);
-      const left = Math.max(rect.left, lastClipRect.left);
-      const right = Math.min(rect.right, lastClipRect.right);
-      const bottom = Math.min(rect.bottom, lastClipRect.bottom);
-      rects[i] = new DOMRect(left, top, right - left, bottom - top);
+      rects[i] = visibleRect(candidates[i], undefined, read);
     }
     return rects;
   }
@@ -402,7 +388,12 @@ export class PositionCalculatorService {
    * that toggling `disabled` mid-drag takes effect on the very next frame. The check is
    * a cheap `hasAttribute` read that does not force layout, keeping the loop hot.
    */
-  #hitTest(x: number, y: number, candidates: HTMLElement[], rects: DOMRect[]): HTMLElement | null {
+  #hitTest(
+    x: number,
+    y: number,
+    candidates: HTMLElement[],
+    rects: (DOMRect | null)[],
+  ): HTMLElement | null {
     let match: HTMLElement | null = null;
     for (let i = 0; i < candidates.length; i++) {
       const candidate = candidates[i];
@@ -410,7 +401,7 @@ export class PositionCalculatorService {
         continue;
       }
       const r = rects[i];
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      if (r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
         match = candidate;
       }
     }

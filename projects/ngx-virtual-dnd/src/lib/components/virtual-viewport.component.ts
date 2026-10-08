@@ -22,6 +22,8 @@ import {
   bindResizeObserverHeightSignal,
 } from '../utils/dom-signal-bindings';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
+import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
+import { validScrollInset } from '../utils/scroll-insets';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
@@ -71,7 +73,9 @@ import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
     // Read by the drag index calculator: this element scrolls its own rows, which start
     // data-content-offset px below the top of the scroll area
     'data-virtual-viewport': '',
-    '[attr.data-content-offset]': 'contentOffset()',
+    '[attr.data-content-offset]': 'rowsOffset()',
+    '[attr.data-scroll-inset-top]': 'rowsTopSpace() || null',
+    '[attr.data-scroll-inset-bottom]': 'rowsBottomSpace() || null',
   },
   styles: `
     :host {
@@ -102,14 +106,16 @@ import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
     <!-- Spacer maintains total scroll height -->
     <div
       class="vdnd-viewport-spacer"
-      [style.top.px]="contentOffset()"
-      [style.height.px]="totalHeight()"
+      [style.top.px]="rowsOffset()"
+      [style.height.px]="totalHeight() + rowsBottomSpace()"
     ></div>
 
-    <!-- Content wrapper with GPU-accelerated transform -->
+    <!-- Content wrapper with GPU-accelerated transform. The space reserved below the rows follows
+         the last one rendered, the placeholder after it too (it renders past the spacer's end). -->
     <div
       class="vdnd-viewport-content"
-      [style.top.px]="contentOffset()"
+      [style.top.px]="rowsOffset()"
+      [style.padding-bottom.px]="rowsBottomSpace()"
       [style.transform]="contentTransform()"
     >
       <ng-content></ng-content>
@@ -165,6 +171,34 @@ export class VirtualViewportComponent
 
   /** Auto-scroll configuration */
   autoScrollConfig = input<Partial<AutoScrollConfig>>({});
+
+  /**
+   * Space (px) at the top of the viewport covered by content pinned over it, such as a header
+   * overlaid on its rows. A drag treats the viewport as starting below it: `constrainToContainer`
+   * keeps the preview under it, the top autoscroll zone starts at its lower edge (the pointer over
+   * it scrolls at full speed), a pointer over it is not over the list, and a keyboard drag keeps
+   * the placeholder below it. The rows start below it (or `contentOffset` down, when that is
+   * more) and the scroll range ends with as much space below them as `scrollInsetBottom` covers,
+   * so the first and last rows can scroll clear of both. Measured from the element's border box.
+   */
+  scrollInsetTop = input<number>(0);
+
+  /** Space (px) at the bottom of the viewport covered by content pinned over it: see `scrollInsetTop`. */
+  scrollInsetBottom = input<number>(0);
+
+  /**
+   * How far down the scroll area the rows start: `contentOffset`, or `scrollInsetTop` when that
+   * covers more. Public for `*vdndVirtualFor` (through an internal token), not for consumers.
+   *
+   * @internal
+   */
+  readonly rowsOffset = computed(() => Math.max(this.contentOffset(), this.rowsTopSpace()));
+
+  /** The space covered above the rows: `scrollInsetTop`, or 0 when negative or invalid. */
+  protected readonly rowsTopSpace = computed(() => validScrollInset(this.scrollInsetTop()));
+
+  /** The space reserved below the rows: `scrollInsetBottom`, or 0 when negative or invalid. */
+  protected readonly rowsBottomSpace = computed(() => validScrollInset(this.scrollInsetBottom()));
 
   // ========== Strategy ==========
 
@@ -254,6 +288,7 @@ export class VirtualViewportComponent
       enabled: () => this.autoScrollEnabled(),
       config: () => this.autoScrollConfig(),
     });
+    refreshDragOnScrollInsetChange(this.scrollInsetTop, this.scrollInsetBottom);
   }
 
   ngOnInit(): void {

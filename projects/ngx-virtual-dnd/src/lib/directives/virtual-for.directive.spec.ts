@@ -197,7 +197,12 @@ const offsetListItems = (): TestItem[] =>
 
 @Component({
   template: `
-    <vdnd-virtual-viewport [itemHeight]="50" [contentOffset]="400" style="height: 300px;">
+    <vdnd-virtual-viewport
+      [itemHeight]="50"
+      [contentOffset]="400"
+      [scrollInsetTop]="insetTop()"
+      style="height: 300px;"
+    >
       <ng-container *vdndVirtualFor="let item of items; trackBy: trackByFn">
         <div class="item" [attr.data-id]="item.id">{{ item.label }}</div>
       </ng-container>
@@ -207,6 +212,7 @@ const offsetListItems = (): TestItem[] =>
 })
 class ContentOffsetViewportHostComponent {
   readonly items = offsetListItems();
+  readonly insetTop = signal(0);
   readonly trackByFn = (_index: number, item: TestItem): string => item.key;
 }
 
@@ -1140,6 +1146,16 @@ describe('VirtualForDirective (content offset)', () => {
       await scrollViewportTo(300);
 
       expect(renderedIds(fixture)).toEqual(itemIds(0, 9));
+    });
+
+    it('should start the rows below a top inset that covers more than the offset', async () => {
+      fixture.componentInstance.insetTop.set(500);
+      fixture.detectChanges();
+
+      // 700 - 500 = 200px into the rows: rows 4-9 are in view, plus 3 overscan on each side
+      await scrollViewportTo(700);
+
+      expect(renderedIds(fixture)).toEqual(itemIds(1, 13));
     });
   });
 
