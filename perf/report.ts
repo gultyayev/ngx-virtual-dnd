@@ -8,8 +8,34 @@ import {
 } from './fixtures/compare-metrics.ts';
 import { extractScenarios } from './fixtures/extract-scenarios.ts';
 import { SCENARIO_METRICS, type ScenarioMetricName } from './fixtures/metric-math.ts';
-import type { BenchmarkRun, Experiment, ScenarioReport } from './fixtures/run-types.ts';
+import {
+  EXPECTED_SCENARIOS,
+  type BenchmarkRun,
+  type Comparison,
+  type ComparisonRow,
+  type Experiment,
+  type ScenarioReport,
+} from './fixtures/run-types.ts';
 import { aggregate } from './fixtures/statistics.ts';
+
+export interface ReportOptions {
+  details?: boolean;
+}
+
+const SCENARIO_NAMES: Record<keyof typeof EXPECTED_SCENARIOS, string> = {
+  'scroll-2000-items': 'Fixed-height scroll',
+  'drag-within-list-1000': 'Within-list drag',
+  'drag-within-virtual-for-list': 'Virtual viewport drag',
+  'dynamic-height-scroll': 'Dynamic-height scroll',
+  'dynamic-height-long-list-scroll': 'Long-list dynamic scroll',
+  'drag-between-lists-autoscroll-1000': 'Cross-list autoscroll',
+};
+
+const RESULT_METRIC_NAMES: Record<string, string> = {
+  taskDuration: 'task time',
+  layoutCount: 'layouts',
+  recalcStyleCount: 'style recalculations',
+};
 
 const METRIC_LABELS: Record<ScenarioMetricName, { label: string; unit: string }> = {
   durationMs: { label: 'Observed duration', unit: 'ms' },
@@ -34,6 +60,141 @@ function escape(value: unknown): string {
 function formatValue(value: number, unit = ''): string {
   const rounded = Math.round(value * 10) / 10;
   return unit ? `${rounded} ${unit}` : `${rounded}`;
+}
+
+function signedValue(value: number): string {
+  return `${value > 0 ? '+' : ''}${formatValue(value)}`;
+}
+
+function percent(value: number | null): string {
+  return value === null ? 'n/a (zero base)' : `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
+}
+
+function scenarioResult(rows: ComparisonRow[]): string {
+  const verdict = rows.some((row) => row.verdict === 'regression')
+    ? 'regression'
+    : rows.some((row) => row.verdict === 'inconclusive')
+      ? 'inconclusive'
+      : 'pass';
+  if (verdict === 'pass') return 'Pass';
+  const affected = rows
+    .filter((row) => row.verdict === verdict)
+    .map((row) => RESULT_METRIC_NAMES[row.metric]);
+  const label = verdict === 'regression' ? 'Regression' : 'Inconclusive';
+  const uncertain =
+    verdict === 'regression'
+      ? rows
+          .filter((row) => row.verdict === 'inconclusive')
+          .map((row) => RESULT_METRIC_NAMES[row.metric])
+      : [];
+  return `${label}: ${affected.join(', ')}${uncertain.length ? `; uncertain: ${uncertain.join(', ')}` : ''}`;
+}
+
+/** Paced totals are descriptive; use the same block summary as primary rows. */
+function pacedMetric(
+  experiment: Experiment,
+  name: string,
+  metric: 'taskDuration' | 'layoutCount' | 'recalcStyleCount',
+): Pick<ComparisonRow, 'baseline' | 'current' | 'delta' | 'changePercent'> {
+  const pairs = experiment.blocks.map((block) => {
+    const cost = (variant: 'base' | 'head') => {
+      const values = block.runs
+        .filter((run) => run.variant === variant)
+        .map(
+          (run) =>
+            (run.scenarios.find((scenario) => scenario.scenario === name) as ScenarioReport).raw[0][
+              metric
+            ],
+        );
+      return aggregate(values).mean;
+    };
+    return { base: cost('base'), head: cost('head') };
+  });
+  const baseline = aggregate(pairs.map((pair) => pair.base)).median;
+  const current = aggregate(pairs.map((pair) => pair.head)).median;
+  return {
+    baseline,
+    current,
+    delta: aggregate(pairs.map((pair) => pair.head - pair.base)).median,
+    changePercent:
+      baseline === 0 ? (current === 0 ? 0 : null) : ((current - baseline) / baseline) * 100,
+  };
+}
+
+function compactExperimentReport(experiment: Experiment, comparison: Comparison): string {
+  const reason =
+    comparison.verdict === 'pass'
+      ? 'All primary checks fit the allowed budget.'
+      : comparison.verdict === 'regression'
+        ? 'At least one fixed-work metric exceeded the allowed budget.'
+        : comparison.rows.some((row) => row.interval[0] === null)
+          ? 'More balanced blocks are needed to decide.'
+          : 'The results are too uncertain to call a pass or regression.';
+  const reference = experiment.blocks[0].runs[0].scenarios[0];
+  const samples = sampleCount(
+    experiment.blocks
+      .flatMap((block) => block.runs)
+      .filter((run) => run.variant === 'base')
+      .flatMap((run) =>
+        run.scenarios.filter((scenario) => scenario.scenario === reference.scenario),
+      ),
+  );
+  const lines = [
+    '## Performance benchmarks',
+    '',
+    `**Verdict: ${comparison.verdict.toUpperCase()}** — ${reason}`,
+    '',
+    `${comparison.blocks} balanced blocks · ${samples} measured samples per side/scenario · ${reference.warmupIterations} warmup per suite · ${reference.cpuThrottle}× CPU throttle · ${comparison.thresholdPercent}% budget with minimum allowances.`,
+    '',
+    '| Scenario | Task time, ms (base → head) | Change | Layout Δ | Style Δ | Result |',
+    '| --- | ---: | ---: | ---: | ---: | --- |',
+  ];
+  for (const [name, label] of Object.entries(SCENARIO_NAMES)) {
+    const rows = comparison.rows.filter((row) => row.scenario === name);
+    const diagnostic = EXPECTED_SCENARIOS[name as keyof typeof EXPECTED_SCENARIOS] === 'paced';
+    const metric = (key: 'taskDuration' | 'layoutCount' | 'recalcStyleCount') =>
+      diagnostic
+        ? pacedMetric(experiment, name, key)
+        : (rows.find((row) => row.metric === key) as ComparisonRow);
+    const task = metric('taskDuration');
+    lines.push(
+      `| ${label} | ${formatValue(task.baseline)} → ${formatValue(task.current)} | ${percent(task.changePercent)} | ${signedValue(metric('layoutCount').delta)} | ${signedValue(metric('recalcStyleCount').delta)} | ${diagnostic ? 'Diagnostic' : scenarioResult(rows)} |`,
+    );
+  }
+  if (experiment.mode === 'calibration') {
+    const control = experiment.environment['control'] ?? 'none';
+    lines.push(
+      '',
+      control === 'none'
+        ? comparison.verdict === 'regression'
+          ? 'Unchanged-code calibration (A/A): this flag is a false alarm of the decision procedure.'
+          : 'Unchanged-code calibration (A/A): repeated experiments are needed to calibrate false alarms.'
+        : `Calibration control: ${escape(control)}. This tests sensitivity to deliberate work or CPU contention.`,
+    );
+  }
+  return lines.join('\n') + '\n';
+}
+
+function compactStandaloneReport(scenarios: ScenarioReport[]): string {
+  const lines = [
+    '## Performance benchmarks',
+    '',
+    '**Verdict: INCONCLUSIVE** — A standalone suite has no base/head comparison.',
+    '',
+    `${range(scenarios.map((scenario) => scenario.raw.length))} measured samples per scenario · ${range(scenarios.map((scenario) => scenario.warmupIterations))} warmup per suite · ${range(scenarios.map((scenario) => scenario.cpuThrottle))}× CPU throttle. Values are medians.`,
+    '',
+    '| Scenario | Task time, ms | Layouts | Style recalculations | Result |',
+    '| --- | ---: | ---: | ---: | --- |',
+  ];
+  for (const [name, label] of Object.entries(SCENARIO_NAMES)) {
+    const scenario = scenarios.find((report) => report.scenario === name) as ScenarioReport;
+    const median = (metric: 'taskDuration' | 'layoutCount' | 'recalcStyleCount') =>
+      formatValue(aggregate(scenario.raw.map((sample) => sample[metric])).median);
+    lines.push(
+      `| ${label} | ${median('taskDuration')} | ${median('layoutCount')} | ${median('recalcStyleCount')} | Diagnostic |`,
+    );
+  }
+  return lines.join('\n') + '\n';
 }
 
 function range(values: number[], unit = ''): string {
@@ -176,8 +337,17 @@ function healthReport(runs: BenchmarkRun[]): string[] {
   return lines;
 }
 
-export function generateExperimentReport(input: unknown, thresholdPercent = 10): string {
+export function generateExperimentReport(
+  input: unknown,
+  thresholdPercent = 10,
+  options: ReportOptions = {},
+): string {
   const comparison = compareExperiment(input, { thresholdPercent });
+  if (!options.details) {
+    return comparison.verdict === 'invalid'
+      ? invalidReport(comparison.reasons, options)
+      : compactExperimentReport(input as Experiment, comparison);
+  }
   const lines = [renderComparisonMarkdown(comparison), ''];
   if (comparison.verdict === 'invalid') return lines.join('\n');
   const experiment = input as Experiment;
@@ -227,10 +397,11 @@ export function generateExperimentReport(input: unknown, thresholdPercent = 10):
   return lines.join('\n');
 }
 
-export function generateStandaloneReport(input: unknown): string {
+export function generateStandaloneReport(input: unknown, options: ReportOptions = {}): string {
   const reasons = validateScenarios(input);
-  if (reasons.length > 0) return invalidReport(reasons);
+  if (reasons.length > 0) return invalidReport(reasons, options);
   const scenarios = input as ScenarioReport[];
+  if (!options.details) return compactStandaloneReport(scenarios);
   const browserVersions = new Set(
     scenarios.flatMap((scenario) => scenario.raw.map((sample) => sample.browserVersion)),
   );
@@ -247,7 +418,25 @@ export function generateStandaloneReport(input: unknown): string {
   return lines.join('\n');
 }
 
-function invalidReport(reasons: string[]): string {
+function invalidReport(reasons: string[], options: ReportOptions = {}): string {
+  if (!options.details) {
+    const shown = reasons.slice(0, 3);
+    const lines = [
+      '## Performance benchmarks',
+      '',
+      '**Verdict: INVALID** — The measurements are incomplete or incompatible.',
+      '',
+      ...shown.map(
+        (reason) => `- ${escape(reason).slice(0, 200)}${escape(reason).length > 200 ? '…' : ''}`,
+      ),
+    ];
+    if (reasons.length > shown.length)
+      lines.push(
+        '',
+        `${reasons.length - shown.length} more problems are listed in the detailed report.`,
+      );
+    return lines.join('\n') + '\n';
+  }
   return [
     '## Performance Benchmark Results — invalid',
     '',
@@ -297,16 +486,27 @@ export function main(
   let comparisonSummary = inputPath === comparisonPath;
   let outputPath: string | undefined;
   let thresholdPercent = 10;
+  const options: ReportOptions = {};
   let report: string;
   let invalid = false;
   try {
     for (let index = 0; index < args.length; index++) {
       const flag = args[index];
       if (flag === '--help') {
-        console.log('Usage: perf:report [--input file] [--output file] [--threshold percent]');
+        console.log(
+          'Usage: perf:report [--input file] [--output file] [--threshold percent] [--details]',
+        );
         return 0;
       }
-      if (!['--input', '--output', '--threshold'].includes(flag) || !args[index + 1]) {
+      if (flag === '--details') {
+        options.details = true;
+        continue;
+      }
+      if (
+        !['--input', '--output', '--threshold'].includes(flag) ||
+        !args[index + 1] ||
+        args[index + 1].startsWith('--')
+      ) {
         throw new Error(`Unknown or incomplete argument: ${flag}`);
       }
       const value = args[++index];
@@ -324,21 +524,21 @@ export function main(
     if (data !== null && typeof data === 'object' && 'formatVersion' in data) {
       const comparison = compareExperiment(data, { thresholdPercent });
       invalid = comparison.verdict === 'invalid';
-      report = generateExperimentReport(data, thresholdPercent);
+      report = generateExperimentReport(data, thresholdPercent, options);
     } else if (
       comparisonSummary ||
       (data !== null && typeof data === 'object' && 'verdict' in data)
     ) {
       invalid = true;
-      report = invalidReport(invalidComparisonReasons(data));
+      report = invalidReport(invalidComparisonReasons(data), options);
     } else {
       const scenarios = extractScenarios(inputPath);
       invalid = validateScenarios(scenarios).length > 0;
-      report = generateStandaloneReport(scenarios);
+      report = generateStandaloneReport(scenarios, options);
     }
   } catch (error) {
     invalid = true;
-    report = invalidReport([error instanceof Error ? error.message : String(error)]);
+    report = invalidReport([error instanceof Error ? error.message : String(error)], options);
   }
   console.log(report);
   if (outputPath) {

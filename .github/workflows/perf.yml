@@ -113,10 +113,12 @@ jobs:
         run: |
           if [ -f perf/results/experiment.json ]; then
             npm run --silent perf:report -- --input perf/results/experiment.json --output perf/results/report.md || true
+            npm run --silent perf:report -- --input perf/results/experiment.json --details --output perf/results/report-details.md > /dev/null || true
             cat perf/results/report.md >> "$GITHUB_STEP_SUMMARY"
-          elif [ -f perf/results/comparison.md ]; then
-            cp perf/results/comparison.md perf/results/report.md
-            cat perf/results/comparison.md >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f perf/results/comparison.json ]; then
+            npm run --silent perf:report -- --input perf/results/comparison.json --output perf/results/report.md || true
+            npm run --silent perf:report -- --input perf/results/comparison.json --details --output perf/results/report-details.md > /dev/null || true
+            cat perf/results/report.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Comment on PR
         if: always() && github.event_name == 'pull_request'
@@ -133,7 +135,7 @@ jobs:
             }
             const marker = '<!-- perf-benchmark-results -->';
             const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = `${marker}\n${report}\n\n[Workflow evidence](${run})\n\nTiming verdicts are advisory while unchanged-code calibration accumulates. Invalid measurements fail the check.`;
+            const body = `${marker}\n${report}\n\n[Full measurements and runner diagnostics](${run}#artifacts) · [Workflow logs](${run})\n\nTiming is advisory during calibration; invalid measurements fail CI.`;
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
             });

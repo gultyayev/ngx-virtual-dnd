@@ -6,6 +6,121 @@ import { test } from 'node:test';
 import { generateExperimentReport, generateStandaloneReport, main } from '../report.ts';
 import { makeExperiment } from './experiment-fixture.ts';
 
+test('default comparison gives one readable row per scenario with the verdict and primary metrics', () => {
+  const report = generateExperimentReport(makeExperiment());
+  assert.match(report, /Verdict: PASS/);
+  assert.match(report, /\| Fixed-height scroll \|/);
+  assert.match(report, /\| Cross-list autoscroll \|.*\| Diagnostic \|/);
+  assert.equal(report.split('\n').filter((line) => line.startsWith('|')).length, 8);
+  assert.ok(report.length < 2000, 'Default report should fit comfortably in a PR comment');
+  assert.doesNotMatch(
+    report,
+    /###|Harness hash|Environment|Runner health|MAD|Workload definition|taskDuration/,
+  );
+});
+
+test('compact standalone output stays diagnostic and shows one row per scenario', () => {
+  const report = generateStandaloneReport(makeExperiment(1).blocks[0].runs[0].scenarios);
+  assert.match(report, /Verdict: INCONCLUSIVE/);
+  assert.match(report, /standalone|base.*head/i);
+  assert.equal(report.split('\n').filter((line) => line.startsWith('|')).length, 8);
+  assert.equal(report.split('\n').filter((line) => /\| Diagnostic \|$/.test(line)).length, 6);
+  assert.ok(report.length < 1500);
+  assert.doesNotMatch(report, /###|Workload definition|MAD|Script time|frame gap/i);
+});
+
+test('compact result identifies a style regression even when task time passes', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks) {
+    for (const run of block.runs) {
+      if (run.variant === 'head') {
+        const scenario = run.scenarios.find(
+          (report) => report.scenario === 'drag-within-list-1000',
+        );
+        assert.ok(scenario);
+        scenario.raw[0].recalcStyleCount += 10;
+      }
+    }
+  }
+  const report = generateExperimentReport(experiment);
+  assert.match(report, /Verdict: REGRESSION/);
+  assert.match(
+    report,
+    /\| Within-list drag \|.*\| 0\.0% \| 0 \| \+10 \| Regression: style recalculations \|/,
+  );
+});
+
+test('compact result identifies task-time regression and does not promote paced costs into a gate', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks) {
+    for (const run of block.runs) {
+      if (run.variant === 'head') {
+        for (const scenario of run.scenarios) {
+          if (scenario.scenario === 'scroll-2000-items') scenario.raw[0].taskDuration += 30;
+          if (scenario.kind === 'paced') scenario.raw[0].taskDuration += 700;
+        }
+      }
+    }
+  }
+  const report = generateExperimentReport(experiment);
+  assert.match(
+    report,
+    /\| Fixed-height scroll \|.*\| \+30\.0% \| 0 \| 0 \| Regression: task time \|/,
+  );
+  assert.match(report, /\| Cross-list autoscroll \|.*\| Diagnostic \|/);
+});
+
+test('compact result keeps a layout-only uncertainty inconclusive', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks) {
+    for (const run of block.runs) {
+      if (run.variant === 'head' && block.index >= 5) {
+        const scenario = run.scenarios.find((report) => report.scenario === 'scroll-2000-items');
+        assert.ok(scenario);
+        scenario.raw[0].layoutCount += 5;
+      }
+    }
+  }
+  const report = generateExperimentReport(experiment);
+  assert.match(report, /Verdict: INCONCLUSIVE/);
+  assert.match(report, /\| Fixed-height scroll \|.*\| Inconclusive: layouts \|/);
+});
+
+test('a task regression takes priority while an uncertain layout check remains visible', () => {
+  const experiment = makeExperiment();
+  for (const block of experiment.blocks) {
+    for (const run of block.runs) {
+      if (run.variant === 'head') {
+        const scenario = run.scenarios.find((report) => report.scenario === 'scroll-2000-items');
+        assert.ok(scenario);
+        scenario.raw[0].taskDuration += 30;
+        if (block.index >= 5) scenario.raw[0].layoutCount += 5;
+      }
+    }
+  }
+  const report = generateExperimentReport(experiment);
+  assert.match(report, /Verdict: REGRESSION/);
+  assert.match(
+    report,
+    /\| Fixed-height scroll \|.*\| Regression: task time; uncertain: layouts \|/,
+  );
+});
+
+test('a short experiment names all uncertain checks instead of hiding them behind a summary label', () => {
+  const report = generateExperimentReport(makeExperiment(1));
+  assert.match(report, /More balanced blocks are needed/);
+  assert.match(report, /Inconclusive: task time, layouts, style recalculations/);
+});
+
+test('compact invalid output caps repeated problems while detailed output preserves every reason', () => {
+  const compact = generateStandaloneReport([]);
+  const detailed = generateStandaloneReport([], { details: true });
+  assert.match(compact, /invalid/i);
+  assert.match(compact, /more|further/);
+  assert.doesNotMatch(compact, /drag-between-lists-autoscroll-1000/);
+  assert.match(detailed, /drag-between-lists-autoscroll-1000/);
+});
+
 test('report marks empty benchmark evidence invalid instead of succeeding silently', () => {
   const result = generateStandaloneReport([]);
   assert.match(result, /invalid/i);
@@ -20,7 +135,7 @@ test('report marks malformed experiment evidence invalid without claiming a pass
 
 test('report uses measured metadata and retains exposure, workload, and collapsed blocking evidence', () => {
   const scenarios = makeExperiment(1).blocks[0].runs[0].scenarios;
-  const result = generateStandaloneReport(scenarios);
+  const result = generateStandaloneReport(scenarios, { details: true });
   assert.match(result, /inconclusive/);
   assert.match(result, /Measured samples: \*\*1\*\*/);
   assert.match(result, /CPU throttle: \*\*4×\*\*/);
@@ -36,7 +151,7 @@ test('report uses measured metadata and retains exposure, workload, and collapse
 });
 
 test('report explains an inconclusive small experiment and shows runner context without causal claims', () => {
-  const result = generateExperimentReport(makeExperiment(1));
+  const result = generateExperimentReport(makeExperiment(1), 10, { details: true });
   assert.match(result, /inconclusive/);
   assert.match(result, /Balanced blocks: \*\*1\*\*/);
   assert.match(result, /common-harness/);
@@ -54,7 +169,7 @@ test('report restores blocking diagnostic rows when any raw measurement contains
   sample.longTasks = [{ startTime: sample.windowStartMs + 10, duration: 100 }];
   sample.longTaskCount = 1;
   sample.totalBlockingTime = 50;
-  const result = generateStandaloneReport(scenarios);
+  const result = generateStandaloneReport(scenarios, { details: true });
   const scrollSection = result.split('### scroll-2000-items')[1].split('### ')[0];
   assert.match(scrollSection, /\| Long tasks \(>50 ms\) \| \*\*1/);
   assert.match(scrollSection, /\| Total Blocking Time \| \*\*50/);
@@ -94,6 +209,24 @@ test('rerendering an output file replaces the prior verdict with the current evi
     assert.equal(current, `${generateExperimentReport(experiment)}\n`);
     assert.match(current, /Verdict: INCONCLUSIVE/);
     assert.doesNotMatch(current, /Verdict: REGRESSION|Stale experiment evidence/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the boolean details flag renders the retained diagnostics without consuming an input argument', (context) => {
+  let rendered = '';
+  context.mock.method(console, 'log', (value: string) => {
+    rendered = value;
+  });
+  const directory = mkdtempSync(resolve(tmpdir(), 'perf-report-details-'));
+  const input = resolve(directory, 'experiment.json');
+  const experiment = makeExperiment(1);
+  try {
+    writeFileSync(input, JSON.stringify(experiment));
+    assert.equal(main(['--details', '--input', input]), 0);
+    assert.equal(rendered, generateExperimentReport(experiment, 10, { details: true }));
+    assert.match(rendered, /Harness hash|Runner health/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
