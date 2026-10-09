@@ -19,8 +19,8 @@ export interface LongTask {
  * when a baseline was produced by a different schema, because old and new numbers are
  * then not comparable — the pre-#42 harness (leaking observer, `buffered: true`,
  * >16.7ms dropped frames) is schema 1; schema 2 measured the main demo with its debug
- * panel, which re-rendered the whole demo every drag frame (#97); this collector is
- * schema 4 preserves raw measurements and workload evidence, bounds observers by
+ * panel, which re-rendered the whole demo every drag frame (#97). Schema 4
+ * preserves raw measurements and workload evidence, bounds observers by
  * the page's monotonic clock, and measures stalled-frame severity separately from count.
  */
 export const METRICS_SCHEMA_VERSION = 4;

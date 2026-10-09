@@ -37,11 +37,12 @@ function historicalComparison(
       !Number.isFinite(Date.parse(data.stats.startTime))
     )
       reasons.push(`${file}: missing Playwright version or start timestamp.`);
-    return { browser: data.config?.version, start: data.stats?.startTime };
+    return { playwrightVersion: data.config?.version, start: data.stats?.startTime };
   };
   const b = readInfo(baselinePath);
   const c = readInfo(currentPath);
-  if (b.browser !== c.browser) reasons.push('Historical runs use different Playwright versions.');
+  if (b.playwrightVersion !== c.playwrightVersion)
+    reasons.push('Historical runs use different Playwright versions.');
   for (const scenario of baseline) {
     const other = current.find((report) => report.scenario === scenario.scenario);
     if (!other) continue;
@@ -75,6 +76,7 @@ export function main(args = process.argv.slice(2)): number {
       '--threshold',
       '--output',
       '--json',
+      '--decision-profile',
     ]);
     for (let i = 0; i < args.length; i += 2)
       if (!allowed.has(args[i]))
@@ -84,10 +86,22 @@ export function main(args = process.argv.slice(2)): number {
     thresholdPercent = Number(argument(args, '--threshold') ?? '10');
     if (!Number.isFinite(thresholdPercent) || thresholdPercent < 0)
       throw new Error('--threshold must be finite and nonnegative.');
+    // Choose the decision metrics without changing the recorded experiment protocol.
+    const decisionProfile = argument(args, '--decision-profile');
+    if (
+      decisionProfile !== undefined &&
+      decisionProfile !== 'counts' &&
+      decisionProfile !== 'timing'
+    )
+      throw new Error('--decision-profile must be counts or timing.');
     const baseline = argument(args, '--baseline');
     const current = argument(args, '--current');
     const experimentPath = argument(args, '--experiment');
     if (baseline !== undefined || current !== undefined) {
+      if (decisionProfile !== undefined)
+        throw new Error(
+          'A decision profile requires a balanced experiment, not historical standalone evidence.',
+        );
       if (!baseline || !current || experimentPath)
         throw new Error(
           'Historical comparison requires --baseline and --current together, without --experiment.',
@@ -100,7 +114,7 @@ export function main(args = process.argv.slice(2)): number {
           'utf8',
         ),
       );
-      result = compareExperiment(experiment, { thresholdPercent });
+      result = compareExperiment(experiment, { thresholdPercent, decisionProfile });
     }
   } catch (error) {
     result = {

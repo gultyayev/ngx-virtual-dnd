@@ -90,8 +90,8 @@ function scenarioResult(rows: ComparisonRow[]): string {
   return `${label}: ${affected.join(', ')}${uncertain.length ? `; uncertain: ${uncertain.join(', ')}` : ''}`;
 }
 
-/** Paced totals are descriptive; use the same block summary as primary rows. */
-function pacedMetric(
+/** Descriptive costs use the same balanced-block summaries as primary rows. */
+function descriptiveMetric(
   experiment: Experiment,
   name: string,
   metric: 'taskDuration' | 'layoutCount' | 'recalcStyleCount',
@@ -122,11 +122,16 @@ function pacedMetric(
 }
 
 function compactExperimentReport(experiment: Experiment, comparison: Comparison): string {
+  const counts = (comparison.profile ?? experiment.profile ?? 'timing') === 'counts';
   const reason =
     comparison.verdict === 'pass'
-      ? 'All primary checks fit the allowed budget.'
+      ? counts
+        ? 'All layout and style checks fit the work-count budget.'
+        : 'All primary checks fit the allowed budget.'
       : comparison.verdict === 'regression'
-        ? 'At least one fixed-work metric exceeded the allowed budget.'
+        ? counts
+          ? 'A layout or style check exceeded the work-count budget.'
+          : 'At least one fixed-work metric exceeded the allowed budget.'
         : comparison.rows.some((row) => row.interval[0] === null)
           ? 'More balanced blocks are needed to decide.'
           : 'The results are too uncertain to call a pass or regression.';
@@ -144,23 +149,27 @@ function compactExperimentReport(experiment: Experiment, comparison: Comparison)
     '',
     `**Verdict: ${comparison.verdict.toUpperCase()}** — ${reason}`,
     '',
-    `${comparison.blocks} balanced blocks · ${samples} measured samples per side/scenario · ${reference.warmupIterations} warmup per suite · ${reference.cpuThrottle}× CPU throttle · ${comparison.thresholdPercent}% budget with minimum allowances.`,
+    `${comparison.blocks} balanced blocks · ${samples} measured samples per side/scenario · ${reference.warmupIterations} warmup per suite · ${reference.cpuThrottle}× CPU throttle · ${comparison.thresholdPercent}% ${counts ? 'work-count ' : ''}budget with minimum allowances.`,
     '',
-    '| Scenario | Task time, ms (base → head) | Change | Layout Δ | Style Δ | Result |',
+    `| Scenario | Task time${counts ? ' (diagnostic)' : ''}, ms (base → head) | Change | Layout Δ | Style Δ | Result |`,
     '| --- | ---: | ---: | ---: | ---: | --- |',
   ];
   for (const [name, label] of Object.entries(SCENARIO_NAMES)) {
-    const rows = comparison.rows.filter((row) => row.scenario === name);
+    const rows = comparison.rows.filter(
+      (row) => row.scenario === name && (!counts || row.metric !== 'taskDuration'),
+    );
     const diagnostic = EXPECTED_SCENARIOS[name as keyof typeof EXPECTED_SCENARIOS] === 'paced';
     const metric = (key: 'taskDuration' | 'layoutCount' | 'recalcStyleCount') =>
-      diagnostic
-        ? pacedMetric(experiment, name, key)
+      diagnostic || (counts && key === 'taskDuration')
+        ? descriptiveMetric(experiment, name, key)
         : (rows.find((row) => row.metric === key) as ComparisonRow);
     const task = metric('taskDuration');
     lines.push(
       `| ${label} | ${formatValue(task.baseline)} → ${formatValue(task.current)} | ${percent(task.changePercent)} | ${signedValue(metric('layoutCount').delta)} | ${signedValue(metric('recalcStyleCount').delta)} | ${diagnostic ? 'Diagnostic' : scenarioResult(rows)} |`,
     );
   }
+  if (experiment.environment['libraryUnchanged'] === true)
+    lines.push('', 'Library source unchanged: this checks the benchmark harness.');
   if (experiment.mode === 'calibration') {
     const control = experiment.environment['control'] ?? 'none';
     lines.push(
@@ -342,15 +351,20 @@ export function generateExperimentReport(
   thresholdPercent = 10,
   options: ReportOptions = {},
 ): string {
-  const comparison = compareExperiment(input, { thresholdPercent });
+  const comparison = recordedFailure(input, compareExperiment(input, { thresholdPercent }));
   if (!options.details) {
     return comparison.verdict === 'invalid'
       ? invalidReport(comparison.reasons, options)
       : compactExperimentReport(input as Experiment, comparison);
   }
-  const lines = [renderComparisonMarkdown(comparison), ''];
+  const lines = [
+    renderComparisonMarkdown({ ...comparison, reasons: comparison.reasons.map(escape) }),
+    '',
+  ];
   if (comparison.verdict === 'invalid') return lines.join('\n');
   const experiment = input as Experiment;
+  if (experiment.environment['libraryUnchanged'] === true)
+    lines.push('Library source unchanged: this checks the benchmark harness.', '');
   if (experiment.mode === 'calibration') {
     const control = experiment.environment['control'] ?? 'none';
     if (control === 'none') {
@@ -395,6 +409,26 @@ export function generateExperimentReport(
   }
   lines.push(...healthReport(runs));
   return lines.join('\n');
+}
+
+function recordedFailure(input: unknown, comparison: Comparison): Comparison {
+  if (
+    comparison.verdict !== 'invalid' ||
+    input === null ||
+    typeof input !== 'object' ||
+    Array.isArray(input)
+  )
+    return comparison;
+  const environment = (input as Record<string, unknown>)['environment'];
+  if (environment === null || typeof environment !== 'object' || Array.isArray(environment))
+    return comparison;
+  const value = (environment as Record<string, unknown>)['failureReason'];
+  if (typeof value !== 'string' || value.trim().length === 0) return comparison;
+  const reason = value.trim();
+  return {
+    ...comparison,
+    reasons: [reason, ...comparison.reasons.filter((existing) => existing.trim() !== reason)],
+  };
 }
 
 export function generateStandaloneReport(input: unknown, options: ReportOptions = {}): string {

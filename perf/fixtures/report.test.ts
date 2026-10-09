@@ -5,6 +5,100 @@ import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { generateExperimentReport, generateStandaloneReport, main } from '../report.ts';
 import { makeExperiment } from './experiment-fixture.ts';
+import { compareExperiment } from './compare-metrics.ts';
+
+function countsExperiment() {
+  const experiment = makeExperiment(3);
+  experiment.profile = 'counts';
+  for (const block of experiment.blocks) {
+    for (const run of block.runs) {
+      for (const scenario of run.scenarios) {
+        scenario.warmupIterations = 0;
+        scenario.warmupRaw = [];
+      }
+    }
+  }
+  return experiment;
+}
+
+test('invalid experiment reports the original runner failure before derivative integrity errors', () => {
+  const experiment = makeExperiment(1);
+  experiment.completed = false;
+  experiment.blocks[0].runs = [];
+  experiment.environment['failureReason'] =
+    'Head workload failed: final checkpoint was not rendered.';
+  for (const details of [false, true]) {
+    const report = generateExperimentReport(experiment, 10, { details });
+    assert.match(report, /Verdict: INVALID/);
+    const firstError = report.split('\n').find((line) => line.startsWith('- '));
+    assert.equal(firstError, '- Head workload failed: final checkpoint was not rendered.');
+  }
+});
+
+test('failure cause is escaped and capped compactly while full details retain it without duplicates', () => {
+  const experiment = makeExperiment(1);
+  experiment.completed = false;
+  const failure = `Head failed | browser\n${'x'.repeat(300)} end of original cause`;
+  experiment.environment['failureReason'] = failure;
+  const compact = generateExperimentReport(experiment);
+  const detailed = generateExperimentReport(experiment, 10, { details: true });
+  assert.match(compact, /Head failed \\\| browser/);
+  assert.doesNotMatch(compact, /end of original cause/);
+  assert.match(detailed, /end of original cause/);
+  const duplicate = compareExperiment(experiment).reasons[0];
+  experiment.environment['failureReason'] = duplicate;
+  const deduplicated = generateExperimentReport(experiment, 10, { details: true });
+  assert.equal(deduplicated.split('\n').filter((line) => line === `- ${duplicate}`).length, 1);
+});
+
+test('counts profile passes work-count checks despite slow task timings and keeps all scenarios', () => {
+  const experiment = countsExperiment();
+  for (const block of experiment.blocks) {
+    for (const run of block.runs) {
+      if (run.variant === 'head') {
+        for (const scenario of run.scenarios) scenario.raw[0].taskDuration += 700;
+      }
+    }
+  }
+  const report = generateExperimentReport(experiment);
+  assert.match(report, /Verdict: PASS/);
+  assert.match(report, /work-count budget/);
+  assert.match(report, /Task time.*[Dd]iagnostic/);
+  assert.match(report, /\| Fixed-height scroll \| 100 → 800 \| \+700\.0% \| 0 \| 0 \| Pass \|/);
+  assert.match(report, /\| Cross-list autoscroll \|.*\| Diagnostic \|/);
+  assert.equal(report.split('\n').filter((line) => line.startsWith('|')).length, 8);
+  assert.ok(report.length < 2000);
+  assert.doesNotMatch(report, /Inconclusive: task time|Regression: task time/);
+});
+
+test('counts profile names layout and style regressions while task time stays diagnostic', () => {
+  const experiment = countsExperiment();
+  for (const block of experiment.blocks) {
+    for (const run of block.runs) {
+      if (run.variant === 'head') {
+        for (const scenario of run.scenarios) {
+          if (scenario.scenario === 'scroll-2000-items') scenario.raw[0].layoutCount += 5;
+          if (scenario.scenario === 'drag-within-list-1000') scenario.raw[0].recalcStyleCount += 10;
+        }
+      }
+    }
+  }
+  const report = generateExperimentReport(experiment);
+  assert.match(report, /Verdict: REGRESSION/);
+  assert.match(report, /Regression: layouts/);
+  assert.match(report, /Regression: style recalculations/);
+  assert.doesNotMatch(report, /Regression: task time/);
+});
+
+test('unchanged library source is described as a harness check in compact and detailed reports', () => {
+  const experiment = countsExperiment();
+  experiment.variants.head.libraryHash = experiment.variants.base.libraryHash;
+  experiment.environment['libraryUnchanged'] = true;
+  for (const details of [false, true]) {
+    const report = generateExperimentReport(experiment, 10, { details });
+    assert.match(report, /Library source unchanged: this checks the benchmark harness/);
+  }
+});
 
 test('default comparison gives one readable row per scenario with the verdict and primary metrics', () => {
   const report = generateExperimentReport(makeExperiment());

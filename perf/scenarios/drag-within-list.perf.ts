@@ -11,6 +11,7 @@ const SELECTOR = '[data-droppable-id="list-1"] vdnd-virtual-scroll';
 test.describe('Drag Within List Performance', () => {
   test('drag item 0 to item 4 - 1000 items', async ({ page }, testInfo) => {
     const perfPage = new PerfPage(page);
+    let sourceId = '';
     let coordinates = { startX: 0, startY: 0, endX: 0, endY: 0 };
     await runScenario(
       page,
@@ -32,6 +33,8 @@ test.describe('Drag Within List Performance', () => {
         setup: async () => {
           await perfPage.goto(`/?itemCount=${ITEM_COUNT}`);
           await expect(page.getByTestId('list-1-count')).toHaveText(String(ITEM_COUNT / 2));
+          sourceId = await perfPage.getDraggableId('list-1', 0);
+          expect(sourceId).toBe('list1-0');
           const source = await perfPage.getItemBox('list1', 0);
           const target = await perfPage.getItemBox('list1', TARGET_INDEX);
           if (!source || !target) throw new Error('Missing within-list drag source or target');
@@ -55,9 +58,7 @@ test.describe('Drag Within List Performance', () => {
             startScrollTop: 0,
             endScrollTop,
             scrollDistance: endScrollTop,
-            sourceId: 'list1-0',
-            destinationIndex: TARGET_INDEX,
-            completed: true,
+            completed: false,
           };
         },
         verify: async ({ workload }) => {
@@ -81,6 +82,14 @@ test.describe('Drag Within List Performance', () => {
             'list1-5',
           ]);
           await expect(page.getByTestId('list-1-count')).toHaveText(String(ITEM_COUNT / 2));
+          Object.assign(
+            workload,
+            await perfPage.observeDrop({
+              hostSelector: '[data-last-drop-source-index][data-last-drop-destination-index]',
+              destinationDroppableId: 'list-1',
+              sourceId,
+            }),
+          );
         },
       },
     );

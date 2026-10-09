@@ -6,6 +6,8 @@ import {
   medianInterval,
   GATED_METRICS,
   EXIT_CODES,
+  renderComparisonMarkdown,
+  type ComparisonOptions,
 } from './compare-metrics.ts';
 import { makeExperiment } from './experiment-fixture.ts';
 import { computeFrameOverBudgetMs, countJankIntervals } from './metric-math.ts';
@@ -356,4 +358,148 @@ test('setup CPU throttling must be explicit and use the same unthrottled prepara
   wrong.blocks[0].runs[0].scenarios[0].setupCpuThrottle = 4;
   assert.equal(compareExperiment(wrong).verdict, 'invalid');
   assert.match(compareExperiment(wrong).reasons.join(' '), /setup CPU throttle/);
+});
+
+test('counts profile reports only count decisions and leaves slow task time diagnostic', () => {
+  const experiment = makeExperiment(3, 'counts');
+  changeHead(experiment, 400);
+  const result = compareExperiment(experiment);
+  assert.equal(result.profile, 'counts');
+  assert.equal(result.verdict, 'pass');
+  assert.equal(result.rows.length, 10);
+  assert.ok(
+    result.rows.every((row) => row.metric === 'layoutCount' || row.metric === 'recalcStyleCount'),
+  );
+  assert.ok(result.rows.every((row) => row.interval[0] === null && row.interval[1] === null));
+  assert.doesNotMatch(renderComparisonMarkdown(result), /95%|Bonferroni|simultaneous/i);
+});
+test('three balanced blocks detect count regressions without claiming inferential intervals', () => {
+  const experiment = makeExperiment(3, 'counts');
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      if (run.variant === 'head') {
+        run.scenarios[0].raw[0].layoutCount += 4;
+        run.scenarios[0].raw[0].recalcStyleCount += 6;
+      }
+  const result = compareExperiment(experiment);
+  assert.equal(result.verdict, 'regression');
+  assert.equal(result.rows[0].verdict, 'regression');
+  assert.equal(result.rows[1].verdict, 'regression');
+  assert.deepEqual(result.rows[0].interval, [null, null]);
+  assert.match(result.reasons.join(' '), /median/);
+  assert.doesNotMatch(result.reasons.join(' '), /confidence interval|simultaneous/i);
+});
+test('counts decision uses the median paired block budget excess, not unpaired side medians', () => {
+  const experiment = makeExperiment(3, 'counts');
+  for (const [i, block] of experiment.blocks.entries())
+    for (const run of block.runs)
+      run.scenarios[0].raw[0].layoutCount =
+        run.variant === 'base' ? [100, 100, 1000][i] : [125, 50, 1050][i];
+  const result = compareExperiment(experiment);
+  assert.equal(result.rows[0].baseline, 100);
+  assert.equal(result.rows[0].current, 125);
+  assert.equal(result.rows[0].verdict, 'pass');
+});
+test('counts profile honors the absolute floor at zero baseline without invented ratios', () => {
+  const experiment = makeExperiment(3, 'counts');
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      run.scenarios[0].raw[0].layoutCount = run.variant === 'base' ? 0 : 1;
+  const boundary = compareExperiment(experiment);
+  assert.equal(boundary.verdict, 'pass');
+  assert.equal(boundary.rows[0].changePercent, null);
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      if (run.variant === 'head') run.scenarios[0].raw[0].layoutCount = 2;
+  assert.equal(compareExperiment(experiment).verdict, 'regression');
+});
+test('timing remains the default for historical experiments and retains all fifteen checks', () => {
+  const legacy = compareExperiment(makeExperiment());
+  assert.equal(legacy.profile, 'timing');
+  assert.equal(legacy.rows.length, 15);
+  const experiment = makeExperiment(20, 'timing');
+  changeHead(experiment, 20);
+  const result = compareExperiment(experiment);
+  assert.equal(result.verdict, 'regression');
+  assert.deepEqual(result.rows[0].interval, [10, 10]);
+});
+test('unknown profiles and missing scenario evidence still fail closed in the counts profile', () => {
+  const unknown = makeExperiment(3, 'counts') as unknown as Record<string, unknown>;
+  unknown['profile'] = 'unsupported';
+  assert.equal(compareExperiment(unknown).verdict, 'invalid');
+  const missing = makeExperiment(3, 'counts');
+  missing.blocks[0].runs[0].scenarios.pop();
+  assert.equal(compareExperiment(missing).verdict, 'invalid');
+});
+test('matching logical scroll checkpoints remain comparable across different pixel geometries', () => {
+  const experiment = makeExperiment(3, 'counts');
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      if (run.variant === 'head') {
+        const workload = run.scenarios[0].raw[0].workload;
+        workload['startScrollTop'] = 50;
+        workload['endScrollTop'] = 350;
+        workload['scrollDistance'] = 300;
+      }
+  assert.deepEqual(validateExperiment(experiment), []);
+  assert.equal(compareExperiment(experiment).verdict, 'pass');
+  experiment.blocks[0].runs[1].scenarios[0].raw[0].workload['scrollDistance'] = 301;
+  assert.equal(
+    compareExperiment(experiment).verdict,
+    'invalid',
+    'pixel observations must remain internally consistent',
+  );
+});
+test('zero frame intervals are valid clock quantization while negative intervals remain invalid', () => {
+  const experiment = makeExperiment();
+  const sample = experiment.blocks[0].runs[0].scenarios[0].raw[0];
+  sample.frameTimes = [0, 16.67];
+  sample.avgFrameTime = 8.335;
+  sample.maxFrameGap = 16.67;
+  assert.deepEqual(validateExperiment(experiment), []);
+  sample.frameTimes[0] = -0.1;
+  assert.equal(compareExperiment(experiment).verdict, 'invalid');
+});
+test('a counts decision from timing evidence does not gate a task-only regression or mutate its protocol', () => {
+  const experiment = makeExperiment(20, 'timing');
+  changeHead(experiment, 20);
+  const source = JSON.stringify(experiment);
+  assert.equal(compareExperiment(experiment).verdict, 'regression');
+  const counts = compareExperiment(experiment, { decisionProfile: 'counts' });
+  assert.equal(counts.verdict, 'pass');
+  assert.equal(counts.profile, 'counts');
+  assert.equal(counts.blocks, 20);
+  assert.equal(counts.rows.length, 10);
+  assert.equal(experiment.profile, 'timing');
+  assert.equal(experiment.blocks[0].runs[0].scenarios[0].warmupIterations, 1);
+  assert.equal(JSON.stringify(experiment), source);
+});
+test('mandatory count budgets still detect regressions from the same opt-in timing experiment', () => {
+  const experiment = makeExperiment(20, 'timing');
+  for (const block of experiment.blocks)
+    for (const run of block.runs)
+      if (run.variant === 'head') run.scenarios[0].raw[0].layoutCount += 4;
+  const counts = compareExperiment(experiment, { decisionProfile: 'counts' });
+  assert.equal(counts.verdict, 'regression');
+  assert.equal(counts.rows[0].verdict, 'regression');
+  assert.deepEqual(counts.rows[0].interval, [null, null]);
+});
+test('decision overrides cannot bypass invalid source profiles or warmup evidence', () => {
+  const unknown = makeExperiment(20, 'timing') as unknown as Record<string, unknown>;
+  unknown['profile'] = 'unsupported';
+  assert.equal(compareExperiment(unknown, { decisionProfile: 'counts' }).verdict, 'invalid');
+  const corrupt = makeExperiment(20, 'timing');
+  corrupt.blocks[0].runs[0].scenarios[0].warmupRaw = [];
+  const result = compareExperiment(corrupt, { decisionProfile: 'counts' });
+  assert.equal(result.verdict, 'invalid');
+  assert.match(result.reasons.join(' '), /warmup/);
+});
+test('invalid decision override values fail closed and insufficient timing evidence remains inconclusive', () => {
+  const invalid = { decisionProfile: 'unsupported' } as unknown as ComparisonOptions;
+  assert.equal(compareExperiment(makeExperiment(), invalid).verdict, 'invalid');
+  const experiment = makeExperiment(3, 'counts');
+  const timing = compareExperiment(experiment, { decisionProfile: 'timing' });
+  assert.equal(timing.profile, 'timing');
+  assert.equal(timing.verdict, 'inconclusive');
+  assert.equal(experiment.profile, 'counts');
 });

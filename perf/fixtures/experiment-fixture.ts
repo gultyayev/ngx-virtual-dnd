@@ -1,6 +1,11 @@
 /** Synthetic observations for comparison/report tests; never used by the benchmark runner. */
-import { EXPECTED_SCENARIOS, type Experiment, type ScenarioReport } from './run-types.ts';
-export function makeExperiment(blocks = 10): Experiment {
+import {
+  EXPECTED_SCENARIOS,
+  type BenchmarkProfile,
+  type Experiment,
+  type ScenarioReport,
+} from './run-types.ts';
+export function makeExperiment(blocks = 10, profile?: BenchmarkProfile): Experiment {
   const reports = (): ScenarioReport[] =>
     Object.entries(EXPECTED_SCENARIOS).map(([scenario, kind]) => {
       const scroll = kind === 'fixed-work' && scenario.includes('scroll');
@@ -12,7 +17,7 @@ export function makeExperiment(blocks = 10): Experiment {
         setupCpuThrottle: 1,
         iterations: 1,
         completed: true,
-        warmupIterations: 1,
+        warmupIterations: profile === 'counts' ? 0 : 1,
         warmupRaw: [],
         workload: scroll ? { checkpoints: 2, items: 2000 } : { pointerSteps: 20, items: 1000 },
         raw: [
@@ -60,7 +65,7 @@ export function makeExperiment(blocks = 10): Experiment {
           },
         ],
       } as ScenarioReport;
-      report['warmupRaw'] = structuredClone(report.raw);
+      report['warmupRaw'] = profile === 'counts' ? [] : structuredClone(report.raw);
       return report;
     });
   const health = (ms: number) => ({
@@ -75,6 +80,7 @@ export function makeExperiment(blocks = 10): Experiment {
     requestedBlocks: blocks,
     completed: true,
     mode: 'comparison',
+    ...(profile === undefined ? {} : { profile }),
     harnessHash: 'common-harness',
     environment: {
       nodeVersion: '24',

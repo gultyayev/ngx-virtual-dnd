@@ -10,6 +10,7 @@ export const EXPECTED_SCENARIOS = {
 } as const;
 
 export type Variant = 'base' | 'head';
+export type BenchmarkProfile = 'counts' | 'timing';
 export type WorkloadDefinition = Record<string, string | number | boolean>;
 
 export interface ScenarioReport {
@@ -56,6 +57,8 @@ export interface Experiment {
   requestedBlocks: number;
   completed: boolean;
   mode: 'comparison' | 'calibration';
+  /** Omitted by historical experiments, which use the timing decision. */
+  profile?: BenchmarkProfile;
   harnessHash: string;
   environment: Record<string, unknown>;
   variants: Record<Variant, { commit: string; dependencyHash: string; libraryHash: string }>;
@@ -71,12 +74,13 @@ export interface ComparisonRow {
   current: number;
   changePercent: number | null;
   delta: number;
-  /** Simultaneous distribution-free interval for the median budget excess. */
+  /** Timing: simultaneous median budget-excess interval. Counts: no interval, both bounds null. */
   interval: [number | null, number | null];
   verdict: Exclude<Verdict, 'invalid'>;
 }
 
 export interface Comparison {
+  profile?: BenchmarkProfile;
   verdict: Verdict;
   reasons: string[];
   rows: ComparisonRow[];
