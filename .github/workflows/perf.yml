@@ -3,207 +3,171 @@ name: Performance Benchmarks
 on:
   pull_request:
     branches: [master]
-    # Not a required check, so skipping it on docs-only PRs does not block merging.
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - '**/*.mdx'
-      - '.claude/**'
-      - '.ai/**'
-      - 'skills/**'
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+    paths:
+      - 'projects/ngx-virtual-dnd/**'
+      - 'perf/**'
+      - 'scripts/serve-dist.js'
+      - '.github/workflows/perf.yml'
 
 permissions:
   contents: read
   pull-requests: write
 
-concurrency:
-  group: perf-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   harness-unit-tests:
-    runs-on: ubuntu-latest
+    if: github.event.action != 'labeled' && github.event.action != 'unlabeled' || github.event.label.name == 'perf:timing'
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
+      # The harness tests use Node built-ins and do not need Angular dependencies.
+      - run: npm run perf:test
 
-      # Pure statistics / gating logic — no browsers or npm install required.
-      - name: Unit-test perf harness logic
-        run: npm run perf:test
-
-  # Measures the PR's base commit and head (merge commit) on the SAME runner in
-  # the SAME job, then compares the two runs. A committed baseline was tried
-  # first and produced false positives (#62, #63): cross-run/host drift on
-  # shared runners shifts every sample of a run together, which no within-run
-  # statistical guard can distinguish from a real regression. Measuring both
-  # sides back-to-back on one host removes that drift from the comparison.
   benchmark:
     needs: harness-unit-tests
-    runs-on: ubuntu-latest
+    concurrency:
+      group: perf-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    # Timing is opt-in: 80 suites with one warmup each; counts use 12, without warmups.
+    timeout-minutes: 120
+    env:
+      PERF_PROFILE: ${{ contains(github.event.pull_request.labels.*.name, 'perf:timing') && 'timing' || 'counts' }}
+      PERF_BLOCKS: ${{ contains(github.event.pull_request.labels.*.name, 'perf:timing') && '20' || '3' }}
     steps:
-      - name: Checkout PR head (merge commit)
+      - name: Checkout candidate and common harness
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: head
           persist-credentials: false
-
-      - name: Checkout PR base
+      - name: Checkout library baseline
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: base
           persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: |
-            head/package-lock.json
-            base/package-lock.json
-
-      - name: Install dependencies (base)
-        working-directory: base
-        # Each checkout installs with the npm version it pins (packageManager).
-        run: |
-          npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
-          npm ci
-
-      - name: Install dependencies (head)
+          cache: npm
+          cache-dependency-path: head/package-lock.json
+      - name: Prepare a common harness and dependency lockfile
         working-directory: head
-        # Each checkout installs with the npm version it pins (packageManager).
+        run: npm run perf:prepare -- --base ../base
+      - name: Install identical pinned dependencies
         run: |
-          npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
-          npm ci
-
-      # Measure both sides with the head's Playwright. Another version means another browser
-      # build, which perf:compare rightly refuses to compare, so a PR that upgrades Playwright
-      # could never pass the gate. The base keeps its own harness code (perf/).
-      - name: Align base Playwright with head
-        working-directory: base
-        run: |
-          head_version="$(node -p "require('../head/node_modules/@playwright/test/package.json').version")"
-          base_version="$(node -p "require('./node_modules/@playwright/test/package.json').version")"
-          if [ "$head_version" != "$base_version" ]; then
-            echo "Base pins Playwright $base_version; measuring it with $head_version"
-            npm install --no-save "@playwright/test@$head_version"
-          fi
-
-      # One browser install serves both sides now that they share a Playwright version.
-      - name: Install Playwright browsers
+          npm install -g "$(node -p "require('./head/package.json').packageManager.split('+')[0]")"
+          npm ci --prefix base
+          npm ci --prefix head
+      - name: Install the common browser
         working-directory: head
         run: npx playwright install --with-deps chromium
-
-      - name: Build library (base)
+      - name: Build and fingerprint baseline
         working-directory: base
-        run: npm run build:lib
-
-      - name: Build library (head)
+        run: npm run perf:build
+      - name: Build and fingerprint candidate
         working-directory: head
-        run: npm run build:lib
-
-      - name: Run benchmarks (base)
-        working-directory: base
-        run: npm run perf
-
-      - name: Run benchmarks (head)
+        # Compile the base consumer against each library, so new head-only API
+        # bindings cannot break the baseline. Staging preserves both source trees.
+        run: npm run perf:build -- --fixture ../base
+      - name: Measure balanced blocks
+        id: measure
         working-directory: head
-        run: npm run perf
-
-      - name: Generate report
-        working-directory: head
-        run: npm run perf:report -- --output "$GITHUB_STEP_SUMMARY"
-
-      - name: Compare head against base
-        id: compare
+        run: |
+          set +e
+          npm run --silent perf:ab -- --base ../base --head . --profile "$PERF_PROFILE" --blocks "$PERF_BLOCKS"
+          status=$?
+          # Count budgets stay required when timing bounds are also requested.
+          # This derives a second decision from the same validated raw evidence.
+          npm run --silent perf:compare -- --experiment perf/results/experiment.json --decision-profile counts --json perf/results/count-comparison.json --output perf/results/count-comparison.md > /dev/null
+          count_status=$?
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "count_status=$count_status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Report measurements and verdict
         if: always()
         working-directory: head
         run: |
-          # Capture perf:compare's real exit code (a pipe would mask it) so the
-          # gate below can actually fail the build on a regression / bad run.
-          npm run --silent perf:compare -- \
-            --baseline ../base/perf/results/latest.json 2>&1 | tee perf/results/comparison.txt
-          status=${PIPESTATUS[0]}
-          cat perf/results/comparison.txt >> "$GITHUB_STEP_SUMMARY"
-          if [ "$status" -eq 0 ]; then
-            echo "regression=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "regression=true" >> "$GITHUB_OUTPUT"
+          if [ -f perf/results/experiment.json ]; then
+            npm run --silent perf:report -- --input perf/results/experiment.json --output perf/results/report.md || true
+            npm run --silent perf:report -- --input perf/results/experiment.json --details --output perf/results/report-details.md > /dev/null || true
+            cat perf/results/report.md >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f perf/results/comparison.json ]; then
+            npm run --silent perf:report -- --input perf/results/comparison.json --output perf/results/report.md || true
+            npm run --silent perf:report -- --input perf/results/comparison.json --details --output perf/results/report-details.md > /dev/null || true
+            cat perf/results/report.md >> "$GITHUB_STEP_SUMMARY"
           fi
-
-      # Fork PRs get a read-only token, so the comment fails there; the step summary and the
-      # gate below still report the result.
       - name: Comment on PR
-        if: always()
+        if: ${{ !cancelled() }}
         continue-on-error: true
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const { readFileSync, existsSync } = require('fs');
-            const { execSync } = require('child_process');
-
-            const report = execSync('npm run --silent perf:report', {
-              encoding: 'utf-8',
-              cwd: 'head',
-            });
-
-            let comparison = '';
-            const compPath = 'head/perf/results/comparison.txt';
-            if (existsSync(compPath)) {
-              comparison = '\n---\n' + readFileSync(compPath, 'utf-8');
+            let report = 'Benchmark setup failed; see workflow logs.';
+            if (existsSync('head/perf/results/report.md')) {
+              report = readFileSync('head/perf/results/report.md', 'utf8');
+            } else if (existsSync('head/perf/results/comparison.md')) {
+              report = readFileSync('head/perf/results/comparison.md', 'utf8');
             }
-
-            // Find and update existing comment, or create a new one
             const marker = '<!-- perf-benchmark-results -->';
-            const body = `${marker}\n${report}${comparison}`;
-
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              per_page: 100,
-            });
-
-            const existing = comments.find(c => c.body?.includes(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            if (process.env.PERF_PROFILE === 'timing' && existsSync('head/perf/results/count-comparison.json')) {
+              const counts = JSON.parse(readFileSync('head/perf/results/count-comparison.json', 'utf8'));
+              report += `\n\n**Required count checks: ${counts.verdict.toUpperCase()}**`;
             }
-
-      - name: Upload results
+            const policy = process.env.PERF_PROFILE === 'counts'
+              ? 'Layout/style count regressions and invalid evidence fail CI. Timing is diagnostic; apply `perf:timing` for the longer comparison.'
+              : 'Layout/style count budgets and evidence integrity remain required. Timing regressions and inconclusive bounds are advisory during calibration.';
+            const body = [marker, report, '', `[Full measurements and runner diagnostics](${run}#artifacts) · [Workflow logs](${run})`, '', policy].join('\n');
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
+            }
+      - name: Upload raw evidence and diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: perf-results
-          path: |
-            head/perf/results/
-            base/perf/results/
-          retention-days: 30
-
-      # Runs last so the PR comment and artifact upload still happen, but the job
-      # (and therefore the check) fails when a regression or bad run was found.
-      - name: Enforce performance gate
-        if: always() && steps.compare.outputs.regression == 'true'
+          name: perf-results-${{ github.run_attempt }}
+          path: head/perf/results/
+          retention-days: 90
+      - name: Enforce count budgets and measurement integrity
+        if: ${{ always() && !cancelled() }}
+        env:
+          PERF_STATUS: ${{ steps.measure.outputs.status }}
+          PERF_COUNT_STATUS: ${{ steps.measure.outputs.count_status }}
         run: |
-          echo "::error::Performance regression or incomparable base/head runs detected — see the comparison table."
-          exit 1
+          case "$PERF_COUNT_STATUS" in
+            0) echo "Required count checks passed." ;;
+            1) echo "::error::Layout/style count budget exceeded. See report and artifacts."; exit 1 ;;
+            *) echo "::error::Invalid or incomplete count evidence. See logs and artifacts."; exit 1 ;;
+          esac
+          case "$PERF_STATUS" in
+            0) echo "Valid $PERF_PROFILE profile pass." ;;
+            1)
+              if [ "$PERF_PROFILE" = counts ]; then
+                echo "::error::Layout/style count budget exceeded. See report and artifacts."
+                exit 1
+              fi
+              echo "::warning::Timing regression evidence; timing gate remains advisory during calibration."
+              ;;
+            2)
+              if [ "$PERF_PROFILE" = counts ]; then
+                echo "::error::Count profile did not establish a valid count result."
+                exit 1
+              fi
+              echo "::warning::Inconclusive timing evidence; this is not a timing pass."
+              ;;
+            *) echo "::error::Invalid or incomplete benchmark evidence. See logs and artifacts."; exit 1 ;;
+          esac

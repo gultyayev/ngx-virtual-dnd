@@ -53,7 +53,8 @@ storybook-static
 /reference
 /playwright-report
 /test-results
-/perf/results/*.json
+/perf/results/*
+!/perf/results/.gitkeep
 /perf/baselines/*.json
 
 .codemie

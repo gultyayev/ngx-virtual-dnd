@@ -1,89 +1,209 @@
 import { expect, Page } from '@playwright/test';
+import type { WorkloadEvidence } from './metrics-collector';
 
-/**
- * Query flag that removes the demo pages' drag-state debug output (`data-testid="drag-state-debug"`):
- * the main demo's debug panel and the hidden `app-drag-state-debug` mirror. Both re-render on
- * every drag frame, and the panel re-renders the whole main demo and every row with it (#97), so
- * the drag numbers measured the demo instead of the library. E2E needs that output; the
- * benchmarks never read it.
- */
+/** Debug views re-render every drag frame; disable them on every benchmark document. */
 const NO_DRAG_STATE_DEBUG = 'dragStateDebug=false';
 
 export class PerfPage {
-  readonly page: Page;
+  constructor(readonly page: Page) {}
 
-  constructor(page: Page) {
-    this.page = page;
-  }
-
-  /** Open a demo page without its drag-state debug output. */
   async goto(route = '/'): Promise<void> {
     const separator = route.includes('?') ? '&' : '?';
     await this.page.goto(`${route}${separator}${NO_DRAG_STATE_DEBUG}`);
     await this.page.waitForLoadState('networkidle');
     await this.page.locator('[data-draggable-id]').first().waitFor({ state: 'visible' });
-    // Fail instead of silently measuring the debug output again if a page stops honoring the flag
+    await this.page.evaluate(async () => {
+      await document.fonts.ready;
+    });
+    if (route.split('?')[0] === '/') {
+      // Settings push the main demo's lists below the fold. Keep both complete
+      // scrollports on screen before taking coordinates or starting observers.
+      await this.page
+        .locator('[data-droppable-id="list-1"] vdnd-virtual-scroll')
+        .evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
+    }
+    await this.waitForFrames(3);
     await expect(this.page.getByTestId('drag-state-debug')).toHaveCount(0);
   }
 
-  /**
-   * Set the item count on the main demo page and regenerate items.
-   * Only works on the `/` route.
-   */
-  async setItemCount(count: number): Promise<void> {
-    // The item-count control is the first number input on the demo page
-    // (mirrors the E2E page object); the count badge is `list-1-count`.
-    const input = this.page.locator('input[type="number"]').first();
-    await input.fill(String(count));
-    await this.page.locator('button', { hasText: 'Regenerate' }).click();
-    // Wait for virtual scroll to render with the new item count
-    await expect(async () => {
-      const badge = this.page.getByTestId('list-1-count');
-      const text = await badge.textContent();
-      expect(parseInt(text?.trim() ?? '0', 10)).toBe(Math.floor(count / 2));
-    }).toPass({ timeout: 5000 });
+  async waitForFrames(count = 2): Promise<void> {
+    await this.page.evaluate(async (frames) => {
+      for (let i = 0; i < frames; i++) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+    }, count);
   }
 
-  /**
-   * Programmatic smooth scroll using rAF interpolation.
-   * Scrolls the element matching `selector` from its current position to `targetScrollTop`
-   * over `durationMs` milliseconds.
-   */
-  async smoothScroll(selector: string, targetScrollTop: number, durationMs: number): Promise<void> {
-    await this.page.evaluate(
-      ({ selector, target, duration }) => {
-        return new Promise<void>((resolve) => {
-          const el = document.querySelector(selector) as HTMLElement;
-          if (!el) {
-            resolve();
-            return;
-          }
-          const start = el.scrollTop;
-          const delta = target - start;
-          const startTime = performance.now();
-          const step = () => {
-            const elapsed = performance.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            // Ease-in-out for more realistic scroll behavior
-            const eased =
-              progress < 0.5 ? 2 * progress * progress : 1 - (-2 * progress + 2) ** 2 / 2;
-            el.scrollTop = start + delta * eased;
-            if (progress < 1) {
-              requestAnimationFrame(step);
-            } else {
-              resolve();
+  async scrollTop(selector: string): Promise<number> {
+    return this.page.locator(selector).evaluate((element) => element.scrollTop);
+  }
+
+  /** Prepare row zero after the dynamic list's static header, before measuring. */
+  async scrollRowToTop(selector: string, rowId: string): Promise<void> {
+    await this.page.locator(selector).evaluate((element, id) => {
+      const row = element.querySelector(`[data-draggable-id="${id}"]`);
+      if (!row) throw new Error(`Missing scroll checkpoint row ${id}`);
+      const scrollport = element.getBoundingClientRect();
+      element.scrollTop += row.getBoundingClientRect().top - scrollport.top - element.clientTop;
+    }, rowId);
+    await this.waitForFrames(3);
+  }
+
+  /** Deliver a fixed sequence of logical rows, allowing the renderer's pixel geometry to vary. */
+  async scrollCheckpoints(options: {
+    selector: string;
+    checkpoints: number;
+    rowPrefix: string;
+    rowStep?: number;
+  }): Promise<WorkloadEvidence> {
+    return this.page.evaluate(async (opts) => {
+      const element = document.querySelector<HTMLElement>(opts.selector);
+      if (!element) throw new Error(`Missing scroll container ${opts.selector}`);
+      const rowStep = opts.rowStep ?? 1;
+      if (
+        !Number.isSafeInteger(opts.checkpoints) ||
+        opts.checkpoints < 1 ||
+        !Number.isSafeInteger(rowStep) ||
+        rowStep < 1
+      ) {
+        throw new Error('Scroll checkpoints and rowStep must be positive integers');
+      }
+      const rows = () => Array.from(element.querySelectorAll<HTMLElement>('[data-draggable-id]'));
+      const ids = () => rows().map((row) => row.getAttribute('data-draggable-id')!);
+      const nextFrame = () =>
+        new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const rowOffset = (row: HTMLElement) =>
+        row.getBoundingClientRect().top - element.getBoundingClientRect().top - element.clientTop;
+      const targetRow = (id: string) =>
+        rows().find((row) => row.getAttribute('data-draggable-id') === id);
+      const writeCheckpoint = (targetIndex: number, targetId: string) => {
+        const target = targetRow(targetId);
+        if (target && target.getBoundingClientRect().height > 0) {
+          element.scrollTop += rowOffset(target);
+          return;
+        }
+        // With zero overscan the next logical target can be outside the DOM. Use
+        // a rendered row only to estimate pixels, then settle the actual target.
+        const anchors = rows()
+          .flatMap((row) => {
+            const id = row.getAttribute('data-draggable-id')!;
+            const suffix = id.startsWith(opts.rowPrefix) ? id.slice(opts.rowPrefix.length) : '';
+            if (!/^\d+$/.test(suffix)) return [];
+            const index = Number(suffix);
+            const height = row.getBoundingClientRect().height;
+            return Number.isSafeInteger(index) && height > 0 ? [{ row, index, height }] : [];
+          })
+          .sort((a, b) => Math.abs(a.index - targetIndex) - Math.abs(b.index - targetIndex));
+        const anchor = anchors[0];
+        if (!anchor) throw new Error(`No measurable row geometry for checkpoint ${targetId}`);
+        element.scrollTop += rowOffset(anchor.row) + (targetIndex - anchor.index) * anchor.height;
+      };
+      const startScrollTop = element.scrollTop;
+      const visitedRows = new Set(ids());
+      const renderedRanges: string[] = [];
+      const checkpointRows: string[] = [];
+      let operations = 0;
+      let scrollWrites = 0;
+      let maxCheckpointOffsetPx = 0;
+      for (let i = 1; i <= opts.checkpoints; i++) {
+        const targetIndex = i * rowStep;
+        const targetId = `${opts.rowPrefix}${targetIndex}`;
+        let alignedOffset: number | undefined;
+        for (let attempt = 0; attempt < 9; attempt++) {
+          writeCheckpoint(targetIndex, targetId);
+          scrollWrites++;
+          await nextFrame();
+          await nextFrame();
+          // Presence is insufficient: a target can already exist in overscan before
+          // the scroll. Wait for its actual position after rendering/height updates.
+          const target = targetRow(targetId);
+          if (target && target.getBoundingClientRect().height > 0) {
+            const offset = Math.abs(rowOffset(target));
+            if (offset <= 2) {
+              alignedOffset = offset;
+              break;
             }
-          };
-          requestAnimationFrame(step);
-        });
-      },
-      { selector, target: targetScrollTop, duration: durationMs },
-    );
+          }
+        }
+        if (alignedOffset === undefined) {
+          throw new Error(
+            `Checkpoint ${i}: row ${targetId} did not render aligned with the scrollport`,
+          );
+        }
+        maxCheckpointOffsetPx = Math.max(maxCheckpointOffsetPx, alignedOffset);
+        const rendered = ids();
+        for (const id of rendered) visitedRows.add(id);
+        checkpointRows.push(targetId);
+        renderedRanges.push(`${rendered[0]}:${rendered.at(-1)}`);
+        operations++;
+      }
+      return {
+        operations,
+        scrollWrites,
+        startScrollTop,
+        endScrollTop: element.scrollTop,
+        scrollDistance: element.scrollTop - startScrollTop,
+        checkpointRows,
+        visitedRows: [...visitedRows],
+        renderedRanges,
+        finalTargetRow: checkpointRows.at(-1)!,
+        maxCheckpointOffsetPx,
+        completed: true,
+      };
+    }, options);
+  }
+
+  /** Read verified drop evidence after the performance window has closed. */
+  async observeDrop(options: {
+    hostSelector: string;
+    destinationDroppableId: string;
+    sourceId: string;
+  }): Promise<WorkloadEvidence> {
+    return this.page.evaluate(({ hostSelector, destinationDroppableId, sourceId }) => {
+      const host = document.querySelector(hostSelector);
+      if (!host) throw new Error(`Missing drop outcome host ${hostSelector}`);
+      const index = (attribute: string) => {
+        const value = host.getAttribute(attribute);
+        if (value === null || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+          throw new Error(`Missing or invalid drop outcome ${attribute}`);
+        }
+        return Number(value);
+      };
+      const sourceIndex = index('data-last-drop-source-index');
+      const destinationIndex = index('data-last-drop-destination-index');
+      const destination = Array.from(document.querySelectorAll('[data-droppable-id]')).find(
+        (element) => element.getAttribute('data-droppable-id') === destinationDroppableId,
+      );
+      const observedRow =
+        destination &&
+        Array.from(destination.querySelectorAll('[data-draggable-id]')).find(
+          (row) => row.getAttribute('data-draggable-id') === sourceId,
+        );
+      if (!observedRow)
+        throw new Error(
+          `Dragged item ${sourceId} was not observed in destination ${destinationDroppableId}`,
+        );
+      return {
+        sourceIndex,
+        destinationIndex,
+        sourceId: observedRow.getAttribute('data-draggable-id')!,
+        completed: true,
+      };
+    }, options);
+  }
+
+  async getDraggableId(droppableId: string, index: number): Promise<string> {
+    const id = await this.page
+      .locator(`[data-droppable-id="${droppableId}"] [data-draggable-id]`)
+      .nth(index)
+      .getAttribute('data-draggable-id');
+    if (!id) throw new Error(`Missing draggable ${index} in ${droppableId}`);
+    return id;
   }
 
   /**
-   * Simulate a full drag operation with stepped mouse moves.
-   * Mirrors the E2E drag pattern from `demo.page.ts`.
+   * Every pointer position receives two rendering opportunities before the next input. This
+   * prevents the library's per-frame coalescing from doing less work on a slower runner.
    */
   async simulateDrag(opts: {
     startX: number;
@@ -92,68 +212,57 @@ export class PerfPage {
     endY: number;
     steps?: number;
     holdDurationMs?: number;
-  }): Promise<void> {
-    const { startX, startY, endX, endY, steps = 15, holdDurationMs } = opts;
-
+  }): Promise<{ operations: number; holdElapsedMs: number }> {
+    const { startX, startY, endX, endY, steps = 20, holdDurationMs = 0 } = opts;
     await this.page.mouse.move(startX, startY);
     await this.page.mouse.down();
-
-    // Small initial move to pass drag threshold
-    await this.page.mouse.move(startX + 5, startY + 5, { steps: 2 });
-
-    // Wait for drag preview
-    const dragPreview = this.page.getByTestId('vdnd-drag-preview');
-    await expect(dragPreview).toBeVisible({ timeout: 2000 });
-
-    // Move to target
-    await this.page.mouse.move(endX, endY, { steps });
-    // Firefox finalization move
-    await this.page.mouse.move(endX, endY);
-
-    if (holdDurationMs) {
-      await this.page.waitForTimeout(holdDurationMs);
+    await this.page.mouse.move(startX + 5, startY + 5);
+    await this.waitForFrames();
+    await expect(this.page.getByTestId('vdnd-drag-preview')).toBeVisible({ timeout: 2000 });
+    for (let i = 1; i <= steps; i++) {
+      await this.page.mouse.move(
+        startX + 5 + ((endX - startX - 5) * i) / steps,
+        startY + 5 + ((endY - startY - 5) * i) / steps,
+      );
+      await this.waitForFrames();
     }
-
-    // Wait one rAF for position update
-    await this.page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
+    const holdStart = await this.page.evaluate(() => performance.now());
+    if (holdDurationMs) await this.page.waitForTimeout(holdDurationMs);
+    const holdElapsedMs = (await this.page.evaluate(() => performance.now())) - holdStart;
     await this.page.mouse.up();
-
-    // Wait for drag to complete
-    await expect(dragPreview).not.toBeVisible({ timeout: 2000 });
+    await this.waitForFrames();
+    return { operations: steps + 1, holdElapsedMs };
   }
 
-  /**
-   * Get bounding box of a virtual scroll container.
-   */
   async getContainerBox(list: 'list1' | 'list2') {
     const droppableId = list === 'list1' ? 'list-1' : 'list-2';
-    const container = this.page.locator(`[data-droppable-id="${droppableId}"] vdnd-virtual-scroll`);
-    return container.boundingBox();
+    return this.page
+      .locator(`[data-droppable-id="${droppableId}"] vdnd-virtual-scroll`)
+      .boundingBox();
   }
 
-  /**
-   * Get bounding box of a specific draggable item.
-   */
   async getItemBox(list: 'list1' | 'list2', index: number) {
     return this.getDraggableBox(list === 'list1' ? 'list-1' : 'list-2', index);
   }
 
-  /** Get bounding box of the `index`-th rendered draggable in a droppable. */
   async getDraggableBox(droppableId: string, index: number) {
-    const items = this.page.locator(`[data-droppable-id="${droppableId}"] [data-draggable-id]`);
-    return items.nth(index).boundingBox();
+    return this.page
+      .locator(`[data-droppable-id="${droppableId}"] [data-draggable-id]`)
+      .nth(index)
+      .boundingBox();
   }
 
-  /** Reset scroll position of both lists to the top. */
-  async resetScrollPositions(): Promise<void> {
-    for (const id of ['list-1', 'list-2']) {
-      await this.page.evaluate((droppableId) => {
-        const el = document.querySelector(
-          `[data-droppable-id="${droppableId}"] vdnd-virtual-scroll`,
-        ) as HTMLElement;
-        if (el) el.scrollTop = 0;
-      }, id);
-    }
-    await this.page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
+  async expectRenderedOrder(droppableId: string, ids: string[]): Promise<void> {
+    const rows = this.page.locator(`[data-droppable-id="${droppableId}"] [data-draggable-id]`);
+    await expect(async () => {
+      expect(
+        await rows.evaluateAll((elements) =>
+          elements.map((el) => el.getAttribute('data-draggable-id')),
+        ),
+      ).toEqual(expect.arrayContaining(ids));
+      for (let i = 0; i < ids.length; i++) {
+        expect(await rows.nth(i).getAttribute('data-draggable-id')).toBe(ids[i]);
+      }
+    }).toPass({ timeout: 5000 });
   }
 }

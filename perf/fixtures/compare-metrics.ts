@@ -1,191 +1,704 @@
-/**
- * Pure regression-gating logic for `compare.ts`.
- *
- * Kept free of I/O and `import.meta`/`process.exit` so it can be unit-tested
- * with `node --test` (see `compare-metrics.test.ts`).
- *
- * All gated metrics are "higher is worse", so only increases are treated as
- * regressions. A change is gated only when it is worse on the **median** by
- * more than the percent threshold AND by more than the noise floor — a
- * per-metric absolute minimum combined with a robust MAD-based band. This
- * removes the "p95-of-5 = max", "zero-baseline = +100%", and single-noisy-run
- * failure modes (issue #42, problems 4 & 5).
- *
- * Within-run guards cannot correct for cross-run/host drift — a run on a
- * different machine shifts *all* samples together (PR #63's own benchmark
- * disproved a min-based "sustained" guard exactly this way). That failure mode
- * is instead eliminated structurally: CI measures the PR's base and head on the
- * same runner in the same workflow run (see `.github/workflows/perf.yml`).
- */
+/** Paired benchmark decisions. Raw observations, rather than stored aggregates, are authoritative. */
+import {
+  EXPECTED_SCENARIOS,
+  type BenchmarkProfile,
+  type Comparison,
+  type Experiment,
+  type ScenarioReport,
+} from './run-types.ts';
+import {
+  computeFrameOverBudgetMs,
+  computeTotalBlockingTime,
+  countJankIntervals,
+  METRICS_SCHEMA_VERSION,
+} from './metric-math.ts';
 
-import type { AggregatedMetrics } from './statistics.ts';
+export const GATED_METRICS = ['taskDuration', 'layoutCount', 'recalcStyleCount'] as const;
+export const COUNT_GATED_METRICS = ['layoutCount', 'recalcStyleCount'] as const;
+export const MIN_ABS_DELTA = { taskDuration: 5, layoutCount: 1, recalcStyleCount: 3 } as const;
+export const EXIT_CODES = { pass: 0, regression: 1, inconclusive: 2, invalid: 3 } as const;
+export interface ComparisonOptions {
+  thresholdPercent?: number;
+  familyAlpha?: number;
+  /** Change only the decision rule after validating the source experiment and its protocol. */
+  decisionProfile?: BenchmarkProfile;
+}
 
-/**
- * Metrics evaluated by the regression gate, in report order. `p99FrameTime` is
- * deliberately absent: with the <300 frame intervals our scenarios collect,
- * nearest-rank p99 resolves to (or next to) the maximum, so it duplicates
- * `maxFrameGap` — the same noisy value must not be gated twice with different
- * floors. `scriptDuration` is absent too: runs of the same code drifted by up to
- * 26% (pages reload each iteration, so JIT and GC timing vary), past the percent
- * threshold; `taskDuration` includes script time and drifted at most 19%. Both stay
- * in the benchmark report as informational context.
- */
-export const GATED_METRICS = [
-  'totalBlockingTime',
-  'longTaskCount',
+const SCALAR_METRICS = [
+  'taskDuration',
   'layoutCount',
   'recalcStyleCount',
-  'taskDuration',
+  'scriptDuration',
+  'durationMs',
+  'frameCount',
   'avgFrameTime',
   'maxFrameGap',
-  'droppedFrames',
+  'jankIntervalCount',
+  'frameOverBudgetMs',
+  'longTaskCount',
+  'totalBlockingTime',
+  'windowStartMs',
+  'windowEndMs',
+  'counterWindowMs',
 ] as const;
-
-/**
- * Multiplier applied to the baseline **MAD** (median absolute deviation) to form
- * the per-metric noise band. MAD is used instead of stddev because a single
- * outlier in only five samples inflates stddev enough to mask a real, sustained
- * regression (e.g. a baseline of `[0,0,0,0,500]` has stddev ≈224 but MAD 0).
- * `3 × MAD` ≈ `2σ` for normally distributed data (σ̂ = 1.4826 × MAD).
- */
-export const REGRESSION_MAD_MULTIPLIER = 3;
-
-/**
- * Absolute minimum change (in each metric's own unit) that must be exceeded
- * before a percent regression is gated. Below these, a change is reported as
- * informational only. Values are deliberately conservative; see `perf/README.md`.
- */
-export const MIN_ABS_DELTA: Record<string, number> = {
-  totalBlockingTime: 20, // ms
-  longTaskCount: 2, // tasks
-  // Layout/style-recalc counts are near-deterministic (baseline MAD ≈ 0), so the
-  // floor only needs to guard genuinely small baselines. 25 was larger than the
-  // drag-within-list baseline median (24) — a full doubling of layout work slipped
-  // under it as "noise". Without the demo's debug panel (#97) the drag layout
-  // baselines are 10 (drag-within-list) and 6 (drag-within-virtual-for-list, where
-  // one forced layout per placeholder move adds 4).
-  layoutCount: 3, // count
-  recalcStyleCount: 10, // count
-  // Main-thread task time over the whole scenario, under 4x CPU throttling. Runs of
-  // the same code on one machine differed by up to 28 ms on the ~200 ms
-  // drag-within-virtual-for-list baseline (25% of it is 50 ms); the percent
-  // threshold covers larger baselines (at most +19% drift, 68 ms on ~360 ms).
-  taskDuration: 50, // ms
-  avgFrameTime: 1.5, // ms
-  maxFrameGap: 15, // ms
-  droppedFrames: 3, // frames
-  // p99FrameTime has no floor because it is not gated: the scenarios collect
-  // fewer than ~300 frame intervals, so nearest-rank p99 resolves to (or next
-  // to) the maximum — gating it would evaluate the same noisy value as
-  // maxFrameGap a second time, with a contradictory tolerance.
-};
-
-/** Why an over-threshold change was suppressed instead of gated. */
-export type SuppressedReason = 'below-floor' | 'within-noise-band';
-
-export interface MetricEvaluation {
-  metric: string;
-  /** Baseline median. */
-  baseline: number;
-  /** Current median. */
-  current: number;
-  absDelta: number;
-  percentChange: number;
-  /** Gated as a regression. */
-  regression: boolean;
-  /** Nominally over the percent threshold but suppressed as noise/below floor. */
-  suppressed: boolean;
-  /** Set when `suppressed` is true: which guard kept the change from gating. */
-  suppressedReason?: SuppressedReason;
+const FIXED_SCENARIOS = Object.entries(EXPECTED_SCENARIOS)
+  .filter(([, kind]) => kind === 'fixed-work')
+  .map(([name]) => name);
+const object = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+const nonempty = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+const nonnegative = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+const timestamp = (value: unknown): value is string =>
+  nonempty(value) &&
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+  Number.isFinite(Date.parse(value));
+const sameNumber = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.001, Math.abs(b) * 1e-9);
+const strings = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every(nonempty);
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (object(value))
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+      .join(',')}}`;
+  return JSON.stringify(value) ?? 'undefined';
 }
-
-/**
- * Percent change from baseline to current. A zero baseline yields +100% for any
- * nonzero current (and 0% when both are zero); the absolute floor in
- * {@link evaluateMetric} keeps that from gating on its own.
- */
-export function percentChange(baseline: number, current: number): number {
-  if (baseline === 0) return current === 0 ? 0 : 100;
-  return ((current - baseline) / Math.abs(baseline)) * 100;
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const half = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2;
 }
+const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
 
-/** Evaluate one metric's baseline vs current aggregates against the threshold. */
-export function evaluateMetric(
-  metric: string,
-  baseline: AggregatedMetrics,
-  current: AggregatedMetrics,
-  threshold: number,
-): MetricEvaluation {
-  const b = baseline.median;
-  const c = current.median;
-  const absDelta = c - b;
-  const pct = percentChange(b, c);
-
-  const floor = MIN_ABS_DELTA[metric] ?? 0;
-  const noiseBand = REGRESSION_MAD_MULTIPLIER * (baseline.mad ?? 0);
-
-  const worse = absDelta > 0;
-  const overThreshold = pct > threshold;
-  const overFloor = absDelta >= floor;
-  const overNoise = absDelta > noiseBand;
-
-  const regression = worse && overThreshold && overFloor && overNoise;
-  const suppressed = worse && overThreshold && !regression;
-
-  let suppressedReason: SuppressedReason | undefined;
-  if (suppressed) {
-    suppressedReason = !overFloor ? 'below-floor' : 'within-noise-band';
-  }
-
-  return {
-    metric,
-    baseline: b,
-    current: c,
-    absDelta,
-    percentChange: pct,
-    regression,
-    suppressed,
-    suppressedReason,
-  };
-}
-
-/** Why `compare.ts` refused to compare a baseline with the current run. */
-export interface BaselineIncompatibility {
-  /** The two sides were produced by different metrics schemas. */
-  schemaMismatch: boolean;
-  /** One side's results file mixes scenarios from different collector versions. */
-  mixedSchemas: boolean;
-  /** The two sides ran on different Playwright (browser) builds. */
-  playwrightMismatch: boolean;
-}
-
-/**
- * What to do about an incompatible baseline. CI never reads a saved baseline: it measures each
- * PR's base commit on the same runner (`.github/workflows/perf.yml`), so only a local saved
- * baseline is ever regenerated.
- */
-export function incompatibleBaselineAdvice(reason: BaselineIncompatibility): string[] {
-  if (reason.mixedSchemas) {
-    return [
-      'A results file mixes collector outputs (e.g. a stale file merged with a fresh one). ' +
-        'Re-run `npm run perf` for a clean one (for a saved local baseline, `npm run perf:baseline`).',
+/** Invalid or missing metadata always fails closed, including when both sides omit the same field. */
+export function validateScenarios(
+  input: unknown,
+  options: { sampleCount?: number; browserVersion?: string } = {},
+): string[] {
+  const errors: string[] = [];
+  if (!Array.isArray(input)) return ['Scenarios must be an array.'];
+  const seen = new Set<string>();
+  for (const [index, scenario] of input.entries()) {
+    const prefix = `scenario ${index}`;
+    if (!object(scenario) || !nonempty(scenario['scenario'])) {
+      errors.push(`${prefix}: missing scenario identity.`);
+      continue;
+    }
+    const name = scenario['scenario'];
+    if (seen.has(name)) errors.push(`${name}: duplicate scenario.`);
+    seen.add(name);
+    if (!(name in EXPECTED_SCENARIOS)) errors.push(`${name}: unknown scenario.`);
+    if (scenario['kind'] !== EXPECTED_SCENARIOS[name as keyof typeof EXPECTED_SCENARIOS])
+      errors.push(`${name}: wrong or missing workload kind.`);
+    if (scenario['metricsSchemaVersion'] !== METRICS_SCHEMA_VERSION)
+      errors.push(`${name}: unsupported metrics schema; schema 4 is required.`);
+    if (scenario['cpuThrottle'] !== 4) errors.push(`${name}: missing or unsupported CPU throttle.`);
+    if (scenario['setupCpuThrottle'] !== 1)
+      errors.push(`${name}: missing or unsupported setup CPU throttle.`);
+    if (scenario['completed'] !== true)
+      errors.push(`${name}: scenario did not complete successfully.`);
+    if (
+      !Number.isSafeInteger(scenario['warmupIterations']) ||
+      Number(scenario['warmupIterations']) < 0
+    )
+      errors.push(`${name}: missing or invalid warmup iteration count.`);
+    if (!object(scenario['workload']) || Object.keys(scenario['workload']).length === 0)
+      errors.push(`${name}: missing workload definition.`);
+    else if (
+      Object.values(scenario['workload']).some(
+        (value) => !(typeof value === 'string' || typeof value === 'boolean' || nonnegative(value)),
+      )
+    )
+      errors.push(`${name}: invalid workload definition.`);
+    const raw = scenario['raw'];
+    if (!Array.isArray(raw) || raw.length === 0) {
+      errors.push(`${name}: missing raw samples.`);
+      continue;
+    }
+    if (
+      !Number.isInteger(scenario['iterations']) ||
+      scenario['iterations'] !== raw.length ||
+      (options.sampleCount !== undefined && raw.length !== options.sampleCount)
+    )
+      errors.push(`${name}: raw sample count does not match the experiment/iterations.`);
+    const warmupRaw = scenario['warmupRaw'];
+    if (!Array.isArray(warmupRaw) || warmupRaw.length !== scenario['warmupIterations'])
+      errors.push(`${name}: retained warmup sample count does not match warmup iterations.`);
+    const observations = [
+      ...raw.map((sample, i) => ({ sample, label: `${name} sample ${i}` })),
+      ...(Array.isArray(warmupRaw)
+        ? warmupRaw.map((sample, i) => ({ sample, label: `${name} warmup sample ${i}` }))
+        : []),
     ];
+    for (const { sample, label } of observations) {
+      if (!object(sample)) {
+        errors.push(`${label}: invalid raw sample.`);
+        continue;
+      }
+      for (const metric of SCALAR_METRICS)
+        if (!nonnegative(sample[metric]))
+          errors.push(`${label}: ${metric} must be a finite nonnegative number.`);
+      // One renderer main thread cannot spend more wall time in tasks than
+      // the counter window. Allow 1ms for the counter snapshots' rounding.
+      if (
+        nonnegative(sample['taskDuration']) &&
+        nonnegative(sample['counterWindowMs']) &&
+        sample['taskDuration'] > sample['counterWindowMs'] + 1
+      )
+        errors.push(`${label}: task duration exceeds the counter window.`);
+      if (
+        nonnegative(sample['scriptDuration']) &&
+        nonnegative(sample['taskDuration']) &&
+        sample['scriptDuration'] > sample['taskDuration'] + 1
+      )
+        errors.push(`${label}: script duration exceeds total task duration.`);
+      for (const metric of [
+        'layoutCount',
+        'recalcStyleCount',
+        'frameCount',
+        'jankIntervalCount',
+        'longTaskCount',
+      ])
+        if (!Number.isInteger(sample[metric]))
+          errors.push(`${label}: ${metric} must be an integer.`);
+      if (sample['visibilityState'] !== 'visible')
+        errors.push(`${label}: page was not visibly measured.`);
+      if (
+        !nonempty(sample['browserVersion']) ||
+        (options.browserVersion !== undefined &&
+          sample['browserVersion'] !== options.browserVersion)
+      )
+        errors.push(`${label}: missing or inconsistent browser version.`);
+      if (
+        nonnegative(sample['windowStartMs']) &&
+        nonnegative(sample['windowEndMs']) &&
+        nonnegative(sample['durationMs'])
+      ) {
+        if (
+          sample['windowEndMs'] <= sample['windowStartMs'] ||
+          !sameNumber(sample['durationMs'], sample['windowEndMs'] - sample['windowStartMs'])
+        )
+          errors.push(`${label}: inconsistent measurement timestamps/duration.`);
+        if (
+          !nonnegative(sample['counterWindowMs']) ||
+          sample['counterWindowMs'] + 0.001 < sample['durationMs']
+        )
+          errors.push(`${label}: counters do not bracket the measurement window.`);
+      }
+      const frameTimes = sample['frameTimes'];
+      if (!Array.isArray(frameTimes) || frameTimes.length === 0 || !frameTimes.every(nonnegative))
+        errors.push(`${label}: missing or invalid frame intervals.`);
+      else {
+        if (
+          sample['frameCount'] !== frameTimes.length ||
+          !sameNumber(Number(sample['avgFrameTime']), mean(frameTimes)) ||
+          !sameNumber(Number(sample['maxFrameGap']), Math.max(...frameTimes)) ||
+          sample['jankIntervalCount'] !== countJankIntervals(frameTimes) ||
+          !sameNumber(Number(sample['frameOverBudgetMs']), computeFrameOverBudgetMs(frameTimes))
+        )
+          errors.push(`${label}: frame diagnostics disagree with raw intervals.`);
+        if (frameTimes.reduce((sum, gap) => sum + gap, 0) > Number(sample['durationMs']) + 0.001)
+          errors.push(`${label}: frame intervals exceed the measurement window.`);
+      }
+      const tasks = sample['longTasks'];
+      if (
+        !Array.isArray(tasks) ||
+        tasks.some(
+          (task) =>
+            !object(task) ||
+            !nonnegative(task['startTime']) ||
+            !nonnegative(task['duration']) ||
+            task['startTime'] < Number(sample['windowStartMs']) ||
+            task['startTime'] >= Number(sample['windowEndMs']),
+        )
+      )
+        errors.push(`${label}: missing or out-of-window long tasks.`);
+      else if (
+        sample['longTaskCount'] !== tasks.length ||
+        !sameNumber(Number(sample['totalBlockingTime']), computeTotalBlockingTime(tasks))
+      )
+        errors.push(`${label}: task diagnostics disagree with raw long tasks.`);
+      const workload = sample['workload'];
+      if (
+        !object(workload) ||
+        !Number.isInteger(workload['operations']) ||
+        Number(workload['operations']) <= 0 ||
+        workload['completed'] !== true
+      ) {
+        errors.push(`${label}: missing completed workload evidence.`);
+        continue;
+      }
+      if (
+        Object.values(workload).some(
+          (value) =>
+            !(
+              typeof value === 'string' ||
+              typeof value === 'boolean' ||
+              nonnegative(value) ||
+              strings(value)
+            ),
+        )
+      )
+        errors.push(`${label}: invalid workload observation.`);
+      if (
+        nonnegative(workload['startScrollTop']) &&
+        nonnegative(workload['endScrollTop']) &&
+        nonnegative(workload['scrollDistance']) &&
+        !sameNumber(
+          workload['scrollDistance'],
+          workload['endScrollTop'] - workload['startScrollTop'],
+        )
+      )
+        errors.push(`${label}: scroll distance does not match the observed start/end positions.`);
+      const definition = scenario['workload'];
+      if (
+        object(definition) &&
+        ((definition['checkpoints'] !== undefined &&
+          workload['operations'] !== definition['checkpoints']) ||
+          (definition['pointerSteps'] !== undefined &&
+            workload['operations'] !== Number(definition['pointerSteps']) + 1))
+      )
+        errors.push(`${label}: completed operations differ from the workload definition.`);
+      if (name.startsWith('drag-')) {
+        if (!nonempty(workload['sourceId'])) errors.push(`${label}: missing drag source outcome.`);
+        for (const field of ['startScrollTop', 'endScrollTop', 'scrollDistance'])
+          if (!nonnegative(workload[field]))
+            errors.push(`${label}: missing drag outcome ${field}.`);
+        if (scenario['kind'] === 'fixed-work') {
+          if (
+            !Number.isInteger(workload['destinationIndex']) ||
+            Number(workload['destinationIndex']) < 0 ||
+            (object(definition) &&
+              definition['destinationIndex'] !== undefined &&
+              workload['destinationIndex'] !== definition['destinationIndex'])
+          )
+            errors.push(`${label}: missing or incorrect drag destination outcome.`);
+          if (workload['scrollDistance'] !== 0)
+            errors.push(`${label}: fixed reorder unexpectedly scrolled.`);
+        } else if (
+          !nonnegative(workload['holdDurationMs']) ||
+          Number(workload['holdDurationMs']) <= 0 ||
+          !nonnegative(workload['holdElapsedMs']) ||
+          workload['holdElapsedMs'] < workload['holdDurationMs'] ||
+          Number(workload['scrollDistance']) <= 0
+        )
+          errors.push(`${label}: missing paced autoscroll progress/hold evidence.`);
+      }
+      if (name.includes('scroll') && scenario['kind'] === 'fixed-work') {
+        const visitedRows = workload['visitedRows'];
+        const checkpointRows = workload['checkpointRows'];
+        if (
+          !strings(visitedRows) ||
+          visitedRows.length === 0 ||
+          !strings(checkpointRows) ||
+          checkpointRows.length !== workload['operations'] ||
+          !nonempty(workload['finalTargetRow'])
+        )
+          errors.push(`${label}: missing fixed scroll checkpoints/visited rows.`);
+        else if (
+          checkpointRows.some((row) => !visitedRows.includes(row)) ||
+          checkpointRows.at(-1) !== workload['finalTargetRow']
+        )
+          errors.push(
+            `${label}: completed scroll checkpoints are absent from the observed rows/final target.`,
+          );
+        for (const field of ['startScrollTop', 'endScrollTop', 'scrollDistance'])
+          if (!nonnegative(workload[field]))
+            errors.push(`${label}: missing scroll outcome ${field}.`);
+      }
+    }
   }
-  const advice: string[] = [];
-  if (reason.schemaMismatch) {
-    advice.push(
-      'This is expected on the PR that changes the metrics schema: its base commit still runs ' +
-        'the old harness. CI measures each PR’s base commit afresh, so there is no baseline to ' +
-        'regenerate; the next PR based on a commit with this schema compares normally.',
+  for (const name of Object.keys(EXPECTED_SCENARIOS))
+    if (!seen.has(name)) errors.push(`${name}: missing expected scenario.`);
+  return errors;
+}
+
+function validateHealth(value: unknown, label: string): string[] {
+  if (!object(value)) return [`${label}: missing runner health snapshot.`];
+  const errors: string[] = [];
+  if (!timestamp(value['timestamp'])) errors.push(`${label}: missing timestamp.`);
+  if (
+    !Array.isArray(value['loadAverage']) ||
+    value['loadAverage'].length !== 3 ||
+    !value['loadAverage'].every(nonnegative)
+  )
+    errors.push(`${label}: invalid load average.`);
+  if (!nonnegative(value['freeMemoryBytes'])) errors.push(`${label}: invalid free memory.`);
+  if (
+    !object(value['cpuTime']) ||
+    !nonnegative(value['cpuTime']['idle']) ||
+    !nonnegative(value['cpuTime']['total']) ||
+    value['cpuTime']['idle'] > value['cpuTime']['total']
+  )
+    errors.push(`${label}: invalid CPU counters.`);
+  if (
+    !object(value['pressure']) ||
+    Object.values(value['pressure']).some((number) => number !== null && !nonnegative(number))
+  )
+    errors.push(`${label}: missing or invalid pressure diagnostics.`);
+  return errors;
+}
+
+export function validateExperiment(input: unknown): string[] {
+  if (!object(input)) return ['Experiment must be an object.'];
+  const errors: string[] = [];
+  if (input['formatVersion'] !== 1)
+    errors.push('Unsupported experiment format; version 1 is required.');
+  if (!Number.isSafeInteger(input['requestedBlocks']) || Number(input['requestedBlocks']) < 1)
+    errors.push('Missing or invalid predeclared requested block count.');
+  if (input['completed'] !== true)
+    errors.push('Experiment is incomplete or cancelled; completed evidence is required.');
+  if (input['mode'] !== 'comparison' && input['mode'] !== 'calibration')
+    errors.push('Missing or unsupported experiment mode.');
+  if (
+    input['profile'] !== undefined &&
+    input['profile'] !== 'counts' &&
+    input['profile'] !== 'timing'
+  )
+    errors.push('Unsupported experiment profile; use counts or timing.');
+  if (!nonempty(input['harnessHash'])) errors.push('Missing common harness hash.');
+  const environment = input['environment'];
+  if (!object(environment)) errors.push('Missing experiment environment.');
+  else {
+    for (const key of ['nodeVersion', 'playwrightVersion', 'browserVersion'])
+      if (!nonempty(environment[key])) errors.push(`Missing environment ${key}.`);
+    if (
+      !object(environment['viewport']) ||
+      environment['viewport']['width'] !== 1280 ||
+      environment['viewport']['height'] !== 720
+    )
+      errors.push('Missing or incompatible viewport.');
+    if (
+      environment['deviceScaleFactor'] !== 1 ||
+      environment['headless'] !== true ||
+      environment['cpuThrottle'] !== 4
+    )
+      errors.push('Missing or incompatible browser/throttle settings.');
+  }
+  const variants = input['variants'];
+  if (!object(variants) || !object(variants['base']) || !object(variants['head']))
+    errors.push('Missing base/head variant identity.');
+  else {
+    for (const variant of ['base', 'head']) {
+      const identity = variants[variant] as Record<string, unknown>;
+      if (!nonempty(identity['commit']) || !nonempty(identity['dependencyHash']))
+        errors.push(`${variant}: missing commit or dependency hash.`);
+      if (!nonempty(identity['libraryHash']) || !/^[a-f0-9]{64}$/.test(identity['libraryHash']))
+        errors.push(`${variant}: missing or invalid measured library source hash.`);
+    }
+    if (variants['base']['dependencyHash'] !== variants['head']['dependencyHash'])
+      errors.push('Dependency hashes differ; the common consumer stack is not comparable.');
+    if (
+      input['mode'] === 'calibration' &&
+      variants['base']['commit'] !== variants['head']['commit']
+    )
+      errors.push('Calibration must measure the same commit on both sides.');
+    if (
+      input['mode'] === 'calibration' &&
+      variants['base']['libraryHash'] !== variants['head']['libraryHash']
+    )
+      errors.push('Calibration must measure identical library source on both sides.');
+  }
+  const blocks = input['blocks'];
+  if (!Array.isArray(blocks) || blocks.length === 0) return [...errors, 'Missing balanced blocks.'];
+  if (blocks.length !== input['requestedBlocks'])
+    errors.push('Completed block count does not match the predeclared experiment plan.');
+  const seenIndices = new Set<number>();
+  const seenFiles = new Set<string>();
+  let previousEnd = -Infinity;
+  let referenceDefinitions: string | undefined;
+  for (const [index, block] of blocks.entries()) {
+    const label = `block ${index}`;
+    if (!object(block)) {
+      errors.push(`${label}: invalid block.`);
+      continue;
+    }
+    if (block['index'] !== index || seenIndices.has(Number(block['index'])))
+      errors.push(`${label}: duplicate or non-contiguous block index.`);
+    seenIndices.add(Number(block['index']));
+    const order = block['order'];
+    if (
+      canonical(order) !== canonical(['base', 'head', 'head', 'base']) &&
+      canonical(order) !== canonical(['head', 'base', 'base', 'head'])
+    )
+      errors.push(`${label}: order must be ABBA or BAAB.`);
+    const runs = block['runs'];
+    if (!Array.isArray(runs) || runs.length !== 4) {
+      errors.push(`${label}: exactly four runs are required.`);
+      continue;
+    }
+    const workloadReference = new Map<string, Record<string, unknown>>();
+    for (const [runIndex, run] of runs.entries()) {
+      const runLabel = `${label} run ${runIndex}`;
+      if (!object(run)) {
+        errors.push(`${runLabel}: invalid run.`);
+        continue;
+      }
+      if (!Array.isArray(order) || run['variant'] !== order[runIndex])
+        errors.push(`${runLabel}: variant differs from declared order.`);
+      if (!timestamp(run['startedAt'])) errors.push(`${runLabel}: missing start timestamp.`);
+      if (!nonempty(run['sourceFile']) || seenFiles.has(run['sourceFile']))
+        errors.push(`${runLabel}: missing or reused source file.`);
+      if (nonempty(run['sourceFile'])) seenFiles.add(run['sourceFile']);
+      errors.push(
+        ...validateHealth(run['healthBefore'], `${runLabel} before`),
+        ...validateHealth(run['healthAfter'], `${runLabel} after`),
+      );
+      if (
+        object(run['healthBefore']) &&
+        object(run['healthAfter']) &&
+        timestamp(run['healthBefore']['timestamp']) &&
+        timestamp(run['healthAfter']['timestamp']) &&
+        timestamp(run['startedAt'])
+      ) {
+        const before = Date.parse(run['healthBefore']['timestamp']);
+        const after = Date.parse(run['healthAfter']['timestamp']);
+        const start = Date.parse(run['startedAt']);
+        if (before < previousEnd || before > start || start > after)
+          errors.push(`${runLabel}: measurement/health timestamps are out of order.`);
+        previousEnd = after;
+      }
+      errors.push(
+        ...validateScenarios(run['scenarios'], {
+          sampleCount: 1,
+          browserVersion:
+            object(environment) && nonempty(environment['browserVersion'])
+              ? environment['browserVersion']
+              : undefined,
+        }).map((reason) => `${runLabel}: ${reason}`),
+      );
+      if (!Array.isArray(run['scenarios'])) continue;
+      const scenarios = run['scenarios'].filter(object);
+      const definitions = canonical(
+        scenarios
+          .map((scenario) => ({
+            scenario: scenario['scenario'],
+            kind: scenario['kind'],
+            schema: scenario['metricsSchemaVersion'],
+            throttle: scenario['cpuThrottle'],
+            setupThrottle: scenario['setupCpuThrottle'],
+            warmupIterations: scenario['warmupIterations'],
+            workload: scenario['workload'],
+          }))
+          .sort((a, b) => String(a.scenario).localeCompare(String(b.scenario))),
+      );
+      referenceDefinitions ??= definitions;
+      if (definitions !== referenceDefinitions)
+        errors.push(`${runLabel}: workload definitions/settings differ between runs.`);
+      for (const scenario of scenarios) {
+        if (
+          scenario['kind'] !== 'fixed-work' ||
+          !nonempty(scenario['scenario']) ||
+          !Array.isArray(scenario['raw']) ||
+          !object(scenario['raw'][0]) ||
+          !object(scenario['raw'][0]['workload'])
+        )
+          continue;
+        const workload = scenario['raw'][0]['workload'];
+        const old = workloadReference.get(scenario['scenario']);
+        workloadReference.set(scenario['scenario'], workload);
+        if (!old) continue;
+        for (const key of [
+          'operations',
+          'checkpointRows',
+          'sourceId',
+          'destinationIndex',
+          'finalTargetRow',
+        ])
+          if (canonical(old[key]) !== canonical(workload[key]))
+            errors.push(`${runLabel} ${scenario['scenario']}: unequal completed work (${key}).`);
+        // Overscan/rendering strategies may legitimately render different extra
+        // rows. Completed checkpoint IDs define equal user-visible work; the
+        // full visitedRows/renderedRanges and pixel scroll positions remain
+        // diagnostic evidence. Geometry changes may change pixels while the
+        // same logical checkpoint path is completed on both variants.
+      }
+    }
+  }
+  return [...new Set(errors)];
+}
+
+/** Exact distribution-free median interval. null means the available blocks cannot bound that side. */
+export function medianInterval(values: number[], alpha: number): [number | null, number | null] {
+  const n = values.length;
+  if (n === 0) return [null, null];
+  const sorted = [...values].sort((a, b) => a - b);
+  // P(Binomial(n,.5) <= k-1) computed from exact binomial coefficients.
+  let probability = 2 ** -n;
+  let tail = 0;
+  let accepted = 0;
+  for (let k = 1; k <= Math.floor((n + 1) / 2); k++) {
+    tail += probability;
+    if (2 * tail <= alpha) accepted = k;
+    else break;
+    probability *= (n - k + 1) / k;
+  }
+  return accepted === 0 ? [null, null] : [sorted[accepted - 1], sorted[n - accepted]];
+}
+
+export function compareExperiment(input: unknown, options: ComparisonOptions = {}): Comparison {
+  const thresholdPercent = options.thresholdPercent ?? 10;
+  const familyAlpha = options.familyAlpha ?? 0.05;
+  const reasons = validateExperiment(input);
+  if (!Number.isFinite(thresholdPercent) || thresholdPercent < 0)
+    reasons.push('Threshold must be finite and nonnegative.');
+  if (!Number.isFinite(familyAlpha) || familyAlpha <= 0 || familyAlpha >= 1)
+    reasons.push('Family alpha must be between zero and one.');
+  if (
+    options.decisionProfile !== undefined &&
+    options.decisionProfile !== 'counts' &&
+    options.decisionProfile !== 'timing'
+  )
+    reasons.push('Unsupported decision profile; use counts or timing.');
+  const blocks = object(input) && Array.isArray(input['blocks']) ? input['blocks'].length : 0;
+  const requestedProfile = object(input) ? input['profile'] : undefined;
+  const sourceProfile: BenchmarkProfile | undefined =
+    requestedProfile === undefined || requestedProfile === 'timing'
+      ? 'timing'
+      : requestedProfile === 'counts'
+        ? 'counts'
+        : undefined;
+  if (reasons.length)
+    return {
+      verdict: 'invalid',
+      profile: sourceProfile,
+      reasons,
+      rows: [],
+      blocks,
+      thresholdPercent,
+    };
+  const experiment = input as Experiment;
+  const profile = options.decisionProfile ?? sourceProfile;
+  const rows: Comparison['rows'] = [];
+  const metrics = profile === 'counts' ? COUNT_GATED_METRICS : GATED_METRICS;
+  const checks = FIXED_SCENARIOS.length * metrics.length;
+  for (const scenario of FIXED_SCENARIOS)
+    for (const metric of metrics) {
+      const pairs = experiment.blocks.map((block) => {
+        const cost = (variant: 'base' | 'head') =>
+          mean(
+            block.runs
+              .filter((run) => run.variant === variant)
+              .map(
+                (run) =>
+                  (run.scenarios.find((report) => report.scenario === scenario) as ScenarioReport)
+                    .raw[0][metric],
+              ),
+          );
+        const base = cost('base');
+        const head = cost('head');
+        return {
+          base,
+          head,
+          excess: head - base - Math.max(MIN_ABS_DELTA[metric], (base * thresholdPercent) / 100),
+        };
+      });
+      const baseline = median(pairs.map((pair) => pair.base));
+      const current = median(pairs.map((pair) => pair.head));
+      const excesses = pairs.map((pair) => pair.excess);
+      // Counts deliberately use a deterministic decision rule. The smaller
+      // experiment does not provide an inferential uncertainty estimate.
+      const interval: Comparison['rows'][number]['interval'] =
+        profile === 'counts' ? [null, null] : medianInterval(excesses, familyAlpha / checks);
+      const verdict =
+        profile === 'counts'
+          ? median(excesses) > 0
+            ? 'regression'
+            : 'pass'
+          : interval[0] !== null && interval[0] > 0
+            ? 'regression'
+            : interval[1] !== null && interval[1] <= 0
+              ? 'pass'
+              : 'inconclusive';
+      rows.push({
+        scenario,
+        metric,
+        baseline,
+        current,
+        delta: median(pairs.map((pair) => pair.head - pair.base)),
+        changePercent:
+          baseline === 0 ? (current === 0 ? 0 : null) : ((current - baseline) / baseline) * 100,
+        interval,
+        verdict,
+      });
+    }
+  const verdict = rows.some((row) => row.verdict === 'regression')
+    ? 'regression'
+    : rows.some((row) => row.verdict === 'inconclusive')
+      ? 'inconclusive'
+      : 'pass';
+  if (profile === 'timing' && rows.some((row) => row.interval[0] === null))
+    reasons.push(
+      'Too few independent balanced blocks for simultaneous median confidence bounds; collect more blocks.',
     );
-  }
-  if (reason.playwrightMismatch) {
-    advice.push(
-      'CI measures both sides with the head’s Playwright, so this comes from a saved local baseline.',
+  if (
+    profile === 'timing' &&
+    rows.some((row) => row.verdict === 'inconclusive' && row.interval[0] !== null)
+  )
+    reasons.push(
+      'A confidence interval overlaps the practical regression budget; the available evidence is inconclusive.',
     );
-  }
-  advice.push(
-    'Local comparisons: save a new baseline on the current harness (`npm run perf:baseline`).',
-  );
-  return advice;
+  if (verdict === 'regression')
+    reasons.push(
+      profile === 'counts'
+        ? 'At least one count median exceeds its practical regression budget.'
+        : 'At least one simultaneous confidence interval is wholly above its practical regression budget.',
+    );
+  if (profile === 'counts')
+    reasons.push(
+      'Count checks use a deterministic median paired-block budget rule; no statistical uncertainty is estimated. Task time and paced interactions remain diagnostic.',
+    );
+  if (
+    experiment.mode === 'calibration' &&
+    experiment.environment['control'] === 'none' &&
+    verdict === 'regression'
+  )
+    reasons.push(
+      'Unchanged-code calibration produced a false alarm of the decision procedure; this is calibration evidence, not a library change.',
+    );
+  if (
+    experiment.mode === 'calibration' &&
+    experiment.environment['control'] !== undefined &&
+    experiment.environment['control'] !== 'none'
+  )
+    reasons.push(
+      `Calibration control ${experiment.environment['control']} measures gate sensitivity; its verdict is not a PR regression.`,
+    );
+  if (verdict === 'pass')
+    reasons.push(
+      profile === 'counts'
+        ? 'All count medians are within their practical regression budgets.'
+        : 'Every primary confidence interval is within its practical regression budget. Paced interaction diagnostics do not gate.',
+    );
+  return { verdict, profile, reasons, rows, blocks, thresholdPercent };
+}
+
+export function renderComparisonMarkdown(result: Comparison): string {
+  const number = (value: number | null) => (value === null ? 'unbounded' : value.toFixed(2));
+  const counts = result.profile === 'counts';
+  const lines = [
+    '## Performance comparison',
+    '',
+    `**Verdict: ${result.verdict.toUpperCase()}** · ${result.profile ?? 'timing'} profile · ${result.blocks} balanced blocks · ${result.thresholdPercent}% practical budget`,
+    '',
+    ...result.reasons.map((reason) => `- ${reason}`),
+  ];
+  if (result.rows.length)
+    lines.push(
+      '',
+      `| Scenario | Metric | Base | Head | Change | ${counts ? 'Uncertainty estimate' : 'Median budget excess interval'} | Verdict |`,
+      '|---|---|---:|---:|---:|---|---|',
+      ...result.rows.map(
+        (row) =>
+          `| ${row.scenario} | ${row.metric} | ${number(row.baseline)} | ${number(row.current)} | ${row.changePercent === null ? 'undefined (zero base)' : `${row.changePercent.toFixed(1)}%`} | ${counts ? 'not estimated' : `[${number(row.interval[0])}, ${number(row.interval[1])}]`} | ${row.verdict} |`,
+      ),
+      '',
+      counts
+        ? 'Count checks use a deterministic median paired-block budget rule without statistical uncertainty estimates. Task time and paced interactions are diagnostic. The budget is the larger of the percent threshold and each metric’s absolute floor. Raw samples are authoritative.'
+        : 'Intervals are simultaneous distribution-free median bounds over independent balanced blocks (Bonferroni across primary checks, 95% by default). The budget is the larger of the percent threshold and each metric’s absolute floor. Raw samples are authoritative; paced workloads are diagnostic.',
+    );
+  return lines.join('\n') + '\n';
 }

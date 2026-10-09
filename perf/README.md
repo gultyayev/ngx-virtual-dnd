@@ -1,243 +1,337 @@
-# Performance Benchmarks
+# Performance benchmarks
 
-Playwright-driven micro-benchmarks that gate pull requests by measuring the
-PR's **base and head on the same CI runner in the same workflow run** (A/B) and
-comparing the two. This document records the **methodology** behind the numbers
-so the regression gate stays trustworthy in both directions (no false alarms,
-no missed regressions).
+The benchmark compares library revisions using a common production-built consumer,
+browser, and measurement harness. Balanced adjacent base/head blocks reduce
+execution-order drift. Raw measurements and completed-work checks make the results
+auditable. An experiment reports **pass**, **regression**, **inconclusive**, or
+**invalid**; a standalone suite is diagnostic.
 
-A committed baseline was used first and abandoned (#62, #63): PR runs happen on
-different shared-runner hosts than the run that produced the baseline, and
-cross-run/host drift shifts **every** sample of a run together. No within-run
-statistical guard can tell that apart from a real regression — a min-based
-"sustained" check was tried and disproven by its own PR's benchmark. Measuring
-both sides back-to-back on one host removes the drift from the comparison
-instead of trying to model it.
-
-## Layout
-
-| Path                            | Purpose                                                             |
-| ------------------------------- | ------------------------------------------------------------------- |
-| `scenarios/*.perf.ts`           | One benchmark per interaction (scroll, drag, autoscroll, dynamic).  |
-| `fixtures/perf.page.ts`         | Page object: opens demo pages without drag-state debug output.      |
-| `fixtures/metrics-collector.ts` | In-page long-task / frame collection and CDP counters.              |
-| `fixtures/metric-math.ts`       | Pure metric derivation (TBT, dropped frames, CDP counters, report). |
-| `fixtures/statistics.ts`        | Pure aggregation (mean, median, p95, stddev).                       |
-| `fixtures/compare-metrics.ts`   | Pure regression-gating decision.                                    |
-| `compare.ts`                    | Baseline vs current comparison + Markdown output (CLI).             |
-| `report.ts`                     | Human-readable benchmark report (CLI).                              |
-| `baselines/`                    | Locally captured reference runs (gitignored, nothing committed).    |
+PRs run a short **counts** profile by default: three balanced blocks, no warmups,
+and layout/style count budgets. Task timing is diagnostic, so a computational
+slowdown that preserves these counts can pass. Apply the **`perf:timing`** PR
+label to request twenty blocks with warmups and timing bounds. Timing regressions
+and inconclusive bounds remain advisory; count budget regressions and invalid or
+incomplete evidence fail CI in both profiles. The timing profile derives its
+required count decision from the same validated samples. A required timing gate needs repeated
+unchanged-code A/A experiments and positive controls on the PR runner class.
+A single passing calibration does not establish a false-alarm rate.
 
 ## Commands
 
+Install dependencies and Chromium, then build before measuring:
+
 ```bash
-npm run perf            # run the benchmark scenarios (writes perf/results/latest.json)
-npm run perf:report     # render the latest run as a Markdown table
-npm run perf:compare    # compare latest run against a saved local baseline
-npm run perf:test       # unit-test the pure statistics / gating logic (node --test)
-npm run perf:baseline   # run perf and save the result as the local baseline
+npm ci
+npx playwright install chromium
+npm run perf:build
+npm run perf
+npm run perf:report -- --input perf/results/latest.json
+npm run perf:test
 ```
 
-`perf:compare` flags: `--threshold <pct>` (default 25), `--baseline <file>`,
-`--current <file>`, `--output <file>`, `--allow-baseline-mismatch` (downgrade an
-incompatible-baseline failure to a warning). It exits non-zero — failing CI — on
-a detected regression, a missing scenario/metric, or an incompatible baseline.
+`perf:build` builds the library and production consumer and records their source,
+fixture, declared dependency, actual installed dependency, and output hashes.
+The benchmark serves static output; Angular compilation and development-server
+rebuilds are outside the experiment. Rebuild after changing library source,
+the measured consumer, or dependencies. Experiments reject stale builds.
 
-## Measured pages
+To compare against a Git revision, prepare a clean, disposable base checkout
+with the head's harness and dependency manifests:
 
-The scenarios run on the demo pages (`/`, `/virtual-viewport`, `/dynamic-height`),
-always opened with `?dragStateDebug=false` (`PerfPage.goto`). That flag removes
-the pages' drag-state debug output, which E2E tests read to synchronize with the
-drag scheduler: the main demo's debug panel and the hidden `app-drag-state-debug`
-mirror elsewhere. Both render the cursor position, so they re-render on every drag
-frame, and the main demo's panel re-renders the whole `DemoComponent` template and
-every rendered row of both lists with it (#97). `PerfPage.goto` fails the run when a
-page still renders that output, so a page that stops honoring the flag can't
-silently skew the numbers again.
+```bash
+git worktree add --detach ../perf-base origin/master
+npm run perf:prepare -- --base ../perf-base
+npm ci
+npm --prefix ../perf-base ci
+npm --prefix ../perf-base run perf:build
+npm run perf:build -- --fixture ../perf-base
+npm run perf:ab -- --base ../perf-base --profile counts
+npm run perf:compare
+npm run perf:report
+```
 
-For the same reason the main demo subscribes to `placeholderMove` in its
-constructor instead of binding it in the template: a template listener marks the
-demo's view dirty, so each placeholder move (about one every three frames during
-autoscroll) re-rendered the demo and every row. Keep high-frequency outputs out of
-the measured pages' templates.
+Replace `origin/master` with the desired base revision. `perf:prepare` replaces
+the disposable checkout's harness, dependency manifests, and server scripts while
+preserving its consumer, compiler configuration, library source, and Git revision.
+It refuses a dirty base checkout or the head checkout itself. Both builds use
+**the base consumer**: the candidate build stages it in a temporary directory
+against the candidate's compiled library. Head-only demo bindings to new APIs
+cannot break the baseline, and staging preserves both source trees.
 
-Measured against the previous page (5 runs before, 3 after, alternated on one
-machine), `drag-within-list-1000` went from 24 layouts to 10 and about 15% less
-main-thread task time, and `drag-between-lists-autoscroll-1000` from 88 layouts
-to 78 and about 10% less task time. What remains is the library's work,
-including the consumer row templates it renders.
+The head supplies the harness and browser for **both** variants. Both checkouts
+need current `perf:build` output. Their measured consumer and dependencies must
+match; only the library varies. An incompatible library/consumer combination
+cannot produce comparable evidence. Dependency changes require a separate
+experiment: this comparison installs the head lockfile on both sides. Builds
+validate the installed hidden lockfile and package versions against that lockfile,
+then freeze their fingerprint for the experiment.
 
-| Scenario                             | Page                           | Interaction                                                    |
-| ------------------------------------ | ------------------------------ | -------------------------------------------------------------- |
-| `scroll-2000-items`                  | `/`                            | Smooth-scroll a `vdnd-virtual-scroll` list                     |
-| `drag-within-list-1000`              | `/`                            | Drag within a `vdnd-virtual-scroll` list                       |
-| `drag-between-lists-autoscroll-1000` | `/`                            | Drag to the other list and hold at its edge (autoscroll)       |
-| `drag-within-virtual-for-list`       | `/virtual-viewport`            | Drag within a `vdnd-virtual-viewport` list (`*vdndVirtualFor`) |
-| `dynamic-height-scroll`              | `/dynamic-height`              | Smooth-scroll a dynamic-height `*vdndVirtualFor` list          |
-| `dynamic-height-long-list-scroll`    | `/dynamic-height?count=100000` | Scroll through rows never measured before                      |
+To measure already prepared checkouts:
 
-## Measurement methodology
+```bash
+npm run perf:ab -- --base /path/to/base --head /path/to/head --profile counts
+# Full timing comparison with a declared twenty-block budget:
+npm run perf:ab -- --base /path/to/base --head /path/to/head --profile timing
+npm run perf:compare -- --experiment perf/results/experiment.json --threshold 10
+npm run perf:report -- --input perf/results/experiment.json
+```
 
-Each scenario runs `1` warmup + `5` measured iterations under `4x` CPU
-throttling. For every iteration the collector:
+`perf:ab` defaults to the current checkout for both paths and the timing profile
+with 20 blocks. `--profile counts` defaults to 3 blocks and zero warmups.
+`--blocks` overrides the predeclared budget. `--base-port` and `--head-port`
+replace ports 4300 and 4301; `--output` selects the experiment JSON path.
+One timing block is useful for a smoke check, but returns inconclusive.
 
-1. **Creates a single long-task `PerformanceObserver` per iteration and
-   disconnects it** in `collectObserverResults`. A leftover observer from an
-   earlier iteration would otherwise keep firing into the current iteration's
-   array and over-count long tasks.
-2. **Omits `buffered: true`** and **filters entries to the scenario window** via
-   a `performance.now()` start bound (`filterLongTasksSince`). Long tasks from
-   page load and warmup are never attributed to the measured scenario.
-3. Classifies a frame as **dropped only when the interval exceeds ~25 ms**
-   (`DROPPED_FRAME_THRESHOLD_MS`, ≈1.5× the 16.67 ms vsync interval). Ordinary
-   60 Hz scheduling jitter (16.8 ms) is not counted the same as a real stall.
-4. Reads the renderer's cumulative counters from CDP `Performance.getMetrics`
-   before and after the scenario and reports the deltas: `layoutCount`,
-   `recalcStyleCount`, and main-thread time, `taskDuration` (`TaskDuration`, all
-   main-thread tasks: script, style, layout, paint, …) and `scriptDuration`
-   (`ScriptDuration`), converted to ms. These are wall times of the tasks (CDP's
-   default `timeTicks` domain), which include the CPU throttling. The frame
-   metrics only move when a frame misses its budget; task time also counts extra
-   work that still fits in the frame, but only a change beyond the percent
-   threshold gates it. It includes the harness's own page calls (Playwright's
-   waits, the frame tracker), which differ little between the two sides. A
-   missing counter fails the run instead of reading as 0.
+```bash
+# Unchanged-code A/A: both paths must contain identical library source/revisions.
+npm run perf:a/a -- --base . --head . --blocks 20
 
-## Regression gating
+# Known busy work during each head measurement:
+npm run perf:a/a -- --base . --head . --blocks 20 \
+  --control script --control-work-ms 50
 
-The gate compares the **median** of the 5 samples, not p95. With only 5 samples
-the p95 index resolves to the maximum, so p95 gated on the single noisiest run.
-The median is the representative central value.
+# Environmental sensitivity to CPU contention:
+npm run perf:a/a -- --base . --head . --blocks 20 --control cpu
+```
 
-A metric (all gated metrics are "higher is worse") is flagged as a **REGRESSION**
-only when the current median is worse than the baseline median by **all** of:
+Controls require calibration mode and the timing profile, are recorded in the
+artifact, and are never ordinary PR comparisons. `--control-work-ms` ranges
+from 0 to 1000; injected absolute work is not a guaranteed percentage slowdown.
+The CPU control tests contention sensitivity rather than a library regression.
+The script control runs in a browser timer task so script counters, long-task
+observers, and frame intervals can observe it. Busy work executed directly
+through DevTools can visibly stall while normal instrumentation omits it.
 
-- more than the percent `--threshold` (default 25%),
-- more than a per-metric **absolute floor** (`MIN_ABS_DELTA` in
-  `fixtures/compare-metrics.ts`), and
-- more than **3× the baseline MAD** (median absolute deviation).
+`perf:compare` accepts `--experiment`, `--threshold`, `--output` (Markdown), and
+`--json` (machine-readable verdict). Its default input is
+`perf/results/experiment.json` and threshold is 10%. Exit codes are:
 
-These are **within-run** guards for iteration-level noise; run-level drift is
-handled structurally by the same-runner A/B setup, not statistically. (A
-min-based "sustained" guard was tried for cross-run drift and reverted: drift
-shifts all five samples together, so the guard both failed to catch the
-observed false positives and let one unusually fast sample veto genuine
-regressions.)
+| Code | Verdict      | Counts profile                                          | Timing profile                                          |
+| ---- | ------------ | ------------------------------------------------------- | ------------------------------------------------------- |
+| 0    | pass         | All paired median count excesses are within budget.     | All primary bounds are within their practical budgets.  |
+| 1    | regression   | At least one median count excess exceeds budget.        | At least one bound is wholly above its budget.          |
+| 2    | inconclusive | Not used for a complete valid count comparison.         | Too few blocks or uncertainty overlaps a budget.        |
+| 3    | invalid      | Missing, corrupt, incomplete, or incomparable evidence. | Missing, corrupt, incomplete, or incomparable evidence. |
 
-An over-threshold change that fails one of the guards is reported as
-informational with the guard that suppressed it: `noise (below floor)` or
-`noise (within band)`.
+`--decision-profile counts` derives the count budget decision from validated
+timing evidence, as CI does to keep count budgets required. It changes the
+decision metrics without changing the recorded protocol, warmups, or raw samples.
+It cannot bypass integrity checks or turn incomplete evidence into a pass.
 
-`scriptDuration` is reported but **not gated**: every iteration reloads the page,
-so JIT compilation and GC timing vary, and runs of the same code on one machine
-differed by up to 26% (past the 25% threshold). `taskDuration`, which includes
-script time, drifted at most 19% between those runs and is gated. The one
-larger task-time difference (+27%) had the first benchmark run in a fresh
-container as the slower side; CI measures the base first, so a cold start there
-slows the base, not the head.
+`perf:report` defaults to `experiment.json` when present. A failed preflight with
+only `comparison.json` is reported as invalid instead of falling back to an older
+suite; a summary without raw evidence cannot establish a valid verdict. With
+neither experiment nor summary, it uses `latest.json`. It accepts `--input`,
+`--output`, `--threshold`, and `--details`. It exits 3 for invalid evidence and 0
+for a rendered report; use `perf:compare` for the verdict's exit code.
 
-`p99FrameTime` is reported but **not gated**: the scenarios collect fewer than
-~300 frame intervals, so nearest-rank p99 resolves to (or right next to) the
-maximum — gating it would evaluate the same noisy value as `maxFrameGap` a
-second time with a contradictory tolerance (exactly how #63's first attempt
-stayed red: identical 26.5 → 37.7 values were suppressed under `maxFrameGap`'s
-15 ms floor and gated under p99's 5 ms floor).
+The default report shows the verdict and one row per scenario, with task time,
+layout/style changes, and uncertain or regressing metrics. A counts pass refers
+explicitly to count checks; its task column is marked diagnostic. Unchanged
+library source is labelled a harness check, so a harness-only PR does not imply
+a library speedup. The original runner error appears first for incomplete runs.
+CI uses this compact report in the PR comment and job summary. `--details`
+provides metric tables, workloads, confidence intervals, hashes, environment
+settings, and runner health. CI saves it as `report-details.md` with raw JSON.
 
-MAD is used instead of standard deviation because, with only five samples, a
-single outlier inflates stddev enough to hide a real, sustained regression — a
-baseline of `[0,0,0,0,500]` has stddev ≈224 but MAD 0, so a steady jump to 100 ms
-is correctly gated rather than swallowed by the band. `3 × MAD ≈ 2σ` for normal
-data.
+```bash
+npm run perf:report -- --input perf/results/experiment.json
+npm run perf:report -- --input perf/results/experiment.json --details \
+  --output perf/results/report-details.md
+```
 
-The absolute floor is what keeps a **zero baseline** from auto-failing: a metric
-that was `0` and becomes `1` (e.g. a single 51 ms long task) is `+100%` but stays
-below its floor, so it is reported as informational ("noise (below floor)")
-rather than gating. A floor must guard small baselines **without exceeding
-typical baseline medians themselves** — layout/style-recalc counts are
-near-deterministic (MAD ≈ 0), and their original floor of 25 was larger than the
-drag-within-list layout baseline (24), which let a full doubling of layout work
-slip through as "noise". Without the debug panel (schema 3) the drag layout
-baselines are 10 (drag-within-list) and 6 (drag-within-virtual-for-list), so the
-layout floor is 3: one forced layout per placeholder move adds 4 layouts to the
-`*vdndVirtualFor` drag. The task-time floor sits above run-to-run drift on the
-smallest baseline (up to 28 ms on the ~200 ms drag-within-virtual-for-list) and
-at 25% of it; the percent threshold covers the larger baselines. Current floors:
+`perf:baseline` remains a local snapshot convenience. Historical snapshots can
+be inspected with `perf:compare -- --baseline <file> --current <file>`, but valid
+unpaired evidence always returns inconclusive. Old schemas and missing metadata
+are invalid; compatibility checks cannot be bypassed.
 
-| Metric            | Floor | Unit   |
-| ----------------- | ----- | ------ |
-| totalBlockingTime | 20    | ms     |
-| longTaskCount     | 2     | tasks  |
-| layoutCount       | 3     | count  |
-| recalcStyleCount  | 10    | count  |
-| taskDuration      | 50    | ms     |
-| avgFrameTime      | 1.5   | ms     |
-| maxFrameGap       | 15    | ms     |
-| droppedFrames     | 3     | frames |
+## Measured work
 
-## Baseline compatibility (fail closed)
+Demo pages open with `?dragStateDebug=false`. The page object rejects visible
+drag-state debug output: rendering cursor diagnostics can add a consumer-wide
+render every drag frame. Keep high-frequency debug output and template listeners
+out of measured pages.
 
-A comparison is only meaningful when both sides were produced by the **same
-harness**. `perf:compare` fails closed — before comparing any numbers — when the
-baseline is not comparable to the current run:
+| Scenario                             | Page                           | Workload                                             |
+| ------------------------------------ | ------------------------------ | ---------------------------------------------------- |
+| `scroll-2000-items`                  | `/`                            | Fixed row checkpoints through a 2000-item list       |
+| `drag-within-list-1000`              | `/`                            | Fixed drag updates and verified reorder              |
+| `drag-within-virtual-for-list`       | `/virtual-viewport`            | Fixed drag updates and verified reorder              |
+| `dynamic-height-scroll`              | `/dynamic-height`              | Fixed row checkpoints through dynamic rows           |
+| `dynamic-height-long-list-scroll`    | `/dynamic-height?count=100000` | Fixed checkpoints through previously unmeasured rows |
+| `drag-between-lists-autoscroll-1000` | `/`                            | Paced autoscroll and verified cross-list transfer    |
 
-- **Metrics schema.** Each scenario report records `metricsSchemaVersion`
-  (`fixtures/metric-math.ts`). Bump it whenever a change alters what a number
-  _means_ (long-task window, dropped-frame threshold, aggregation, the page a
-  scenario measures). The pre-#42 harness — leaking observer, `buffered: true`,
-  `>16.7ms` dropped frames — is schema 1; schema 2 measured the main demo with
-  its debug panel re-rendering every drag frame; this collector is schema 3
-  (pages without drag-state debug output, plus main-thread time, #97). Comparing across
-  schemas would attribute a **semantics** change (e.g. dropped frames 60 → 0)
-  to the library.
-- **Playwright version.** Embedded in each side's JSON report; different
-  browser builds produce different numbers.
-- **Mixed or partially unversioned runs.** A results file is only healthy when
-  **every** scenario carries the **same numeric** `metricsSchemaVersion`. More
-  than one version, or a mix of versioned and unversioned scenarios (e.g. a
-  stale results file merged with a fresh one), is rejected outright.
+Fixed-work scenarios wait for delivered updates and verify operations, requested
+row checkpoints, or the resulting reorder. Scroll paths advance through logical
+row IDs independent of row height or total scroll range. Each requested row must
+render and settle at its target position. Pixel distances and rendered ranges
+remain diagnostic across variants; per-run scroll evidence must still be
+internally consistent. Drag outcomes include drop attributes and the item
+observed in the destination, collected after verification outside the measured
+window. Within-list drags stay clear of the autoscroll edge.
 
-Both versions are printed in the output — along with each run's **git commit and
-date** (embedded by Playwright's JSON reporter) so it is always visible what
-each side was measured from. Mismatches fail the run; pass
-`--allow-baseline-mismatch` to compare anyway (unreliable). The output says what
-to do about the mismatch (`incompatibleBaselineAdvice` in
-`fixtures/compare-metrics.ts`): only a saved local baseline is ever regenerated,
-because CI never reads one.
+A slower runner must complete the same work instead of visiting fewer rows during
+a fixed elapsed duration. Fixed-work evidence is compared in every block.
+Additional visited rows remain diagnostic: differing overscan strategies can
+complete the same checkpoints. Paced autoscroll retains the responsiveness
+workload and reports actual distance/operations; its totals do not gate because
+elapsed-time work varies under load.
 
-The comparison also fails when a scenario or metric present in the baseline is
-**missing** from the current run — a renamed, skipped, or crashed benchmark must
-not silently disappear behind a green check. The reverse case — a scenario in
-the current run with no baseline entry — is a **new benchmark**: it is listed as
-`NEW (no baseline)` and stays ungated (in CI it gains a baseline automatically
-once it exists on the base side, i.e. after the PR merges).
+The timing profile performs a page-reset warmup before measured iterations;
+the default CI counts profile uses zero warmups. Each measurement starts on a
+fresh page, so warmups prime the browser process rather than reusing a warmed
+application document. Workload, snapshots, and observers run under 4× CPU
+throttling. Navigation, app startup, Playwright utility-script compilation,
+and functional verification run at normal speed to prevent bootstrap stalls.
 
-When the baseline run is more than 60 days older than the current run, the
-output includes a non-fatal **stale baseline** warning. In CI this never fires
-(both sides run minutes apart); it guards local comparisons against an old
-saved baseline.
+A standalone suite defaults to five measured iterations. Each experiment suite
+has one measured iteration; four suites form a block. Three blocks collect six
+measurements per variant per scenario; twenty collect forty. The default profile
+runs 12 suites without warmups; timing runs 80 with one warmup each. This reduces
+default measurement work substantially, but wall time depends on the runner.
+Both profiles retain all six scenarios and the same page-reset protocol.
+Retries are disabled.
 
-## CI: same-runner A/B
+## Measurement and integrity
 
-The `Performance Benchmarks` workflow checks out the PR's **base commit** and
-**head (merge commit)** into sibling directories, then — on the same runner,
-back to back — installs, builds, and runs `npm run perf` in each, and finally
-compares head against base with head's `compare.ts`:
+Metrics schema **4** preserves every measured sample, frame interval, long task,
+page-clock bound, browser version, visibility state, counter exposure, and
+actual workload outcome. Aggregates derive from raw evidence; stored summaries
+cannot override the comparison. Warmup measurements remain separate from inference.
 
-- Absolute numbers are only ever compared within a single job on a single
-  host, so runner-image updates, hardware generation differences, and noisy
-  neighbors between workflow runs cannot masquerade as regressions.
-- There is no committed baseline to go stale and nothing to regenerate; each
-  PR is measured against exactly the code it branched from.
-- Each side runs its own harness. A PR that changes metric **semantics** (bumps
-  `metricsSchemaVersion`) will fail the comparison closed — that PR's perf
-  check requires human judgment (`--allow-baseline-mismatch` locally) because
-  no automated comparison across semantics is meaningful. Nothing needs
-  regenerating after it merges: the next PR's base commit already runs the new
-  schema, so its comparison works again.
+Long-task observers are created/disconnected per measurement and bounded by the
+page's monotonic clock. CDP snapshots bracket renderer counters. Counter exposure
+includes transport/setup overhead and is recorded separately from the interaction
+window. Startup and warmup are excluded from measured interaction.
 
-## Local baselines
+Frame intervals measure `requestAnimationFrame` callback cadence, rather than
+presented frames. A post-work callback makes a final stall observable. The leading
+partial interval before the first callback is excluded. Finite zero intervals
+are valid at reduced timer precision; negative or nonfinite intervals invalidate
+results.
 
-`npm run perf:baseline` saves the latest run to `perf/baselines/baseline.json`
-(gitignored), and `npm run perf:compare` diffs a later run against it — useful
-for local before/after checks while optimizing. Local absolute numbers reflect
-your machine; only compare runs captured on the same machine.
+The comparator requires the expected scenario set, one raw measurement per
+experiment suite, unique source files, valid execution order, finite counters,
+consistent raw-derived diagnostics, supported schema/browser settings, and
+matching logical workload definitions. Empty, duplicate, missing, hidden,
+unfinished, or incompatible evidence fails closed. Experiment files are saved
+after every suite so interrupted runs retain evidence while reporting invalid.
+
+The runner freezes harness inputs, the common external consumer fixture, actual
+installed dependencies, production builds, and Git revisions before each suite
+and after the last. Editing or rebuilding either checkout during an experiment
+invalidates it while preserving collected samples.
+
+## Decisions and metrics
+
+The **counts** profile checks layout and style-recalculation counts for five
+fixed-work scenarios across three balanced blocks. The median paired budget
+excess determines its verdict. With three blocks, a regression requires positive
+budget excess in at least two blocks. This reduces the effect of an isolated
+outlier, but correlated count variation can affect it. This is a practical architectural
+check, without a confidence-level or calibrated false-alarm claim. Task cost and
+responsiveness remain diagnostic.
+
+The **timing** profile checks task duration, layout count, and style-recalculation
+count for those five scenarios. Each block's practical budget is the larger of
+the percentage threshold and absolute floor:
+
+| Metric                    | Absolute floor   | Purpose                                      |
+| ------------------------- | ---------------- | -------------------------------------------- |
+| Task duration             | 5 ms             | Total renderer cost for equal completed work |
+| Layout count              | 1 layout         | Architectural work indicator                 |
+| Style recalculation count | 3 recalculations | Architectural work indicator                 |
+
+Floors define tolerated changes, not noise estimates. With a 100 ms base and
+10% threshold, the task budget is 10 ms. Passing does not rule out smaller changes.
+Both profiles average the two base costs and two head costs separately per block;
+the paired observation is `head − base − budget`. Zero baselines use absolute
+differences and report an undefined percentage honestly.
+
+Timing uses an exact distribution-free median order-statistic interval, with
+Bonferroni adjustment across 15 primary checks for simultaneous 95% bounds.
+A bound wholly above zero supports regression; wholly at/below zero supports
+passing; an overlapping or unbounded interval is inconclusive. Coverage assumes
+independent blocks with a common target median; balanced order does not prove
+that assumption. Frames, repeated rows, and iterations within a block are not
+independent statistical units.
+
+| Timing blocks | Ordered excess bounds | Agreement needed on one side of the budget |
+| ------------- | --------------------- | ------------------------------------------ |
+| 10            | 1st–10th              | All 10 blocks                              |
+| 14            | 2nd–13th              | 13 of 14 blocks                            |
+| 20            | 4th–17th              | 17 of 20 blocks                            |
+
+Fewer than ten blocks cannot form finite simultaneous bounds. Ten blocks are
+not inconclusive by construction: consistent evidence passes or fails, but
+outlier tolerance and detection power are limited. Inconclusive does not establish
+acceptable performance. MAD, mean, and maximum are descriptive diagnostics and
+do not replace paired uncertainty. Modeled pass rates are not measured
+false-alarm/detection rates for the complete procedure.
+
+| Diagnostic                              | Interpretation                                                        |
+| --------------------------------------- | --------------------------------------------------------------------- |
+| Duration and frame count                | Exposure for interpreting workload and stalls                         |
+| Script duration                         | Attribution within task duration                                      |
+| Average frame interval                  | Refresh cadence; weak evidence of isolated stalls                     |
+| Maximum frame gap                       | Worst observed stall, without an independent hard gate                |
+| Jank interval count                     | Intervals over 25 ms; not missed/dropped frames                       |
+| Frame time over budget                  | Sum of `max(0, interval − 16.67 ms)`, preserving stall severity       |
+| Long-task count and Total Blocking Time | Severe-stall diagnostics; zero rows collapse without removing samples |
+
+The redundant five-sample aggregate p95 and fragile frame p99 are removed.
+Individual intervals remain available. Responsiveness and paced throughput
+need calibrated budgets before becoming hard gates.
+
+## Runner drift and calibration
+
+Provenance records CPU model/count, memory, OS/kernel, image version, browser,
+Node/Playwright, hashes, order, and timestamps. Suites record load, free memory,
+CPU counters, and available Linux pressure counters before and after. These
+describe conditions; they cannot identify a particular slowdown's cause alone.
+
+GitHub-hosted VMs have a published resource class, but physical CPU performance
+and image revisions can differ. Pinning the Ubuntu OS family permits image
+updates. Queue load delays assignment without proving a running measurement is
+contended. Browser, server, OS, and host activity may compete. Chrome's 4× CPU
+throttling is relative to its host, not one absolute speed across hosts.
+
+Alternating **ABBA** and **BAAB** blocks balances base/head positions and reduces
+approximately linear drift. It does not remove sudden interference, nonlinear
+warmup, garbage collection, or correlated changes. Health data is retained;
+unfavorable samples are not erased automatically. Larger runners cannot repair
+unequal work or invalid measurement windows.
+
+CI runs **only on pull requests** affecting the library, harness, static server,
+or benchmark workflow. Other changes, including dependency-only PRs, skip this
+library comparison. Adding/removing `perf:timing` selects the relevant profile;
+unrelated label events do not start measurements. There is no scheduled or
+manually dispatched workflow. Local A/A and positive-control commands above
+provide calibration. Cancelled runs retain evidence without replacing the
+previous PR comment. Workflow artifacts are retained for 90 days.
+
+Retain all verdicts and artifacts across independent full experiments. Measure
+false alarms for the complete timing procedure and positive-control detection
+at relevant costs. Zero false alarms in twenty independent experiments still
+permits about a 14% one-sided 95% upper bound; roughly 300 clean experiments
+are needed to support a 1% bound. These counts concern experiments, not blocks.
+
+Promote timing to a required gate only after useful false-alarm and detection
+rates are demonstrated. The runner uses a fixed block count, without automatic
+confirmation. Future confirmation needs a predeclared stopping rule and alpha
+allocation across repeated looks. Increasing ten blocks to twenty after seeing
+a result and reusing the ordinary 95% interval does not preserve its stated
+coverage. This harness does not rerun automatically until green.
+
+## Files
+
+| Path                                              | Purpose                                     |
+| ------------------------------------------------- | ------------------------------------------- |
+| `prepare.ts`, `build.ts`, `run.ts`                | Common fixture, provenance, experiments     |
+| `scenarios/*.perf.ts`                             | Verified fixed-work and paced interactions  |
+| `fixtures/perf.page.ts`                           | Page setup and workload helpers             |
+| `fixtures/metrics-collector.ts`, `metric-math.ts` | Raw collection and derivation               |
+| `fixtures/compare-metrics.ts`, `run-types.ts`     | Integrity, decisions, experiment contract   |
+| `fixtures/statistics.ts`                          | Descriptive aggregation                     |
+| `compare.ts`, `report.ts`                         | Machine verdict and readable evidence       |
+| `results/`, `baselines/`                          | Gitignored raw evidence and local snapshots |

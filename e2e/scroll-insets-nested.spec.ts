@@ -161,6 +161,14 @@ test.describe('Scroll insets (nested and overlaid)', () => {
       await open(page);
       const { headerBottom, x } = await columnUnderPageHeader();
       const [row] = await rowsBetween(column, headerBottom, await edge(column, 'bottom'));
+      // Capture the required progress before dragging: slower pointer delivery can
+      // let the page finish scrolling before the post-handoff observations below.
+      const pageScrollTop = await pageScroller.evaluate((el) => el.scrollTop);
+      expect(
+        pageScrollTop,
+        'The page must have room to scroll upward before dragging',
+      ).toBeGreaterThan(60);
+      const pageProgressTarget = pageScrollTop - 60;
       await startDrag(page, row);
 
       // 30px below the column's hidden top edge: in its top zone, but over the page header. The
@@ -168,8 +176,7 @@ test.describe('Scroll insets (nested and overlaid)', () => {
       await moveTo(page, x, headerBottom - 30);
       await waitForFrames(page, 2);
       const columnScrollTop = await column.evaluate((el) => el.scrollTop);
-      const pageScrollTop = await pageScroller.evaluate((el) => el.scrollTop);
-      await waitForAutoscroll(pageScroller, 'up', pageScrollTop - 60);
+      await waitForAutoscroll(pageScroller, 'up', pageProgressTarget);
       expect(await column.evaluate((el) => el.scrollTop)).toBe(columnScrollTop);
 
       await page.mouse.up();
