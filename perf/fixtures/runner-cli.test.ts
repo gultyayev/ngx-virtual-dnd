@@ -1,12 +1,26 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { dependencyHash, FIXTURE_PATHS, hashPaths, LIBRARY_PATHS } from './runner-plan.ts';
+import {
+  dependencyHash,
+  FIXTURE_PATHS,
+  hashPaths,
+  installedDependencyHash,
+  LIBRARY_PATHS,
+} from './runner-plan.ts';
 import { makeExperiment } from './experiment-fixture.ts';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -46,16 +60,24 @@ function inputs(root: string): void {
     } else put(root, input);
   }
   put(root, 'dist/dnd/browser/index.html', '<html>fixture</html>');
+  put(root, 'package.json', '{}');
+  const packages = { 'node_modules/@playwright/test': { version: 'test-playwright' } };
+  put(root, 'package-lock.json', JSON.stringify({ packages: { '': {}, ...packages } }));
+  put(root, 'node_modules/.package-lock.json', JSON.stringify({ packages }));
+  put(root, 'node_modules/@playwright/test/package.json', '{"version":"test-playwright"}');
 }
-function fingerprint(root: string): void {
+function fingerprint(root: string, fixtureRoot = root): void {
   put(
     root,
     'dist/perf-build.json',
     JSON.stringify({
-      formatVersion: 1,
-      fixtureHash: hashPaths(root, FIXTURE_PATHS),
+      formatVersion: 2,
+      fixtureRoot,
+      fixtureHash: hashPaths(fixtureRoot, FIXTURE_PATHS),
       libraryHash: hashPaths(root, LIBRARY_PATHS),
+      libraryBuildConfigHash: hashPaths(root, ['angular.json', 'tsconfig.json']),
       dependencyHash: dependencyHash(root),
+      installedDependencyHash: installedDependencyHash(root),
       outputHash: hashPaths(root, ['dist/dnd/browser']),
     }),
   );
@@ -76,6 +98,78 @@ function expectInvalid(directory: string, output: string, result: ReturnType<typ
     readFileSync(join(directory, 'comparison.md'), 'utf8'),
     /Invalid benchmark experiment/,
   );
+}
+
+function fakeRunner(root: string, requestedProfile: 'counts' | 'timing'): NodeJS.ProcessEnv {
+  inputs(root);
+  for (const input of [
+    'perf/fixtures/input.ts',
+    'perf/scenarios/input.ts',
+    'perf/playwright.perf.config.ts',
+    'perf/run.ts',
+    'perf/build.ts',
+    'perf/prepare.ts',
+  ])
+    put(root, input, '// fixture');
+  put(
+    root,
+    'scripts/serve-dist.js',
+    'process.stdout.write("serve-dist: serving\\n"); setInterval(() => {}, 1000);',
+  );
+  const reports = makeExperiment(1, requestedProfile).blocks[0].runs[0].scenarios;
+  put(
+    root,
+    'reporter.json',
+    JSON.stringify({
+      errors: [],
+      stats: { expected: reports.length, unexpected: 0, skipped: 0, flaky: 0 },
+      suites: [
+        {
+          specs: reports.map((report) => ({
+            ok: true,
+            tests: [
+              {
+                expectedStatus: 'passed',
+                status: 'expected',
+                results: [
+                  {
+                    status: 'passed',
+                    retry: 0,
+                    errors: [],
+                    attachments: [
+                      {
+                        name: report.scenario,
+                        contentType: 'application/json',
+                        body: Buffer.from(JSON.stringify(report)).toString('base64'),
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })),
+        },
+      ],
+    }),
+  );
+  put(
+    root,
+    'node_modules/@playwright/test/cli.js',
+    `
+const { appendFileSync, readFileSync, writeFileSync } = require('node:fs');
+appendFileSync('received-environment.jsonl', JSON.stringify({ profile: process.env.PERF_PROFILE, warmups: process.env.PERF_WARMUP_ITERATIONS, iterations: process.env.PERF_ITERATIONS, control: process.env.PERF_CONTROL_WORK_MS }) + '\\n');
+writeFileSync(process.env.PERF_RESULT_PATH, readFileSync('reporter.json'));
+`,
+  );
+  fingerprint(root);
+  const bin = join(root, 'bin');
+  mkdirSync(bin);
+  writeFileSync(
+    join(bin, 'git'),
+    '#!/usr/bin/env node\nprocess.stdout.write("fixture-sha\\n");\n',
+    { mode: 0o755 },
+  );
+  return { ...process.env, PATH: `${bin}${delimiter}${process.env['PATH'] ?? ''}` };
 }
 
 test('runner replaces old passing evidence when strict option parsing fails', () => {
@@ -177,8 +271,6 @@ test('cancellation preserves the pending block and an incomplete requested exper
         directory,
         '--head',
         directory,
-        '--blocks',
-        '20',
       ],
       {
         cwd: repository,
@@ -206,6 +298,7 @@ test('cancellation preserves the pending block and an incomplete requested exper
     assert.equal(await finished, 130);
     const retained = JSON.parse(readFileSync(output, 'utf8'));
     assert.equal(retained.requestedBlocks, 20);
+    assert.equal(retained.profile, 'timing');
     assert.equal(retained.completed, false);
     assert.equal(retained.blocks.length, 1);
     const comparison = JSON.parse(
@@ -217,6 +310,112 @@ test('cancellation preserves the pending block and an incomplete requested exper
     if (child?.exitCode === null) child.kill('SIGTERM');
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('runner rejects controls on the quick counts profile before measuring', () => {
+  temporary((directory) => {
+    const output = oldEvidence(directory);
+    const result = cli('perf/run.ts', [
+      '--profile',
+      'counts',
+      '--calibration',
+      '--control',
+      'script',
+      '--output',
+      output,
+    ]);
+    expectInvalid(directory, output, result);
+    const comparison = JSON.parse(readFileSync(join(directory, 'comparison.json'), 'utf8'));
+    assert.match(comparison.reasons[0], /Controls require the timing profile/);
+  });
+});
+
+for (const requestedProfile of ['counts', 'timing'] as const) {
+  test(`runner delivers and records the ${requestedProfile} profile without skipping ordinary unchanged-library evidence`, () => {
+    temporary((directory) => {
+      const environment = fakeRunner(directory, requestedProfile);
+      const args = ['--base', directory, '--head', directory, '--profile', requestedProfile];
+      if (requestedProfile === 'timing') args.push('--blocks', '1');
+      const result = cli('perf/run.ts', args, repository, environment);
+      assert.equal(result.status, requestedProfile === 'counts' ? 0 : 2, result.stderr);
+      const retained = JSON.parse(
+        readFileSync(join(directory, 'perf/results/experiment.json'), 'utf8'),
+      );
+      assert.equal(retained.profile, requestedProfile);
+      assert.equal(retained.mode, 'comparison');
+      assert.equal(retained.completed, true);
+      assert.equal(retained.requestedBlocks, requestedProfile === 'counts' ? 3 : 1);
+      assert.equal(retained.environment.libraryUnchanged, true);
+      assert.deepEqual(retained.environment.fixtureRoot, { base: directory, head: directory });
+      assert.equal(
+        retained.environment.installedDependencyHash.base,
+        installedDependencyHash(directory),
+      );
+      const calls = readFileSync(join(directory, 'received-environment.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      assert.equal(calls.length, retained.requestedBlocks * 4);
+      for (const call of calls)
+        assert.deepEqual(call, {
+          profile: requestedProfile,
+          warmups: requestedProfile === 'counts' ? '0' : '1',
+          iterations: '1',
+          control: '0',
+        });
+      assert.equal(retained.blocks[0].runs[0].scenarios.length, 6);
+    });
+  });
+}
+
+test('runner rejects declared lock changes when installed packages were not refreshed', () => {
+  temporary((directory) => {
+    inputs(directory);
+    fingerprint(directory);
+    put(
+      directory,
+      'package-lock.json',
+      '{"packages":{"":{},"node_modules/@playwright/test":{"version":"changed-version"}}}',
+    );
+    const results = join(directory, 'perf/results');
+    const output = oldEvidence(results);
+    const result = cli('perf/run.ts', ['--base', directory, '--head', directory]);
+    expectInvalid(results, output, result);
+    const comparison = JSON.parse(readFileSync(join(results, 'comparison.json'), 'utf8'));
+    assert.match(comparison.reasons[0], /Installed dependency.*differs from the declared lock/);
+  });
+});
+
+test('runner freezes the measured external baseline fixture rather than the unused head demo', () => {
+  temporary((directory) => {
+    const root = join(directory, 'head');
+    const environment = fakeRunner(root, 'counts');
+    const fixture = join(directory, 'base-fixture');
+    mkdirSync(fixture);
+    for (const input of FIXTURE_PATHS)
+      cpSync(join(root, input), join(fixture, input), { recursive: true });
+    put(root, 'src/head-only-api.ts', '// head demo requires a new feature');
+    fingerprint(root, fixture);
+    const fakeCli = join(root, 'node_modules/@playwright/test/cli.js');
+    writeFileSync(
+      fakeCli,
+      readFileSync(fakeCli, 'utf8') +
+        `\nwriteFileSync(${JSON.stringify(join(fixture, 'src/mutated.ts'))}, '// external fixture changed');\n`,
+    );
+    const result = cli(
+      'perf/run.ts',
+      ['--base', root, '--head', root, '--profile', 'counts'],
+      repository,
+      environment,
+    );
+    assert.equal(result.status, 3, result.stderr);
+    const retained = JSON.parse(readFileSync(join(root, 'perf/results/experiment.json'), 'utf8'));
+    assert.equal(retained.completed, false);
+    assert.equal(retained.blocks[0].runs.length, 1);
+    assert.deepEqual(retained.environment.fixtureRoot, { base: fixture, head: fixture });
+    const comparison = JSON.parse(readFileSync(join(root, 'perf/results/comparison.json'), 'utf8'));
+    assert.match(comparison.reasons[0], /Stale or incompatible production build/);
+  });
 });
 
 for (const mutationRun of [1, 4]) {

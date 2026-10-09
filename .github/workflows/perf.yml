@@ -3,38 +3,20 @@ name: Performance Benchmarks
 on:
   pull_request:
     branches: [master]
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - '**/*.mdx'
-      - '.claude/**'
-      - '.ai/**'
-      - 'skills/**'
-  schedule:
-    # Accumulate A/A evidence across fresh hosts and weekly image updates.
-    - cron: '17 3 * * *'
-  workflow_dispatch:
-    inputs:
-      blocks:
-        description: Balanced blocks (10 gives a finite simultaneous interval)
-        type: string
-        default: '10'
-      control:
-        description: Calibration control
-        type: choice
-        options: [none, script, cpu]
-        default: none
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+    paths:
+      - 'projects/ngx-virtual-dnd/**'
+      - 'perf/**'
+      - 'scripts/serve-dist.js'
+      - '.github/workflows/perf.yml'
 
 permissions:
   contents: read
   pull-requests: write
 
-concurrency:
-  group: perf-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   harness-unit-tests:
+    if: github.event.action != 'labeled' && github.event.action != 'unlabeled' || github.event.label.name == 'perf:timing'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -43,18 +25,20 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
-          cache: npm
-      - name: Install pinned dependencies
-        run: |
-          npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
-          npm ci
+      # The harness tests use Node built-ins and do not need Angular dependencies.
       - run: npm run perf:test
 
   benchmark:
     needs: harness-unit-tests
+    concurrency:
+      group: perf-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-24.04
-    # Forty sequential suites include warmups; contention controls can take longer.
+    # Timing is opt-in: 80 suites with one warmup each; counts use 12, without warmups.
     timeout-minutes: 120
+    env:
+      PERF_PROFILE: ${{ contains(github.event.pull_request.labels.*.name, 'perf:timing') && 'timing' || 'counts' }}
+      PERF_BLOCKS: ${{ contains(github.event.pull_request.labels.*.name, 'perf:timing') && '20' || '3' }}
     steps:
       - name: Checkout candidate and common harness
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -64,7 +48,7 @@ jobs:
       - name: Checkout library baseline
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           path: base
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -72,7 +56,7 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: head/package-lock.json
-      - name: Prepare a common consumer fixture and dependency lockfile
+      - name: Prepare a common harness and dependency lockfile
         working-directory: head
         run: npm run perf:prepare -- --base ../base
       - name: Install identical pinned dependencies
@@ -88,24 +72,23 @@ jobs:
         run: npm run perf:build
       - name: Build and fingerprint candidate
         working-directory: head
-        run: npm run perf:build
+        # Compile the base consumer against each library, so new head-only API
+        # bindings cannot break the baseline. Staging preserves both source trees.
+        run: npm run perf:build -- --fixture ../base
       - name: Measure balanced blocks
         id: measure
         working-directory: head
-        env:
-          PERF_BLOCKS: ${{ inputs.blocks || '10' }}
-          PERF_CALIBRATION: ${{ github.event_name != 'pull_request' }}
-          PERF_CONTROL: ${{ inputs.control || 'none' }}
         run: |
-          args=(--base ../base --head . --blocks "$PERF_BLOCKS")
-          if [ "$PERF_CALIBRATION" = true ]; then
-            args+=(--calibration --control "$PERF_CONTROL")
-          fi
           set +e
-          npm run --silent perf:ab -- "${args[@]}"
+          npm run --silent perf:ab -- --base ../base --head . --profile "$PERF_PROFILE" --blocks "$PERF_BLOCKS"
           status=$?
+          # Count budgets stay required when timing bounds are also requested.
+          # This derives a second decision from the same validated raw evidence.
+          npm run --silent perf:compare -- --experiment perf/results/experiment.json --decision-profile counts --json perf/results/count-comparison.json --output perf/results/count-comparison.md > /dev/null
+          count_status=$?
           set -e
           echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "count_status=$count_status" >> "$GITHUB_OUTPUT"
           exit 0
       - name: Report measurements and verdict
         if: always()
@@ -121,7 +104,7 @@ jobs:
             cat perf/results/report.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Comment on PR
-        if: always() && github.event_name == 'pull_request'
+        if: ${{ !cancelled() }}
         continue-on-error: true
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
@@ -135,7 +118,14 @@ jobs:
             }
             const marker = '<!-- perf-benchmark-results -->';
             const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = `${marker}\n${report}\n\n[Full measurements and runner diagnostics](${run}#artifacts) · [Workflow logs](${run})\n\nTiming is advisory during calibration; invalid measurements fail CI.`;
+            if (process.env.PERF_PROFILE === 'timing' && existsSync('head/perf/results/count-comparison.json')) {
+              const counts = JSON.parse(readFileSync('head/perf/results/count-comparison.json', 'utf8'));
+              report += `\n\n**Required count checks: ${counts.verdict.toUpperCase()}**`;
+            }
+            const policy = process.env.PERF_PROFILE === 'counts'
+              ? 'Layout/style count regressions and invalid evidence fail CI. Timing is diagnostic; apply `perf:timing` for the longer comparison.'
+              : 'Layout/style count budgets and evidence integrity remain required. Timing regressions and inconclusive bounds are advisory during calibration.';
+            const body = [marker, report, '', `[Full measurements and runner diagnostics](${run}#artifacts) · [Workflow logs](${run})`, '', policy].join('\n');
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
             });
@@ -145,21 +135,39 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
             }
-      - name: Upload raw evidence and calibration
+      - name: Upload raw evidence and diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: perf-results-${{ github.run_attempt }}
           path: head/perf/results/
           retention-days: 90
-      - name: Enforce measurement integrity
-        if: always()
+      - name: Enforce count budgets and measurement integrity
+        if: ${{ always() && !cancelled() }}
         env:
           PERF_STATUS: ${{ steps.measure.outputs.status }}
+          PERF_COUNT_STATUS: ${{ steps.measure.outputs.count_status }}
         run: |
+          case "$PERF_COUNT_STATUS" in
+            0) echo "Required count checks passed." ;;
+            1) echo "::error::Layout/style count budget exceeded. See report and artifacts."; exit 1 ;;
+            *) echo "::error::Invalid or incomplete count evidence. See logs and artifacts."; exit 1 ;;
+          esac
           case "$PERF_STATUS" in
-            0) echo "Valid performance pass." ;;
-            1) echo "::warning::Performance regression evidence; timing gate remains advisory during calibration." ;;
-            2) echo "::warning::Inconclusive performance evidence; this is not a performance pass." ;;
+            0) echo "Valid $PERF_PROFILE profile pass." ;;
+            1)
+              if [ "$PERF_PROFILE" = counts ]; then
+                echo "::error::Layout/style count budget exceeded. See report and artifacts."
+                exit 1
+              fi
+              echo "::warning::Timing regression evidence; timing gate remains advisory during calibration."
+              ;;
+            2)
+              if [ "$PERF_PROFILE" = counts ]; then
+                echo "::error::Count profile did not establish a valid count result."
+                exit 1
+              fi
+              echo "::warning::Inconclusive timing evidence; this is not a timing pass."
+              ;;
             *) echo "::error::Invalid or incomplete benchmark evidence. See logs and artifacts."; exit 1 ;;
           esac

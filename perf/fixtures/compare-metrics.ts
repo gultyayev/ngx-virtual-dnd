@@ -1,6 +1,7 @@
 /** Paired benchmark decisions. Raw observations, rather than stored aggregates, are authoritative. */
 import {
   EXPECTED_SCENARIOS,
+  type BenchmarkProfile,
   type Comparison,
   type Experiment,
   type ScenarioReport,
@@ -13,11 +14,14 @@ import {
 } from './metric-math.ts';
 
 export const GATED_METRICS = ['taskDuration', 'layoutCount', 'recalcStyleCount'] as const;
+export const COUNT_GATED_METRICS = ['layoutCount', 'recalcStyleCount'] as const;
 export const MIN_ABS_DELTA = { taskDuration: 5, layoutCount: 1, recalcStyleCount: 3 } as const;
 export const EXIT_CODES = { pass: 0, regression: 1, inconclusive: 2, invalid: 3 } as const;
 export interface ComparisonOptions {
   thresholdPercent?: number;
   familyAlpha?: number;
+  /** Change only the decision rule after validating the source experiment and its protocol. */
+  decisionProfile?: BenchmarkProfile;
 }
 
 const SCALAR_METRICS = [
@@ -185,11 +189,7 @@ export function validateScenarios(
           errors.push(`${label}: counters do not bracket the measurement window.`);
       }
       const frameTimes = sample['frameTimes'];
-      if (
-        !Array.isArray(frameTimes) ||
-        frameTimes.length === 0 ||
-        !frameTimes.every((value) => nonnegative(value) && value > 0)
-      )
+      if (!Array.isArray(frameTimes) || frameTimes.length === 0 || !frameTimes.every(nonnegative))
         errors.push(`${label}: missing or invalid frame intervals.`);
       else {
         if (
@@ -243,6 +243,16 @@ export function validateScenarios(
         )
       )
         errors.push(`${label}: invalid workload observation.`);
+      if (
+        nonnegative(workload['startScrollTop']) &&
+        nonnegative(workload['endScrollTop']) &&
+        nonnegative(workload['scrollDistance']) &&
+        !sameNumber(
+          workload['scrollDistance'],
+          workload['endScrollTop'] - workload['startScrollTop'],
+        )
+      )
+        errors.push(`${label}: scroll distance does not match the observed start/end positions.`);
       const definition = scenario['workload'];
       if (
         object(definition) &&
@@ -343,6 +353,12 @@ export function validateExperiment(input: unknown): string[] {
     errors.push('Experiment is incomplete or cancelled; completed evidence is required.');
   if (input['mode'] !== 'comparison' && input['mode'] !== 'calibration')
     errors.push('Missing or unsupported experiment mode.');
+  if (
+    input['profile'] !== undefined &&
+    input['profile'] !== 'counts' &&
+    input['profile'] !== 'timing'
+  )
+    errors.push('Unsupported experiment profile; use counts or timing.');
   if (!nonempty(input['harnessHash'])) errors.push('Missing common harness hash.');
   const environment = input['environment'];
   if (!object(environment)) errors.push('Missing experiment environment.');
@@ -496,18 +512,9 @@ export function validateExperiment(input: unknown): string[] {
             errors.push(`${runLabel} ${scenario['scenario']}: unequal completed work (${key}).`);
         // Overscan/rendering strategies may legitimately render different extra
         // rows. Completed checkpoint IDs define equal user-visible work; the
-        // full visitedRows/renderedRanges remain diagnostic evidence.
-        for (const key of ['startScrollTop', 'endScrollTop', 'scrollDistance'])
-          if (old[key] !== undefined || workload[key] !== undefined) {
-            if (
-              !nonnegative(old[key]) ||
-              !nonnegative(workload[key]) ||
-              Math.abs(old[key] - workload[key]) > 1
-            )
-              errors.push(
-                `${runLabel} ${scenario['scenario']}: unequal scroll outcome (${key}, tolerance 1px).`,
-              );
-          }
+        // full visitedRows/renderedRanges and pixel scroll positions remain
+        // diagnostic evidence. Geometry changes may change pixels while the
+        // same logical checkpoint path is completed on both variants.
       }
     }
   }
@@ -540,13 +547,36 @@ export function compareExperiment(input: unknown, options: ComparisonOptions = {
     reasons.push('Threshold must be finite and nonnegative.');
   if (!Number.isFinite(familyAlpha) || familyAlpha <= 0 || familyAlpha >= 1)
     reasons.push('Family alpha must be between zero and one.');
+  if (
+    options.decisionProfile !== undefined &&
+    options.decisionProfile !== 'counts' &&
+    options.decisionProfile !== 'timing'
+  )
+    reasons.push('Unsupported decision profile; use counts or timing.');
   const blocks = object(input) && Array.isArray(input['blocks']) ? input['blocks'].length : 0;
-  if (reasons.length) return { verdict: 'invalid', reasons, rows: [], blocks, thresholdPercent };
+  const requestedProfile = object(input) ? input['profile'] : undefined;
+  const sourceProfile: BenchmarkProfile | undefined =
+    requestedProfile === undefined || requestedProfile === 'timing'
+      ? 'timing'
+      : requestedProfile === 'counts'
+        ? 'counts'
+        : undefined;
+  if (reasons.length)
+    return {
+      verdict: 'invalid',
+      profile: sourceProfile,
+      reasons,
+      rows: [],
+      blocks,
+      thresholdPercent,
+    };
   const experiment = input as Experiment;
+  const profile = options.decisionProfile ?? sourceProfile;
   const rows: Comparison['rows'] = [];
-  const checks = FIXED_SCENARIOS.length * GATED_METRICS.length;
+  const metrics = profile === 'counts' ? COUNT_GATED_METRICS : GATED_METRICS;
+  const checks = FIXED_SCENARIOS.length * metrics.length;
   for (const scenario of FIXED_SCENARIOS)
-    for (const metric of GATED_METRICS) {
+    for (const metric of metrics) {
       const pairs = experiment.blocks.map((block) => {
         const cost = (variant: 'base' | 'head') =>
           mean(
@@ -568,16 +598,21 @@ export function compareExperiment(input: unknown, options: ComparisonOptions = {
       });
       const baseline = median(pairs.map((pair) => pair.base));
       const current = median(pairs.map((pair) => pair.head));
-      const interval = medianInterval(
-        pairs.map((pair) => pair.excess),
-        familyAlpha / checks,
-      );
+      const excesses = pairs.map((pair) => pair.excess);
+      // Counts deliberately use a deterministic decision rule. The smaller
+      // experiment does not provide an inferential uncertainty estimate.
+      const interval: Comparison['rows'][number]['interval'] =
+        profile === 'counts' ? [null, null] : medianInterval(excesses, familyAlpha / checks);
       const verdict =
-        interval[0] !== null && interval[0] > 0
-          ? 'regression'
-          : interval[1] !== null && interval[1] <= 0
-            ? 'pass'
-            : 'inconclusive';
+        profile === 'counts'
+          ? median(excesses) > 0
+            ? 'regression'
+            : 'pass'
+          : interval[0] !== null && interval[0] > 0
+            ? 'regression'
+            : interval[1] !== null && interval[1] <= 0
+              ? 'pass'
+              : 'inconclusive';
       rows.push({
         scenario,
         metric,
@@ -595,17 +630,26 @@ export function compareExperiment(input: unknown, options: ComparisonOptions = {
     : rows.some((row) => row.verdict === 'inconclusive')
       ? 'inconclusive'
       : 'pass';
-  if (rows.some((row) => row.interval[0] === null))
+  if (profile === 'timing' && rows.some((row) => row.interval[0] === null))
     reasons.push(
       'Too few independent balanced blocks for simultaneous median confidence bounds; collect more blocks.',
     );
-  if (rows.some((row) => row.verdict === 'inconclusive' && row.interval[0] !== null))
+  if (
+    profile === 'timing' &&
+    rows.some((row) => row.verdict === 'inconclusive' && row.interval[0] !== null)
+  )
     reasons.push(
       'A confidence interval overlaps the practical regression budget; the available evidence is inconclusive.',
     );
   if (verdict === 'regression')
     reasons.push(
-      'At least one simultaneous confidence interval is wholly above its practical regression budget.',
+      profile === 'counts'
+        ? 'At least one count median exceeds its practical regression budget.'
+        : 'At least one simultaneous confidence interval is wholly above its practical regression budget.',
+    );
+  if (profile === 'counts')
+    reasons.push(
+      'Count checks use a deterministic median paired-block budget rule; no statistical uncertainty is estimated. Task time and paced interactions remain diagnostic.',
     );
   if (
     experiment.mode === 'calibration' &&
@@ -625,31 +669,36 @@ export function compareExperiment(input: unknown, options: ComparisonOptions = {
     );
   if (verdict === 'pass')
     reasons.push(
-      'Every primary confidence interval is within its practical regression budget. Paced interaction diagnostics do not gate.',
+      profile === 'counts'
+        ? 'All count medians are within their practical regression budgets.'
+        : 'Every primary confidence interval is within its practical regression budget. Paced interaction diagnostics do not gate.',
     );
-  return { verdict, reasons, rows, blocks, thresholdPercent };
+  return { verdict, profile, reasons, rows, blocks, thresholdPercent };
 }
 
 export function renderComparisonMarkdown(result: Comparison): string {
   const number = (value: number | null) => (value === null ? 'unbounded' : value.toFixed(2));
+  const counts = result.profile === 'counts';
   const lines = [
     '## Performance comparison',
     '',
-    `**Verdict: ${result.verdict.toUpperCase()}** · ${result.blocks} balanced blocks · ${result.thresholdPercent}% practical budget`,
+    `**Verdict: ${result.verdict.toUpperCase()}** · ${result.profile ?? 'timing'} profile · ${result.blocks} balanced blocks · ${result.thresholdPercent}% practical budget`,
     '',
     ...result.reasons.map((reason) => `- ${reason}`),
   ];
   if (result.rows.length)
     lines.push(
       '',
-      '| Scenario | Metric | Base | Head | Change | Median budget excess interval | Verdict |',
+      `| Scenario | Metric | Base | Head | Change | ${counts ? 'Uncertainty estimate' : 'Median budget excess interval'} | Verdict |`,
       '|---|---|---:|---:|---:|---|---|',
       ...result.rows.map(
         (row) =>
-          `| ${row.scenario} | ${row.metric} | ${number(row.baseline)} | ${number(row.current)} | ${row.changePercent === null ? 'undefined (zero base)' : `${row.changePercent.toFixed(1)}%`} | [${number(row.interval[0])}, ${number(row.interval[1])}] | ${row.verdict} |`,
+          `| ${row.scenario} | ${row.metric} | ${number(row.baseline)} | ${number(row.current)} | ${row.changePercent === null ? 'undefined (zero base)' : `${row.changePercent.toFixed(1)}%`} | ${counts ? 'not estimated' : `[${number(row.interval[0])}, ${number(row.interval[1])}]`} | ${row.verdict} |`,
       ),
       '',
-      'Intervals are simultaneous distribution-free median bounds over independent balanced blocks (Bonferroni across primary checks, 95% by default). The budget is the larger of the percent threshold and each metric’s absolute floor. Raw samples are authoritative; paced workloads are diagnostic.',
+      counts
+        ? 'Count checks use a deterministic median paired-block budget rule without statistical uncertainty estimates. Task time and paced interactions are diagnostic. The budget is the larger of the percent threshold and each metric’s absolute floor. Raw samples are authoritative.'
+        : 'Intervals are simultaneous distribution-free median bounds over independent balanced blocks (Bonferroni across primary checks, 95% by default). The budget is the larger of the percent threshold and each metric’s absolute floor. Raw samples are authoritative; paced workloads are diagnostic.',
     );
   return lines.join('\n') + '\n';
 }

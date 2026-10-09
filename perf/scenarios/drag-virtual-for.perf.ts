@@ -10,6 +10,7 @@ const SELECTOR = '[data-droppable-id="viewport-a"]';
 test.describe('Drag Within *vdndVirtualFor List Performance', () => {
   test('drag row 0 to row 4 in a vdnd-virtual-viewport list', async ({ page }, testInfo) => {
     const perfPage = new PerfPage(page);
+    let sourceId = '';
     let coordinates = { startX: 0, startY: 0, endX: 0, endY: 0 };
     await runScenario(
       page,
@@ -30,6 +31,8 @@ test.describe('Drag Within *vdndVirtualFor List Performance', () => {
       {
         setup: async () => {
           await perfPage.goto('/virtual-viewport');
+          sourceId = await perfPage.getDraggableId('viewport-a', 0);
+          expect(sourceId).toBe('a-1');
           const source = await perfPage.getDraggableBox('viewport-a', 0);
           const target = await perfPage.getDraggableBox('viewport-a', TARGET_INDEX);
           if (!source || !target) throw new Error('Missing virtual-for drag source or target');
@@ -53,9 +56,7 @@ test.describe('Drag Within *vdndVirtualFor List Performance', () => {
             startScrollTop: 0,
             endScrollTop,
             scrollDistance: endScrollTop,
-            sourceId: 'a-1',
-            destinationIndex: TARGET_INDEX,
-            completed: true,
+            completed: false,
           };
         },
         verify: async ({ workload }) => {
@@ -79,6 +80,14 @@ test.describe('Drag Within *vdndVirtualFor List Performance', () => {
             'a-6',
           ]);
           await expect(page.getByTestId('viewport-a-count')).toHaveText('60');
+          Object.assign(
+            workload,
+            await perfPage.observeDrop({
+              hostSelector: '[data-testid="viewport-demo"]',
+              destinationDroppableId: 'viewport-a',
+              sourceId,
+            }),
+          );
         },
       },
     );

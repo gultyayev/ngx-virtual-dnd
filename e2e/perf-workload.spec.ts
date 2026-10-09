@@ -4,6 +4,133 @@ import { runScenario } from '../perf/fixtures/scenario';
 import { MetricsCollector } from '../perf/fixtures/metrics-collector';
 
 test.describe('Benchmark workload delivery', () => {
+  test('follows the same logical scroll checkpoints with different geometry and no overscan', async ({
+    page,
+  }) => {
+    const expectedRows = Array.from({ length: 8 }, (_, i) => `row-${(i + 1) * 2}`);
+    const distances: number[] = [];
+    for (const geometry of [
+      { height: 50, padding: 0 },
+      { height: 75, padding: 45 },
+    ]) {
+      await page.setContent(
+        '<div data-testid="virtual-scrollport" style="height:100px;overflow:auto;overflow-anchor:none"><div data-testid="virtual-content" style="position:relative"></div></div>',
+      );
+      await page.evaluate(({ height, padding }) => {
+        const viewport = document.querySelector<HTMLElement>('[data-testid="virtual-scrollport"]')!;
+        const content = document.querySelector<HTMLElement>('[data-testid="virtual-content"]')!;
+        content.style.height = `${30 * height + padding}px`;
+        const render = () => {
+          const first = Math.max(0, Math.floor((viewport.scrollTop - padding) / height));
+          const end = Math.min(
+            30,
+            Math.ceil((viewport.scrollTop + viewport.clientHeight - padding) / height),
+          );
+          content.replaceChildren(
+            ...Array.from({ length: end - first }, (_, offset) => {
+              const index = first + offset;
+              const row = document.createElement('div');
+              row.dataset['draggableId'] = `row-${index}`;
+              row.style.cssText = `position:absolute;top:${padding + index * height}px;height:${height}px;width:100%`;
+              row.textContent = String(index);
+              return row;
+            }),
+          );
+        };
+        viewport.addEventListener('scroll', render);
+        render();
+      }, geometry);
+      const evidence = await new PerfPage(page).scrollCheckpoints({
+        selector: '[data-testid="virtual-scrollport"]',
+        checkpoints: 8,
+        rowPrefix: 'row-',
+        rowStep: 2,
+      });
+      expect(evidence['operations']).toBe(8);
+      expect(evidence['checkpointRows']).toEqual(expectedRows);
+      expect(evidence['finalTargetRow']).toBe('row-16');
+      expect(evidence['maxCheckpointOffsetPx']).toBeLessThanOrEqual(2);
+      distances.push(Number(evidence['scrollDistance']));
+    }
+    expect(distances[0]).toBeLessThan(distances[1]);
+  });
+
+  test('settles target alignment when an already rendered row shifts after a scroll update', async ({
+    page,
+  }) => {
+    await page.setContent(
+      `<div data-testid="settling-scrollport" style="height:100px;overflow:auto;overflow-anchor:none"><div data-testid="settling-content">${Array.from({ length: 10 }, (_, i) => `<div data-draggable-id="row-${i}" style="height:50px">${i}</div>`).join('')}</div></div>`,
+    );
+    await page.evaluate(() => {
+      const viewport = document.querySelector('[data-testid="settling-scrollport"]')!;
+      const content = document.querySelector<HTMLElement>('[data-testid="settling-content"]')!;
+      viewport.addEventListener(
+        'scroll',
+        () => {
+          requestAnimationFrame(() => {
+            content.style.paddingTop = '40px';
+          });
+        },
+        { once: true },
+      );
+    });
+    const evidence = await new PerfPage(page).scrollCheckpoints({
+      selector: '[data-testid="settling-scrollport"]',
+      checkpoints: 1,
+      rowPrefix: 'row-',
+    });
+    expect(evidence['checkpointRows']).toEqual(['row-1']);
+    expect(evidence['maxCheckpointOffsetPx']).toBeLessThanOrEqual(2);
+    const offset = await page
+      .getByTestId('settling-scrollport')
+      .evaluate(
+        (viewport) =>
+          viewport.querySelector('[data-draggable-id="row-1"]')!.getBoundingClientRect().top -
+          viewport.getBoundingClientRect().top,
+      );
+    expect(Math.abs(offset)).toBeLessThanOrEqual(2);
+  });
+
+  test('records actual drop attributes and the item observed in the destination', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<main data-testid="drop-host" data-last-drop-source-index="3" data-last-drop-destination-index="7"><div data-droppable-id="observed-target"><div data-draggable-id="observed-source-3"></div></div></main>',
+    );
+    const outcome = await new PerfPage(page).observeDrop({
+      hostSelector: '[data-testid="drop-host"]',
+      destinationDroppableId: 'observed-target',
+      sourceId: 'observed-source-3',
+    });
+    expect(outcome).toEqual({
+      sourceIndex: 3,
+      destinationIndex: 7,
+      sourceId: 'observed-source-3',
+      completed: true,
+    });
+    await page
+      .getByTestId('drop-host')
+      .evaluate((host) => host.removeAttribute('data-last-drop-source-index'));
+    await expect(
+      new PerfPage(page).observeDrop({
+        hostSelector: '[data-testid="drop-host"]',
+        destinationDroppableId: 'observed-target',
+        sourceId: 'observed-source-3',
+      }),
+    ).rejects.toThrow('Missing or invalid drop outcome data-last-drop-source-index');
+    await page
+      .getByTestId('drop-host')
+      .evaluate((host) => host.setAttribute('data-last-drop-source-index', '3'));
+    await page.locator('[data-draggable-id="observed-source-3"]').evaluate((row) => row.remove());
+    await expect(
+      new PerfPage(page).observeDrop({
+        hostSelector: '[data-testid="drop-host"]',
+        destinationDroppableId: 'observed-target',
+        sourceId: 'observed-source-3',
+      }),
+    ).rejects.toThrow('not observed in destination');
+  });
+
   test('records positive-control work as script, a long task, and a frame stall', async ({
     page,
     browserName,
@@ -117,8 +244,6 @@ test.describe('Benchmark workload delivery', () => {
         selector: '#missing',
         checkpoints: 8,
         rowPrefix: 'row-',
-        itemHeight: 50,
-        targetScrollTop: 400,
       }),
     ).rejects.toThrow('Missing scroll container #missing');
   });
@@ -142,8 +267,6 @@ test.describe('Benchmark workload delivery', () => {
       selector: '#scrollport',
       checkpoints: 8,
       rowPrefix: 'row-',
-      itemHeight: 50,
-      targetScrollTop: 400,
     });
     expect(evidence['operations']).toBe(8);
     expect(evidence['checkpointRows']).toEqual(Array.from({ length: 8 }, (_, i) => `row-${i + 1}`));

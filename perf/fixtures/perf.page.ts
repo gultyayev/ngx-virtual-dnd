@@ -26,13 +26,6 @@ export class PerfPage {
     await expect(this.page.getByTestId('drag-state-debug')).toHaveCount(0);
   }
 
-  async setItemCount(count: number): Promise<void> {
-    await this.page.locator('input[type="number"]').first().fill(String(count));
-    await this.page.locator('button', { hasText: 'Regenerate' }).click();
-    await expect(this.page.getByTestId('list-1-count')).toHaveText(String(Math.floor(count / 2)));
-    await this.waitForFrames(3);
-  }
-
   async waitForFrames(count = 2): Promise<void> {
     await this.page.evaluate(async (frames) => {
       for (let i = 0; i < frames; i++) {
@@ -56,71 +49,89 @@ export class PerfPage {
     await this.waitForFrames(3);
   }
 
-  /**
-   * Perform known scroll checkpoints, yielding two rendering opportunities after EVERY write.
-   * Unlike elapsed-time interpolation, a slow renderer cannot skip intermediate row updates.
-   * Dynamic rows advance by IDs already rendered in the preceding viewport, so fresh height
-   * estimates cannot change the intended sequence of rows.
-   */
+  /** Deliver a fixed sequence of logical rows, allowing the renderer's pixel geometry to vary. */
   async scrollCheckpoints(options: {
     selector: string;
     checkpoints: number;
     rowPrefix: string;
     rowStep?: number;
-    targetScrollTop?: number;
-    itemHeight?: number;
   }): Promise<WorkloadEvidence> {
     return this.page.evaluate(async (opts) => {
       const element = document.querySelector<HTMLElement>(opts.selector);
       if (!element) throw new Error(`Missing scroll container ${opts.selector}`);
-      const rows = () =>
-        Array.from(element.querySelectorAll('[data-draggable-id]')).map(
-          (row) => row.getAttribute('data-draggable-id')!,
-        );
+      const rowStep = opts.rowStep ?? 1;
+      if (
+        !Number.isSafeInteger(opts.checkpoints) ||
+        opts.checkpoints < 1 ||
+        !Number.isSafeInteger(rowStep) ||
+        rowStep < 1
+      ) {
+        throw new Error('Scroll checkpoints and rowStep must be positive integers');
+      }
+      const rows = () => Array.from(element.querySelectorAll<HTMLElement>('[data-draggable-id]'));
+      const ids = () => rows().map((row) => row.getAttribute('data-draggable-id')!);
       const nextFrame = () =>
         new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const rowOffset = (row: HTMLElement) =>
+        row.getBoundingClientRect().top - element.getBoundingClientRect().top - element.clientTop;
+      const targetRow = (id: string) =>
+        rows().find((row) => row.getAttribute('data-draggable-id') === id);
+      const writeCheckpoint = (targetIndex: number, targetId: string) => {
+        const target = targetRow(targetId);
+        if (target && target.getBoundingClientRect().height > 0) {
+          element.scrollTop += rowOffset(target);
+          return;
+        }
+        // With zero overscan the next logical target can be outside the DOM. Use
+        // a rendered row only to estimate pixels, then settle the actual target.
+        const anchors = rows()
+          .flatMap((row) => {
+            const id = row.getAttribute('data-draggable-id')!;
+            const suffix = id.startsWith(opts.rowPrefix) ? id.slice(opts.rowPrefix.length) : '';
+            if (!/^\d+$/.test(suffix)) return [];
+            const index = Number(suffix);
+            const height = row.getBoundingClientRect().height;
+            return Number.isSafeInteger(index) && height > 0 ? [{ row, index, height }] : [];
+          })
+          .sort((a, b) => Math.abs(a.index - targetIndex) - Math.abs(b.index - targetIndex));
+        const anchor = anchors[0];
+        if (!anchor) throw new Error(`No measurable row geometry for checkpoint ${targetId}`);
+        element.scrollTop += rowOffset(anchor.row) + (targetIndex - anchor.index) * anchor.height;
+      };
       const startScrollTop = element.scrollTop;
-      const visitedRows = new Set(rows());
+      const visitedRows = new Set(ids());
       const renderedRanges: string[] = [];
       const checkpointRows: string[] = [];
       let operations = 0;
+      let scrollWrites = 0;
       let maxCheckpointOffsetPx = 0;
       for (let i = 1; i <= opts.checkpoints; i++) {
-        let targetId: string;
-        if (opts.targetScrollTop !== undefined) {
-          const position =
-            startScrollTop + ((opts.targetScrollTop - startScrollTop) * i) / opts.checkpoints;
-          targetId = `${opts.rowPrefix}${Math.floor(position / opts.itemHeight!)}`;
-          element.scrollTop = position;
-        } else {
-          targetId = `${opts.rowPrefix}${i * (opts.rowStep ?? 1)}`;
-          const row = element.querySelector(`[data-draggable-id="${targetId}"]`);
-          if (!row) throw new Error(`Checkpoint ${i}: row ${targetId} was not rendered`);
-          const scrollport = element.getBoundingClientRect();
-          element.scrollTop += row.getBoundingClientRect().top - scrollport.top - element.clientTop;
-        }
-        await nextFrame();
-        await nextFrame();
-        // Wait for the actual virtual render, not just acceptance of the scroll write.
-        let rendered = rows();
-        for (let retry = 0; !rendered.includes(targetId) && retry < 8; retry++) {
+        const targetIndex = i * rowStep;
+        const targetId = `${opts.rowPrefix}${targetIndex}`;
+        let alignedOffset: number | undefined;
+        for (let attempt = 0; attempt < 9; attempt++) {
+          writeCheckpoint(targetIndex, targetId);
+          scrollWrites++;
           await nextFrame();
-          rendered = rows();
+          await nextFrame();
+          // Presence is insufficient: a target can already exist in overscan before
+          // the scroll. Wait for its actual position after rendering/height updates.
+          const target = targetRow(targetId);
+          if (target && target.getBoundingClientRect().height > 0) {
+            const offset = Math.abs(rowOffset(target));
+            if (offset <= 2) {
+              alignedOffset = offset;
+              break;
+            }
+          }
         }
-        if (!rendered.includes(targetId)) {
-          throw new Error(`Checkpoint ${i}: row ${targetId} did not render`);
-        }
-        if (opts.targetScrollTop === undefined) {
-          const row = element.querySelector(`[data-draggable-id="${targetId}"]`)!;
-          maxCheckpointOffsetPx = Math.max(
-            maxCheckpointOffsetPx,
-            Math.abs(
-              row.getBoundingClientRect().top -
-                element.getBoundingClientRect().top -
-                element.clientTop,
-            ),
+        if (alignedOffset === undefined) {
+          throw new Error(
+            `Checkpoint ${i}: row ${targetId} did not render aligned with the scrollport`,
           );
         }
+        maxCheckpointOffsetPx = Math.max(maxCheckpointOffsetPx, alignedOffset);
+        const rendered = ids();
         for (const id of rendered) visitedRows.add(id);
         checkpointRows.push(targetId);
         renderedRanges.push(`${rendered[0]}:${rendered.at(-1)}`);
@@ -128,6 +139,7 @@ export class PerfPage {
       }
       return {
         operations,
+        scrollWrites,
         startScrollTop,
         endScrollTop: element.scrollTop,
         scrollDistance: element.scrollTop - startScrollTop,
@@ -139,6 +151,54 @@ export class PerfPage {
         completed: true,
       };
     }, options);
+  }
+
+  /** Read verified drop evidence after the performance window has closed. */
+  async observeDrop(options: {
+    hostSelector: string;
+    destinationDroppableId: string;
+    sourceId: string;
+  }): Promise<WorkloadEvidence> {
+    return this.page.evaluate(({ hostSelector, destinationDroppableId, sourceId }) => {
+      const host = document.querySelector(hostSelector);
+      if (!host) throw new Error(`Missing drop outcome host ${hostSelector}`);
+      const index = (attribute: string) => {
+        const value = host.getAttribute(attribute);
+        if (value === null || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+          throw new Error(`Missing or invalid drop outcome ${attribute}`);
+        }
+        return Number(value);
+      };
+      const sourceIndex = index('data-last-drop-source-index');
+      const destinationIndex = index('data-last-drop-destination-index');
+      const destination = Array.from(document.querySelectorAll('[data-droppable-id]')).find(
+        (element) => element.getAttribute('data-droppable-id') === destinationDroppableId,
+      );
+      const observedRow =
+        destination &&
+        Array.from(destination.querySelectorAll('[data-draggable-id]')).find(
+          (row) => row.getAttribute('data-draggable-id') === sourceId,
+        );
+      if (!observedRow)
+        throw new Error(
+          `Dragged item ${sourceId} was not observed in destination ${destinationDroppableId}`,
+        );
+      return {
+        sourceIndex,
+        destinationIndex,
+        sourceId: observedRow.getAttribute('data-draggable-id')!,
+        completed: true,
+      };
+    }, options);
+  }
+
+  async getDraggableId(droppableId: string, index: number): Promise<string> {
+    const id = await this.page
+      .locator(`[data-droppable-id="${droppableId}"] [data-draggable-id]`)
+      .nth(index)
+      .getAttribute('data-draggable-id');
+    if (!id) throw new Error(`Missing draggable ${index} in ${droppableId}`);
+    return id;
   }
 
   /**

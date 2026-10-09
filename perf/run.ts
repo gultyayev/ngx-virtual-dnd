@@ -17,8 +17,10 @@ import {
   FIXTURE_PATHS,
   HARNESS_PATHS,
   hashPaths,
+  installedDependencyHash,
   LIBRARY_PATHS,
   PRODUCTION_INPUT_PATHS,
+  runnerProfile,
 } from './fixtures/runner-plan.ts';
 import type { Experiment, HealthSnapshot, Variant } from './fixtures/run-types.ts';
 
@@ -28,7 +30,8 @@ function parseRunnerOptions(args: string[]) {
     options: {
       base: { type: 'string' },
       head: { type: 'string' },
-      blocks: { type: 'string', default: '10' },
+      profile: { type: 'string', default: 'timing' },
+      blocks: { type: 'string' },
       output: { type: 'string' },
       calibration: { type: 'boolean', default: false },
       control: { type: 'string', default: 'none' },
@@ -54,7 +57,8 @@ function evidenceArgument(args: string[], flag: string): string | undefined {
 const args = process.argv.slice(2);
 let values = parseRunnerOptions([]);
 const roots = { base: resolve('.'), head: resolve(evidenceArgument(args, '--head') ?? '.') };
-let blocks = 10;
+let blocks = 20;
+let profile = runnerProfile('timing');
 let control = 'none';
 let controlWorkMs = 50;
 const ports = { base: 4300, head: 4301 };
@@ -72,23 +76,36 @@ function gitCommit(root: string): string {
   return result.stdout.trim();
 }
 
-function verifyBuild(root: string): string {
+function verifyBuild(root: string): {
+  fixtureRoot: string;
+  fixtureHash: string;
+  installedDependencyHash: string;
+} {
   const data = JSON.parse(readFileSync(resolve(root, 'dist/perf-build.json'), 'utf8')) as Record<
     string,
     unknown
   >;
+  const fixtureRoot = typeof data['fixtureRoot'] === 'string' ? resolve(data['fixtureRoot']) : root;
+  const installed = installedDependencyHash(root);
   if (
-    data['formatVersion'] !== 1 ||
-    data['fixtureHash'] !== hashPaths(root, FIXTURE_PATHS) ||
+    data['formatVersion'] !== 2 ||
+    typeof data['fixtureRoot'] !== 'string' ||
+    data['fixtureHash'] !== hashPaths(fixtureRoot, FIXTURE_PATHS) ||
     data['libraryHash'] !== hashPaths(root, LIBRARY_PATHS) ||
+    data['libraryBuildConfigHash'] !== hashPaths(root, ['angular.json', 'tsconfig.json']) ||
     data['dependencyHash'] !== dependencyHash(root) ||
+    data['installedDependencyHash'] !== installed ||
     data['outputHash'] !== hashPaths(root, ['dist/dnd/browser'])
   ) {
     throw new Error(
       `Stale or incompatible production build in ${root}. Run npm run perf:build there.`,
     );
   }
-  return data['fixtureHash'] as string;
+  return {
+    fixtureRoot,
+    fixtureHash: data['fixtureHash'] as string,
+    installedDependencyHash: installed,
+  };
 }
 
 function pressure(resource: string, kind: 'some' | 'full'): number | null {
@@ -231,7 +248,8 @@ async function execute(variant: Variant, sourceFile: string): Promise<void> {
             PERF_BASE_URL: `http://127.0.0.1:${ports[variant]}`,
             PERF_RESULT_PATH: sourceFile,
             PERF_ITERATIONS: '1',
-            PERF_WARMUP_ITERATIONS: '1',
+            PERF_PROFILE: profile.profile,
+            PERF_WARMUP_ITERATIONS: String(profile.warmupIterations),
             PERF_CONTROL_WORK_MS:
               control === 'script' && variant === 'head' ? String(controlWorkMs) : '0',
           },
@@ -271,7 +289,8 @@ try {
   values = parseRunnerOptions(args);
   roots.base = resolve(values.base ?? '.');
   roots.head = resolve(values.head ?? '.');
-  blocks = Number(values.blocks);
+  profile = runnerProfile(values.profile);
+  blocks = Number(values.blocks ?? profile.blocks);
   control = values.control;
   controlWorkMs = Number(values['control-work-ms']);
   ports.base = Number(values['base-port']);
@@ -284,6 +303,8 @@ try {
     throw new Error('--control must be none, script or cpu.');
   if (!values.calibration && control !== 'none')
     throw new Error('Controls require --calibration; they are not PR regressions.');
+  if (control !== 'none' && profile.profile !== 'timing')
+    throw new Error('Controls require the timing profile.');
   if (!Number.isFinite(controlWorkMs) || controlWorkMs < 0 || controlWorkMs > 1000)
     throw new Error('--control-work-ms must be between 0 and 1000.');
   if (
@@ -293,7 +314,11 @@ try {
     throw new Error('Choose distinct valid server ports.');
   const fixtureBase = verifyBuild(roots.base);
   const fixtureHead = verifyBuild(roots.head);
-  if (fixtureBase !== fixtureHead)
+  if (
+    fixtureBase.fixtureHash !== fixtureHead.fixtureHash ||
+    fixtureBase.installedDependencyHash !== fixtureHead.installedDependencyHash ||
+    dependencyHash(roots.base) !== dependencyHash(roots.head)
+  )
     throw new Error(
       'Base/head fixtures or dependencies differ. Build both libraries with the same consumer fixture and lockfile.',
     );
@@ -340,7 +365,8 @@ try {
   experiment = {
     formatVersion: 1,
     mode: values.calibration ? 'calibration' : 'comparison',
-    harnessHash: frozenHarness + ':' + fixtureHead,
+    harnessHash: frozenHarness + ':' + fixtureHead.fixtureHash,
+    profile: profile.profile,
     variants,
     requestedBlocks: blocks,
     completed: false,
@@ -367,6 +393,13 @@ try {
       runnerImageVersion: process.env['ImageVersion'] ?? 'unknown',
       runnerEnvironment: process.env['RUNNER_ENVIRONMENT'] ?? 'local',
       control,
+      libraryUnchanged: variants.base.libraryHash === variants.head.libraryHash,
+      fixtureRoot: { base: fixtureBase.fixtureRoot, head: fixtureHead.fixtureRoot },
+      fixtureHash: fixtureHead.fixtureHash,
+      installedDependencyHash: {
+        base: fixtureBase.installedDependencyHash,
+        head: fixtureHead.installedDependencyHash,
+      },
       controlWorkMs: control === 'script' ? controlWorkMs : 0,
     },
   };
@@ -391,7 +424,6 @@ try {
       await execute(variant, sourceFile);
       const healthAfter = health();
       const scenarios = extractScenarios(sourceFile);
-      experiment.environment['browserVersion'] ??= scenarios[0]?.raw[0]?.browserVersion;
       if (experiment.environment['browserVersion'] === '')
         experiment.environment['browserVersion'] = scenarios[0]?.raw[0]?.browserVersion;
       block.runs.push({
