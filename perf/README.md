@@ -1,10 +1,10 @@
 # Performance Benchmarks
 
-Playwright-driven micro-benchmarks that gate pull requests by measuring the
-PR's **base and head on the same CI runner in the same workflow run** (A/B) and
-comparing the two. This document records the **methodology** behind the numbers
-so the regression gate stays trustworthy in both directions (no false alarms,
-no missed regressions).
+Playwright-driven micro-benchmarks for manual before/after comparisons. Benchmarks
+do not run in CI or gate pull requests. Compare runs captured on the **same
+machine** with the same harness and Playwright version. This document records the
+**methodology** behind the numbers so local comparisons stay trustworthy in both
+directions (no false alarms, no missed regressions).
 
 A committed baseline was used first and abandoned (#62, #63): PR runs happen on
 different shared-runner hosts than the run that produced the baseline, and
@@ -40,7 +40,7 @@ npm run perf:baseline   # run perf and save the result as the local baseline
 
 `perf:compare` flags: `--threshold <pct>` (default 25), `--baseline <file>`,
 `--current <file>`, `--output <file>`, `--allow-baseline-mismatch` (downgrade an
-incompatible-baseline failure to a warning). It exits non-zero — failing CI — on
+incompatible-baseline failure to a warning). It exits non-zero on
 a detected regression, a missing scenario/metric, or an incompatible baseline.
 
 ## Measured pages
@@ -201,39 +201,18 @@ date** (embedded by Playwright's JSON reporter) so it is always visible what
 each side was measured from. Mismatches fail the run; pass
 `--allow-baseline-mismatch` to compare anyway (unreliable). The output says what
 to do about the mismatch (`incompatibleBaselineAdvice` in
-`fixtures/compare-metrics.ts`): only a saved local baseline is ever regenerated,
-because CI never reads one.
+`fixtures/compare-metrics.ts`). For local comparisons, save a new baseline with
+`npm run perf:baseline` when the harness or Playwright version changes.
 
 The comparison also fails when a scenario or metric present in the baseline is
 **missing** from the current run — a renamed, skipped, or crashed benchmark must
 not silently disappear behind a green check. The reverse case — a scenario in
 the current run with no baseline entry — is a **new benchmark**: it is listed as
-`NEW (no baseline)` and stays ungated (in CI it gains a baseline automatically
-once it exists on the base side, i.e. after the PR merges).
+`NEW (no baseline)` and stays ungated until a new local baseline includes it.
 
 When the baseline run is more than 60 days older than the current run, the
-output includes a non-fatal **stale baseline** warning. In CI this never fires
-(both sides run minutes apart); it guards local comparisons against an old
-saved baseline.
-
-## CI: same-runner A/B
-
-The `Performance Benchmarks` workflow checks out the PR's **base commit** and
-**head (merge commit)** into sibling directories, then — on the same runner,
-back to back — installs, builds, and runs `npm run perf` in each, and finally
-compares head against base with head's `compare.ts`:
-
-- Absolute numbers are only ever compared within a single job on a single
-  host, so runner-image updates, hardware generation differences, and noisy
-  neighbors between workflow runs cannot masquerade as regressions.
-- There is no committed baseline to go stale and nothing to regenerate; each
-  PR is measured against exactly the code it branched from.
-- Each side runs its own harness. A PR that changes metric **semantics** (bumps
-  `metricsSchemaVersion`) will fail the comparison closed — that PR's perf
-  check requires human judgment (`--allow-baseline-mismatch` locally) because
-  no automated comparison across semantics is meaningful. Nothing needs
-  regenerating after it merges: the next PR's base commit already runs the new
-  schema, so its comparison works again.
+output includes a non-fatal **stale baseline** warning to guard local comparisons
+against an old saved baseline.
 
 ## Local baselines
 
