@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.6.1](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.0...v3.6.1) (2026-10-14)
+
+### Bug Fixes
+
+- **lib:** re-read the scroll offset when a scroll container is shown again ([#142](https://github.com/gultyayev/ngx-virtual-dnd/issues/142)) ([a69c4f9](https://github.com/gultyayev/ngx-virtual-dnd/commit/a69c4f9e3f139f39e08d304a5872d99e3f9e4247))
+
 ## [3.6.0](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.5.0...v3.6.0) (2026-10-08)
 
 ### Features
