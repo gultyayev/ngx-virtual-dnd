@@ -214,6 +214,7 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
       ngZone: this.#ngZone,
       height: this.#containerHeight,
       minDeltaPx: 1,
+      scrollTop: this.#scrollTop,
     });
   }
 }
