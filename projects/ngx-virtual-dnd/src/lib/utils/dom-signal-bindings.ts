@@ -15,23 +15,23 @@ export function bindRafThrottledScrollTopSignal(options: {
   const { element, ngZone, scrollTop, thresholdPx = 5, onCommit } = options;
 
   let pendingRaf: number | null = null;
-  let lastCommittedScrollTop = layoutValue(element.scrollTop);
 
+  // The threshold is measured from the signal, not from this listener's last commit: the
+  // signal is also set elsewhere (a resize re-reads the offset, programmatic scrolls set it).
   const onScroll = () => {
     if (pendingRaf !== null) {
       return;
     }
 
     const currentScrollTop = element.scrollTop;
-    if (Math.abs(currentScrollTop - lastCommittedScrollTop) < thresholdPx) {
+    if (Math.abs(currentScrollTop - scrollTop()) < thresholdPx) {
       return;
     }
 
     pendingRaf = requestAnimationFrame(() => {
       pendingRaf = null;
       const finalScrollTop = element.scrollTop;
-      if (Math.abs(finalScrollTop - lastCommittedScrollTop) >= thresholdPx) {
-        lastCommittedScrollTop = finalScrollTop;
+      if (Math.abs(finalScrollTop - scrollTop()) >= thresholdPx) {
         scrollTop.set(finalScrollTop);
         onCommit?.(finalScrollTop);
       }
@@ -42,7 +42,7 @@ export function bindRafThrottledScrollTopSignal(options: {
     element.addEventListener('scroll', onScroll, { passive: true });
   });
 
-  scrollTop.set(lastCommittedScrollTop);
+  scrollTop.set(layoutValue(element.scrollTop));
 
   return () => {
     if (pendingRaf !== null) {
@@ -53,13 +53,22 @@ export function bindRafThrottledScrollTopSignal(options: {
   };
 }
 
+/**
+ * Keep `height` in step with the element's height. Given `scrollTop`, also re-read the scroll
+ * offset on every resize: an element shown again (`display: none` on an ancestor, an inactive
+ * tab) or put back in the page gets its offset restored or reset without a `scroll` event, and
+ * reads 0 while it has no layout box, so the scroll listener can miss or mis-read it. The
+ * observer reports such an element at size 0 and again once it has a box, right after layout,
+ * so the read forces no extra layout.
+ */
 export function bindResizeObserverHeightSignal(options: {
   element: HTMLElement;
   ngZone: NgZone;
   height: WritableSignal<number>;
   minDeltaPx?: number;
+  scrollTop?: WritableSignal<number>;
 }): () => void {
-  const { element, ngZone, height, minDeltaPx = 1 } = options;
+  const { element, ngZone, height, minDeltaPx = 1, scrollTop } = options;
 
   if (typeof ResizeObserver === 'undefined') {
     height.set(layoutValue(element.clientHeight));
@@ -76,6 +85,7 @@ export function bindResizeObserverHeightSignal(options: {
           height.set(nextHeight);
         }
       }
+      scrollTop?.set(element.scrollTop);
     });
     observer.observe(element);
   });

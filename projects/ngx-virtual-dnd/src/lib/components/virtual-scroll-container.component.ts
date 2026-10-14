@@ -833,6 +833,7 @@ export class VirtualScrollContainerComponent<T>
       ngZone: this.#ngZone,
       height: this.#measuredHeight,
       minDeltaPx: 1,
+      scrollTop: this.#scrollTop,
     });
 
     // Scroll listener outside Angular zone with RAF throttling.

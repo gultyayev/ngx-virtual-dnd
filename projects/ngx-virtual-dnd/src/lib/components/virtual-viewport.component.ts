@@ -321,6 +321,7 @@ export class VirtualViewportComponent
       ngZone: this.#ngZone,
       height: this.#containerHeight,
       minDeltaPx: 1,
+      scrollTop: this.#scrollTop,
     });
   }
 }
