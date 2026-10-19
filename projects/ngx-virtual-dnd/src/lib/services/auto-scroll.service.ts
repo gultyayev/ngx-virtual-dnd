@@ -57,9 +57,15 @@ interface OrderedContainer {
   config: AutoScrollConfig;
   /** Depth in the DOM, to order nested containers innermost first */
   depth: number;
-  /** The scroll containers around it, which can hide part of it (see `scrollAncestors`) */
-  ancestors: Element[];
+  /**
+   * The scroll containers around it, which can hide part of it (see `scrollAncestors`). Collected
+   * the first time it has room to scroll: most registered lists never do.
+   */
+  ancestors: Element[] | null;
 }
+
+/** Both axes, to record a container with no room to scroll at all (see #participantTick) */
+const BOTH_AXES = { x: 1, y: 1 };
 
 /**
  * Service that handles auto-scrolling when dragging near container edges.
@@ -85,7 +91,8 @@ export class AutoScrollService {
    * Candidate containers ordered innermost (deepest in the DOM) first, so a
    * nested scrollable wins over its ancestors under the cursor. Rebuilt lazily
    * whenever registrations change (containers rarely move mid-drag) and once per
-   * drag (see startMonitoring), not per frame.
+   * drag (see startMonitoring), not per frame. Every registration is a candidate, also one
+   * with nothing to scroll yet: the tick checks the scroll range first (see #participantTick).
    */
   #orderedContainers: OrderedContainer[] | null = null;
 
@@ -103,10 +110,11 @@ export class AutoScrollService {
   #lastTickCursorY = NaN;
 
   /**
-   * The containers the last tick that ran asked to scroll but had no room left: the first
-   * #exhaustedCount entries (the objects are reused from tick to tick). A resting cursor skips the
-   * tick only while they stay as they were on the axes it asked for: content that grows (rows
-   * measured taller, items added), a resize or a scroll can give one room, and the scroll resumes.
+   * The containers the last tick that ran asked to scroll but had no room left, and those it
+   * skipped because they had nothing to scroll on either axis: the first #exhaustedCount entries
+   * (the objects are reused from tick to tick). A resting cursor skips the tick only while they
+   * stay as they were on the axes it asked for: content that grows (rows measured taller, items
+   * added), a resize or a scroll can give one room, and the scroll resumes.
    */
   readonly #exhausted: ExhaustedContainer[] = [];
   #exhaustedCount = 0;
@@ -144,7 +152,8 @@ export class AutoScrollService {
       element,
       config: { ...DEFAULT_CONFIG, ...config },
     });
-    this.#orderedContainers = null;
+    // A list rendered mid-drag under a resting cursor is checked on the next tick
+    this.refresh();
   }
 
   /**
@@ -152,7 +161,7 @@ export class AutoScrollService {
    */
   unregisterContainer(id: string): void {
     this.#scrollableContainers.delete(id);
-    this.#orderedContainers = null;
+    this.refresh();
   }
 
   /**
@@ -173,19 +182,15 @@ export class AutoScrollService {
     const entries: OrderedContainer[] = [];
     for (const [id, { element, config }] of this.#scrollableContainers) {
       // Registration is unconditional (directives can't expose DOM size as a signal, so
-      // gating registration on it goes stale — see #27). Filter by live scroll geometry
-      // here instead: this list is rebuilt per drag (startMonitoring nulls the cache) and
-      // on register/unregister, so a container that grew scrollable after init is picked
-      // up on the next drag, and one that shrank stops occupying a candidate slot.
-      if (!this.#isScrollable(element)) {
-        continue;
-      }
+      // gating registration on it goes stale — see #27), and so is candidacy: a list can
+      // grow scrollable mid-drag (rows arrive or are measured taller). The tick checks the
+      // live scroll range of each candidate before it measures it.
       entries.push({
         id,
         element,
         config,
         depth: this.#domDepth(element),
-        ancestors: scrollAncestors(element),
+        ancestors: null,
       });
     }
 
@@ -197,9 +202,8 @@ export class AutoScrollService {
   }
 
   /**
-   * Whether the element currently has room to scroll on either axis. Read fresh each
-   * time the candidate list is (re)built — never cached — so it always reflects the
-   * live layout at drag start rather than a stale value captured at registration.
+   * Whether the element currently has room to scroll on either axis. Read fresh on each
+   * tick that evaluates it — never cached — so it reflects the live layout.
    */
   #isScrollable(element: HTMLElement): boolean {
     return element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
@@ -260,8 +264,8 @@ export class AutoScrollService {
 
   /**
    * Check the containers again on the next tick even if the cursor rests: their geometry
-   * changed (a scroll container's covered space). Collects them again too: an element that
-   * gets insets becomes a scroll container around the lists in it.
+   * changed (a scroll container's covered space) or a container was (un)registered. Collects
+   * them again too: an element that gets insets becomes a scroll container around the lists in it.
    * @internal
    */
   refresh(): void {
@@ -306,7 +310,15 @@ export class AutoScrollService {
 
     // Candidates are ordered innermost-first: when the deepest container under the
     // cursor is exhausted at its boundary, the loop falls through to its ancestors.
-    for (const { id, element, config, ancestors } of this.#getOrderedContainers()) {
+    for (const candidate of this.#getOrderedContainers()) {
+      const { id, element, config } = candidate;
+      // Nothing to scroll on either axis: skip it without measuring. Recorded as exhausted on
+      // both axes, so a resting cursor retries once it grows scrollable.
+      if (!this.#isScrollable(element)) {
+        this.#recordExhausted(element, BOTH_AXES);
+        continue;
+      }
+      const ancestors = (candidate.ancestors ??= scrollAncestors(element));
       const rect = element.getBoundingClientRect();
       // The part of the container that shows: the scroll containers around it, and content
       // pinned over their edges (a page's sticky header), can hide part of it. A cursor over that

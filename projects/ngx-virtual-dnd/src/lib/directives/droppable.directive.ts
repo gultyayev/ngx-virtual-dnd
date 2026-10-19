@@ -168,7 +168,7 @@ export class DroppableDirective implements OnDestroy {
       config: () => this.autoScrollConfig(),
       // Register whenever a group is resolved; do NOT gate on scrollability. DOM size is
       // not reactive, so a list that becomes scrollable after init (async data, resize)
-      // would never register. AutoScrollService filters by live scroll geometry per drag.
+      // would never register. AutoScrollService checks the live scroll range each tick.
       canRegister: () => Boolean(this.effectiveGroup()),
     });
 

@@ -1397,7 +1397,7 @@ describe('AutoScrollService', () => {
 
   // ---------------------------------------------------------------------------
   // Scrollability filtering (registration is unconditional; the candidate list
-  // is filtered by live scroll geometry, refreshed per drag)
+  // is checked against live scroll geometry on each tick)
   // ---------------------------------------------------------------------------
   describe('scrollability filtering', () => {
     /** Element whose content fits its box — nothing to scroll. */
@@ -1488,6 +1488,96 @@ describe('AutoScrollService', () => {
       expect(el.scrollTop).toBeGreaterThan(0);
 
       service.unregisterContainer('grow-list');
+    });
+
+    /** A list whose content fits until `grow()` adds rows (no re-registration). */
+    function makeGrowable(): { el: HTMLElement; rectSpy: jest.Mock; grow: () => void } {
+      const { el, rectSpy } = makeNonScrollable();
+      let scrollHeight = 400;
+      Object.defineProperty(el, 'scrollHeight', { get: () => scrollHeight, configurable: true });
+      return {
+        el,
+        rectSpy,
+        grow: () => {
+          scrollHeight = 1000;
+        },
+      };
+    }
+
+    function moveCursor(cursorPosition: { x: number; y: number }): void {
+      dragStateService.updateDragPosition({
+        cursorPosition,
+        activeDroppableId: null,
+        placeholderId: null,
+        placeholderIndex: null,
+      });
+    }
+
+    it('should scroll a container that grows scrollable during the drag once the cursor moves', () => {
+      const { el, grow } = makeGrowable();
+      service.registerContainer('grow-list', el);
+      setupDrag({ x: 150, y: 480 }); // near the bottom edge
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(el.scrollTop).toBe(0);
+
+      grow(); // rows arrive during the same drag
+      moveCursor({ x: 151, y: 481 });
+      flushRAF();
+
+      expect(el.scrollTop).toBeGreaterThan(0);
+      expect(service.isScrolling()).toBe(true);
+
+      service.unregisterContainer('grow-list');
+    });
+
+    it('should scroll a container that grows scrollable while the cursor rests at its edge', () => {
+      const { el, grow } = makeGrowable();
+      service.registerContainer('grow-list', el);
+      setupDrag({ x: 150, y: 480 }); // near the bottom edge
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(el.scrollTop).toBe(0);
+
+      grow();
+      flushRAF();
+
+      expect(el.scrollTop).toBeGreaterThan(0);
+      expect(service.isScrolling()).toBe(true);
+
+      service.unregisterContainer('grow-list');
+    });
+
+    it('should not read an unscrollable container again while the cursor rests and it does not grow', () => {
+      const { el, rectSpy } = makeGrowable();
+      service.registerContainer('grow-list', el);
+      setupDrag({ x: 150, y: 480 });
+      startMonitoringWithScheduler();
+      flushRAF();
+      flushRAF();
+      flushRAF();
+      moveCursor({ x: 151, y: 481 });
+      flushRAF();
+
+      // Still nothing to scroll: never measured, never scrolled
+      expect(rectSpy).not.toHaveBeenCalled();
+      expect(el.scrollTop).toBe(0);
+      expect(service.isScrolling()).toBe(false);
+
+      service.unregisterContainer('grow-list');
+    });
+
+    it('should scroll a container registered while the cursor rests at its edge', () => {
+      setupDrag({ x: 150, y: 480 }); // near the bottom edge of mockElement
+      startMonitoringWithScheduler();
+      flushRAF();
+
+      // The list renders (or is created) mid-drag under the resting cursor
+      service.registerContainer('test-container', mockElement);
+      flushRAF();
+
+      expect(mockElement.scrollTop).toBeGreaterThan(200);
+      expect(service.isScrolling()).toBe(true);
     });
   });
 
