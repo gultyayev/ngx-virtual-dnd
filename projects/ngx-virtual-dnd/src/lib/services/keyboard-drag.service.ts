@@ -192,6 +192,21 @@ export class KeyboardDragService {
     }
 
     this.clampTargetIndex();
+    this.endKeyboardDrag();
+  }
+
+  /**
+   * End the keyboard drag at its target as it stands, without clamping it again: for a caller
+   * that settled the target (`clampTargetIndex`) before it emitted `dragEnd`. A `dragEnd`
+   * listener can change the list's data, and the drop must report the destination `dragEnd`
+   * did. A no-op without a keyboard drag.
+   * @internal
+   */
+  endKeyboardDrag(): void {
+    if (!this.isActive()) {
+      return;
+    }
+
     this.#dragState.endDrag();
   }
 

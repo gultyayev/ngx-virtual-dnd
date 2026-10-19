@@ -705,6 +705,19 @@ describe('KeyboardDragService', () => {
 
         expect(dragState.endedDragState()?.placeholderIndex).toBe(2);
       });
+
+      it('should end at the target it settled before the list shrank', () => {
+        strategy().setItemCount(5);
+        start(0);
+        service.moveToIndex(4);
+        service.clampTargetIndex();
+        // Like a dragEnd listener that removes items before the drop is delivered
+        strategy().setItemCount(2);
+
+        service.endKeyboardDrag();
+
+        expect(dragState.endedDragState()?.placeholderIndex).toBe(5);
+      });
     });
 
     it('should leave a list with its own reveal to it', () => {

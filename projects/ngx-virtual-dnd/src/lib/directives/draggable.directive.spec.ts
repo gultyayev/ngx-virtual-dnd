@@ -2053,6 +2053,30 @@ describe('DraggableDirective', () => {
       });
     });
 
+    it('should report the destination of dragEnd in drop when a dragEnd listener shrinks the list', () => {
+      // The test item is last of 3 (source index 2), so its target is 2 when it is picked up
+      draggableNative.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      fixture.detectChanges();
+      const onDragEnd = component.onDragEnd.bind(component);
+      component.onDragEnd = (event: DragEndEvent): void => {
+        onDragEnd(event);
+        fixture.nativeElement
+          .querySelectorAll('[data-draggable-id^="preceding-item"]')
+          .forEach((row: Element) => row.remove());
+      };
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+
+      expect(component.dragEndEvents[0].destinationIndex).toBe(2);
+      expect(component.dropEvents[0].destination.index).toBe(
+        component.dragEndEvents[0].destinationIndex,
+      );
+    });
+
     it('should cancel drag on escape when dragging', () => {
       dragStateService.startDrag({
         draggableId: 'test-item',

@@ -216,7 +216,8 @@ export class KeyboardDragHandler {
    * Complete a keyboard drag operation (drop the item).
    */
   complete(): void {
-    // The list's data may have changed since the last move: drop inside the items it has now
+    // The list's data may have changed since the last move: drop inside the items it has now.
+    // Settled once, here: dragEnd and drop both report this target.
     this.#deps.keyboardDrag.clampTargetIndex();
     const ctx = this.#deps.getContext();
     const item = this.#endedItem(ctx);
@@ -262,8 +263,9 @@ export class KeyboardDragHandler {
 
     this.#endInZone(() => {
       this.#deps.callbacks.onDragEnd(event);
-      // Ends the drag state, which delivers the drop
-      this.#deps.keyboardDrag.completeKeyboardDrag();
+      // Ends the drag state, which delivers the drop. Not clamped again: a dragEnd listener
+      // may have changed the list, and drop must report the destination dragEnd did.
+      this.#deps.keyboardDrag.endKeyboardDrag();
       // Restore focus to the moved element after state updates (by the ID it renders now)
       this.#restoreFocus(ctx.draggableId, fallbackDroppableId);
     });

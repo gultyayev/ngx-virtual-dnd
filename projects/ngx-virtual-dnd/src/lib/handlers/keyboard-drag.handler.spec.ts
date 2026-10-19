@@ -64,6 +64,7 @@ describe('KeyboardDragHandler', () => {
       isActive: jest.fn().mockReturnValue(false),
       startKeyboardDrag: jest.fn(),
       completeKeyboardDrag: jest.fn(),
+      endKeyboardDrag: jest.fn(),
       clampTargetIndex: jest.fn(),
       cancelKeyboardDrag: jest.fn(),
       moveUp: jest.fn(),
@@ -278,7 +279,7 @@ describe('KeyboardDragHandler', () => {
       expect(event.preventDefault).toHaveBeenCalled();
       // Stops the same keydown from also reaching the element's host binding (double move)
       expect(event.stopPropagation).toHaveBeenCalled();
-      expect(mockKeyboardDrag.completeKeyboardDrag).toHaveBeenCalled();
+      expect(mockKeyboardDrag.endKeyboardDrag).toHaveBeenCalled();
     });
 
     it('should handle Enter key (complete)', () => {
@@ -287,7 +288,7 @@ describe('KeyboardDragHandler', () => {
 
       expect(result).toBe(true);
       expect(event.preventDefault).toHaveBeenCalled();
-      expect(mockKeyboardDrag.completeKeyboardDrag).toHaveBeenCalled();
+      expect(mockKeyboardDrag.endKeyboardDrag).toHaveBeenCalled();
     });
 
     it('should handle Escape key (cancel)', () => {
@@ -370,7 +371,7 @@ describe('KeyboardDragHandler', () => {
 
       expect(result).toBe(false);
       expect(event.preventDefault).not.toHaveBeenCalled();
-      expect(mockKeyboardDrag.completeKeyboardDrag).not.toHaveBeenCalled();
+      expect(mockKeyboardDrag.endKeyboardDrag).not.toHaveBeenCalled();
       expect(mockKeyboardDrag.cancelKeyboardDrag).not.toHaveBeenCalled();
     });
 
@@ -403,7 +404,19 @@ describe('KeyboardDragHandler', () => {
           destinationIndex: 3,
         }),
       );
-      expect(mockKeyboardDrag.completeKeyboardDrag).toHaveBeenCalled();
+      expect(mockKeyboardDrag.endKeyboardDrag).toHaveBeenCalled();
+    });
+
+    it('should settle the target once, before dragEnd, and end the drag without clamping again', () => {
+      const calls: string[] = [];
+      mockKeyboardDrag.clampTargetIndex.mockImplementation(() => calls.push('clamp'));
+      jest.mocked(mockCallbacks.onDragEnd).mockImplementation(() => calls.push('dragEnd'));
+      mockKeyboardDrag.endKeyboardDrag.mockImplementation(() => calls.push('end'));
+
+      handler.complete();
+
+      expect(calls).toEqual(['clamp', 'dragEnd', 'end']);
+      expect(mockKeyboardDrag.completeKeyboardDrag).not.toHaveBeenCalled();
     });
 
     it('reports no destination when the active target was disabled mid-drag', () => {
@@ -551,7 +564,7 @@ describe('KeyboardDragHandler', () => {
     it('focuses the first destination draggable when the dropped item is not rendered', () => {
       // Dropped into list-2; the drop clears the drag state before the focus callback runs
       mockDragState.activeDroppableId.mockReturnValue('list-2');
-      mockKeyboardDrag.completeKeyboardDrag.mockImplementation(() => {
+      mockKeyboardDrag.endKeyboardDrag.mockImplementation(() => {
         mockDragState.activeDroppableId.mockReturnValue(null);
         mockDragState.sourceDroppableId.mockReturnValue(null);
       });
