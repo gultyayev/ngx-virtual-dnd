@@ -14,6 +14,8 @@ During a drag the original element is hidden. Two elements take its place:
 
 `<vdnd-drag-preview />` clones the dragged element, copies its computed styles and sizes the clone to match the original. The point where the user grabbed the item stays under the pointer.
 
+The clone is a picture of the item. It has no `id` attributes (the item keeps its own, so IDs stay unique in the document), and its controls are disabled and out of the tab order.
+
 The clone is made in the frame the item lifts, and copying the styles takes longer the more elements the row has. For rows with many elements on low-end devices, a [custom preview](#custom-preview) is cheaper: with a template, drags skip the clone.
 
 ## Custom preview
@@ -39,6 +41,8 @@ Set `[vdndDraggableData]="task"` on the draggable so the template receives the i
 :::warning The preview lives under `<body>`
 The preview is moved into a `div.vdnd-overlay-container` at the end of `<body>`. This escapes ancestor `transform`, `filter` and `perspective` styles, which would otherwise break `position: fixed` (Ionic's `ion-page` is one example). Your component's styles still apply to elements in the preview template. But selectors that depend on ancestors, such as `.board .card`, no longer match. Style the preview by its own classes.
 :::
+
+The preview box is `inert` and `aria-hidden="true"`, with a default or a custom preview alike: nothing in it takes focus or reaches screen readers. Announce the drag yourself (see [Accessibility](/guide/features/accessibility)), not with live content in the preview template.
 
 `cursorOffset` (default `{ x: 8, y: 8 }`) is only a fallback for when the grab point is unknown. Drags started by the library always know it.
 

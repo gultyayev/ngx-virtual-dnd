@@ -232,26 +232,16 @@ export class ElementCloneService {
   }
 
   /**
-   * Sanitize the clone to prevent interaction issues.
+   * Sanitize the clone to prevent interaction issues. The clone is a picture of the row: the
+   * root gets the same treatment as its descendants, and nothing in it can take focus, reach
+   * assistive technology or answer a document ID lookup.
    */
   #sanitizeClone(clone: HTMLElement): void {
-    // Remove draggable directive attributes
-    clone.removeAttribute('vdndDraggable');
-    clone.removeAttribute('data-draggable-id');
-    clone.removeAttribute('data-droppable-id');
+    const elements = [clone, ...Array.from(clone.querySelectorAll('*'))];
+    for (const el of elements) {
+      if (!(el instanceof HTMLElement)) continue;
 
-    // Remove Angular-specific attributes
-    const angularAttrs = Array.from(clone.attributes).filter(
-      (attr) => attr.name.startsWith('ng-') || attr.name.startsWith('_ng'),
-    );
-    angularAttrs.forEach((attr) => clone.removeAttribute(attr.name));
-
-    // Process all descendant elements
-    const allElements = clone.querySelectorAll('*');
-    allElements.forEach((el) => {
-      if (!(el instanceof HTMLElement)) return;
-
-      // Remove event-related attributes
+      // Remove event-related and Angular-specific attributes
       const attrs = Array.from(el.attributes);
       attrs.forEach((attr) => {
         if (
@@ -264,16 +254,26 @@ export class ElementCloneService {
         }
       });
 
-      // Remove draggable attributes from children too
+      // Remove draggable directive attributes
       el.removeAttribute('vdndDraggable');
       el.removeAttribute('data-draggable-id');
       el.removeAttribute('data-droppable-id');
-    });
 
-    // Disable interactive elements
-    const interactiveElements = clone.querySelectorAll(
-      'button, input, textarea, select, a, [contenteditable]',
-    );
+      // IDs stay unique to the source. SVG elements keep theirs: the SVG references them itself
+      // (`url(#gradient)`, `<use href>`), and they reach no label or focus target.
+      el.removeAttribute('id');
+
+      if (el.hasAttribute('tabindex')) {
+        el.setAttribute('tabindex', '-1');
+      }
+    }
+
+    // Disable interactive elements, the root included
+    const interactiveSelector = 'button, input, textarea, select, a, [contenteditable]';
+    const interactiveElements = Array.from(clone.querySelectorAll(interactiveSelector));
+    if (clone.matches(interactiveSelector)) {
+      interactiveElements.unshift(clone);
+    }
     interactiveElements.forEach((el) => {
       if (el instanceof HTMLElement) {
         el.style.pointerEvents = 'none';
@@ -282,6 +282,10 @@ export class ElementCloneService {
         el.setAttribute('disabled', 'true');
       }
     });
+
+    // Nothing in the clone takes focus or reaches assistive technology
+    clone.setAttribute('inert', '');
+    clone.setAttribute('aria-hidden', 'true');
 
     // A checked radio joins its group as soon as the clone is connected, which unchecks the
     // radio in the source item. Without a name the cloned radios belong to no group.

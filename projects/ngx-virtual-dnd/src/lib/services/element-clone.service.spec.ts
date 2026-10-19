@@ -200,6 +200,63 @@ describe('ElementCloneService', () => {
       expect(link.style.pointerEvents).toBe('none');
     });
 
+    it('should take a focusable root out of the tab order and the accessibility tree', () => {
+      const source = document.createElement('div');
+      source.setAttribute('tabindex', '0');
+      source.setAttribute('role', 'listitem');
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.getAttribute('tabindex')).toBe('-1');
+      expect(clone.getAttribute('aria-hidden')).toBe('true');
+      expect(clone.hasAttribute('inert')).toBe(true);
+    });
+
+    it('should disable an interactive root like an interactive descendant', () => {
+      const source = document.createElement('button');
+      source.setAttribute('onclick', 'alert(1)');
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.style.pointerEvents).toBe('none');
+      expect(clone.getAttribute('tabindex')).toBe('-1');
+      expect(clone.hasAttribute('disabled')).toBe(true);
+      expect(clone.hasAttribute('onclick')).toBe(false);
+    });
+
+    it('should take focusable descendants out of the tab order', () => {
+      const source = document.createElement('div');
+      source.innerHTML = '<div class="cell" tabindex="0"></div>';
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.querySelector('.cell')!.getAttribute('tabindex')).toBe('-1');
+    });
+
+    it('should not duplicate the ids of the root and its descendants in the document', () => {
+      const source = attach(document.createElement('div'));
+      source.id = 'task-1';
+      source.innerHTML = '<label id="task-1-title" for="task-1-done">Title</label>';
+
+      const clone = attach(service.cloneElement(source));
+
+      expect(clone.hasAttribute('id')).toBe(false);
+      expect(clone.querySelector('[id]')).toBeNull();
+      expect(document.querySelectorAll('#task-1')).toHaveLength(1);
+      expect(document.querySelectorAll('#task-1-title')).toHaveLength(1);
+    });
+
+    it('should keep the ids an SVG references inside itself', () => {
+      const source = document.createElement('div');
+      source.innerHTML =
+        '<svg><defs><linearGradient id="fill"></linearGradient></defs>' +
+        '<rect fill="url(#fill)"></rect></svg>';
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.querySelector('linearGradient')!.id).toBe('fill');
+    });
+
     it('should keep cloned radio buttons out of the source radio group', () => {
       const source = attach(document.createElement('div'));
       source.innerHTML =

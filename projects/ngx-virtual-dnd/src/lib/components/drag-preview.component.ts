@@ -80,6 +80,8 @@ interface SettlingPreview {
       <div
         #preview
         class="vdnd-drag-preview"
+        inert
+        aria-hidden="true"
         [class.vdnd-drag-preview-dropping]="isSettling()"
         [attr.data-testid]="isSettling() ? 'vdnd-drag-preview-dropping' : 'vdnd-drag-preview'"
         [style.width.px]="dimensions().width"
