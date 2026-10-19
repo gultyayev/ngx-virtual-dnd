@@ -118,7 +118,12 @@ export class VirtualForRowRenderer<T> {
       }
       renderedKeys.add(entry.key);
 
-      const view = this.#getOrCreateView(entry.key, entry.context!, changedViews);
+      const view = this.#getOrCreateView(
+        entry.key,
+        entry.context!,
+        changedViews,
+        this.#getSafeViewContainerIndex(-1, viewContainerIndex),
+      );
 
       // Ensure view is at correct position in ViewContainerRef
       const currentIndex = viewContainer.indexOf(view);
@@ -267,7 +272,9 @@ export class VirtualForRowRenderer<T> {
   }
 
   /**
-   * Get an existing view or create/recycle one from the pool.
+   * Get an existing view or create/recycle one from the pool. A new view is created in the
+   * container at `index`: during hydration, that gives it the nodes of the next server-rendered
+   * row instead of new ones.
    * Adds the view to `changedViews` when it needs rendering: new, taken from the pool, or with a
    * changed context.
    */
@@ -275,6 +282,7 @@ export class VirtualForRowRenderer<T> {
     key: unknown,
     context: VirtualForContext<T>,
     changedViews: EmbeddedViewRef<VirtualForContext<T>>[],
+    index: number,
   ): EmbeddedViewRef<VirtualForContext<T>> {
     const activeView = this.#activeViews.get(key);
     let view = activeView ?? this.#viewPool.pop();
@@ -286,7 +294,7 @@ export class VirtualForRowRenderer<T> {
         changedViews.push(view);
       }
     } else {
-      view = this.#host.template.createEmbeddedView(context);
+      view = this.#host.viewContainer.createEmbeddedView(this.#host.template, context, index);
       changedViews.push(view);
     }
     this.#activeViews.set(key, view);

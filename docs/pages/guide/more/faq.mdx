@@ -15,7 +15,7 @@ Both. Drag state lives in signals, so zoneless apps need nothing extra; the live
 
 ## Does it work with server-side rendering?
 
-Yes. On the server, the lists render their first rows without errors and without a browser `document`, and drag and drop starts once the app runs in the browser. The library's tests render every list component with Angular's server renderer.
+Yes. On the server, the lists render their first rows without errors and without a browser `document`, and drag and drop starts once the app runs in the browser. With `provideClientHydration()`, the browser keeps the rows the server rendered instead of creating them again. The library's tests render every list component with Angular's server renderer, and hydrate it in a browser DOM.
 
 ## Can lists in different components exchange items?
 
