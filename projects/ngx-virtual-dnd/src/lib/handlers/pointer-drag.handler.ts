@@ -401,11 +401,12 @@ export class PointerDragHandler {
   }
 
   /**
-   * Whether the tracked press no longer applies to the draggable: it renders another item now, or
-   * it left the page (a virtual list recycled or pooled its row).
+   * Whether the tracked press no longer applies to the draggable: it renders another item now, it
+   * left the page (a virtual list recycled or pooled its row), or it was disabled since the press
+   * (the press only checked it then).
    */
   #isStalePress(ctx: PointerDragContext): boolean {
-    return ctx.draggableId !== this.#pressedId || !ctx.element.isConnected;
+    return ctx.draggableId !== this.#pressedId || !ctx.element.isConnected || ctx.disabled;
   }
 
   /**

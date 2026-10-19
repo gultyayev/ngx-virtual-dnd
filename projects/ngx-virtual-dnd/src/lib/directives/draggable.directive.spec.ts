@@ -514,6 +514,25 @@ describe('DraggableDirective', () => {
 
       expect(dragStateService.isDragging()).toBe(false);
     });
+
+    it('should not start a drag from a press made before it was disabled', () => {
+      draggableNative.dispatchEvent(
+        new MouseEvent('mousedown', {
+          clientX: 100,
+          clientY: 100,
+          button: 0,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      component.disabled.set(true);
+      fixture.detectChanges();
+
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 120 }));
+
+      expect(dragStateService.isDragging()).toBe(false);
+      expect(component.dragStartEvents).toEqual([]);
+    });
   });
 
   describe('mousedown handling', () => {
