@@ -64,6 +64,7 @@ describe('KeyboardDragHandler', () => {
       isActive: jest.fn().mockReturnValue(false),
       startKeyboardDrag: jest.fn(),
       completeKeyboardDrag: jest.fn(),
+      clampTargetIndex: jest.fn(),
       cancelKeyboardDrag: jest.fn(),
       moveUp: jest.fn(),
       moveDown: jest.fn(),

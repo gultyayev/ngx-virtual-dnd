@@ -2013,6 +2013,46 @@ describe('DraggableDirective', () => {
       );
     });
 
+    describe('when the list shrinks during a keyboard drag', () => {
+      // The test item is last of 3 (source index 2); the two rows before it then leave the list
+      const pickUpAndShrink = (): void => {
+        draggableNative.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: ' ',
+            code: 'Space',
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        fixture.detectChanges();
+        expect(TestBed.inject(KeyboardDragService).targetIndex()).toBe(2);
+        fixture.nativeElement
+          .querySelectorAll('[data-draggable-id^="preceding-item"]')
+          .forEach((row: Element) => row.remove());
+      };
+
+      it('should clamp an arrow move to the items the list has now', () => {
+        pickUpAndShrink();
+
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+        );
+
+        expect(TestBed.inject(KeyboardDragService).targetIndex()).toBe(0);
+      });
+
+      it('should drop at an index inside the list it has now', () => {
+        pickUpAndShrink();
+
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+        );
+
+        expect(component.dragEndEvents[0].destinationIndex).toBe(0);
+        expect(component.dropEvents[0].destination.index).toBe(0);
+      });
+    });
+
     it('should cancel drag on escape when dragging', () => {
       dragStateService.startDrag({
         draggableId: 'test-item',

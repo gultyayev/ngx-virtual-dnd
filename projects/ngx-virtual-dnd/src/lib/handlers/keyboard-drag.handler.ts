@@ -216,6 +216,8 @@ export class KeyboardDragHandler {
    * Complete a keyboard drag operation (drop the item).
    */
   complete(): void {
+    // The list's data may have changed since the last move: drop inside the items it has now
+    this.#deps.keyboardDrag.clampTargetIndex();
     const ctx = this.#deps.getContext();
     const item = this.#endedItem(ctx);
     const sourceIndex = this.#deps.dragState.sourceIndex() ?? 0;
