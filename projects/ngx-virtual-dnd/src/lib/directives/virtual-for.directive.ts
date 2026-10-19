@@ -29,7 +29,7 @@ import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
 import { setStrategyItems } from '../strategies/strategy-items';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
-import { revealDropTargetIn } from '../utils/drop-animator';
+import { RenderEntry, VirtualForRowRenderer } from '../rendering/virtual-for-row-renderer';
 
 /**
  * Context provided to the template for each virtual item.
@@ -61,17 +61,6 @@ function isPositioned(element: HTMLElement): boolean {
 
 /** Render-queue key of the placeholder entry */
 const PLACEHOLDER_KEY = '__placeholder__';
-
-/**
- * Represents an item entry in the render queue for virtual scrolling.
- * @internal
- */
-interface RenderEntry<T> {
-  type: 'item' | 'placeholder';
-  key: unknown;
-  context: VirtualForContext<T> | null;
-  visualIndex: number;
-}
 
 /**
  * A structural directive for virtual scrolling within custom scroll containers.
@@ -145,11 +134,16 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   /** Whether we're inside a viewport component (use wrapper positioning) */
   readonly #useViewportPositioning = this.#viewport !== null;
 
-  /** Pool of views for reuse */
-  readonly #viewPool: EmbeddedViewRef<VirtualForContext<T>>[] = [];
-
-  /** Currently active views keyed by their track-by value */
-  readonly #activeViews = new Map<unknown, EmbeddedViewRef<VirtualForContext<T>>>();
+  /** The rows (see VirtualForRowRenderer) */
+  readonly #rowRenderer = new VirtualForRowRenderer<T>({
+    viewContainer: this.#viewContainer,
+    template: this.#templateRef,
+    positionRows: !this.#useViewportPositioning,
+    shiftAnimator: this.#shiftAnimator,
+    draggedElement: () => this.#dragState.draggedItem()?.element,
+    observe: (view, key) => this.#observeViewElements(view, key),
+    unobserve: (view) => this.#unobserveViewElements(view),
+  });
 
   /** Single spacer element for scroll height */
   #spacer: HTMLDivElement | null = null;
@@ -470,8 +464,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.#viewPool.forEach((view) => view.destroy());
-    this.#activeViews.forEach((view) => view.destroy());
+    this.#rowRenderer.destroy();
 
     // Clean up spacer element (only if we created one)
     this.#spacer?.remove();
@@ -500,7 +493,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
   /** Rendered item root elements (keyed by trackBy key) plus the placeholder. */
   *#shiftAnimationEntries(): Iterable<ShiftAnimationEntry> {
-    for (const [key, view] of this.#activeViews) {
+    for (const [key, view] of this.#rowRenderer.views) {
       for (const node of view.rootNodes) {
         if (node instanceof HTMLElement) {
           yield [key, node];
@@ -624,7 +617,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   /** Create the ResizeObserver and observe the items already rendered. */
   #startMeasuring(): void {
     this.#setupResizeObserver();
-    for (const [key, view] of this.#activeViews) {
+    for (const [key, view] of this.#rowRenderer.views) {
       this.#observeViewElements(view, key);
     }
   }
@@ -679,20 +672,6 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   }
 
   /**
-   * Stop any shift animation on a view about to be pooled — a recycled view must not
-   * carry an in-flight offset over to the item it renders next.
-   */
-  #cancelShiftAnimation(view: EmbeddedViewRef<VirtualForContext<T>>): void {
-    if (!this.#shiftAnimator) return;
-
-    for (const node of view.rootNodes) {
-      if (node instanceof HTMLElement) {
-        this.#shiftAnimator.cancel(node);
-      }
-    }
-  }
-
-  /**
    * Stop observing an element's root nodes.
    */
   #unobserveViewElements(view: EmbeddedViewRef<VirtualForContext<T>>): void {
@@ -742,21 +721,18 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
       draggedIndex,
     });
 
+    // Remove placeholder from DOM if not needed
+    if (!showPlaceholder && this.#placeholderInDom && this.#placeholder) {
+      this.#placeholder.remove();
+      this.#placeholderInDom = false;
+    }
+
     // 2. Reconcile views with the DOM. Without a viewport, the rows at or after the placeholder
     // move down by its height (with a viewport, the placeholder pushes them in the flow).
-    const gap = this.#gap();
-    const placeholderDomPosition = this.#reconcileViews(
-      itemsToRender,
-      showPlaceholder,
-      strategy,
-      gap,
-    );
+    const placeholderDomPosition = this.#rowRenderer.render(itemsToRender, strategy, this.#gap());
 
     // 3. Position placeholder in DOM
     this.#positionPlaceholder(showPlaceholder, placeholderDomPosition, strategy, placeholderIndex);
-
-    // 4. Trim view pool to prevent memory bloat
-    this.#trimViewPool();
   }
 
   /**
@@ -862,227 +838,6 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   }
 
   /**
-   * Reconcile views with the calculated items to render.
-   * Moves unused views to pool, updates existing views, creates new views as needed.
-   * Returns the DOM position where placeholder should be inserted.
-   */
-  #reconcileViews(
-    itemsToRender: RenderEntry<T>[],
-    showPlaceholder: boolean,
-    strategy: VirtualScrollStrategy,
-    gap: { index: number; height: number } | null,
-  ): number {
-    // Determine which keys we need
-    const neededKeys = new Set(
-      itemsToRender.filter((r) => r.type === 'item').map((item) => item.key),
-    );
-
-    // Move unused views to pool
-    for (const [key, view] of this.#activeViews) {
-      if (!neededKeys.has(key)) {
-        this.#activeViews.delete(key);
-        this.#poolView(view);
-      }
-    }
-
-    // Remove placeholder from DOM if not needed
-    if (!showPlaceholder && this.#placeholderInDom && this.#placeholder) {
-      this.#placeholder.remove();
-      this.#placeholderInDom = false;
-    }
-
-    // Process items and track placeholder position
-    let viewContainerIndex = 0;
-    let placeholderDomPosition = -1;
-    const renderedKeys = new Set<unknown>();
-    const changedViews: EmbeddedViewRef<VirtualForContext<T>>[] = [];
-
-    for (const entry of itemsToRender) {
-      if (entry.type === 'placeholder') {
-        placeholderDomPosition = viewContainerIndex;
-        continue;
-      }
-
-      if (renderedKeys.has(entry.key)) {
-        this.#warnDuplicateTrackByKey(entry.key);
-        continue;
-      }
-      renderedKeys.add(entry.key);
-
-      const view = this.#getOrCreateView(entry.key, entry.context!, changedViews);
-
-      // Ensure view is at correct position in ViewContainerRef
-      const currentIndex = this.#viewContainer.indexOf(view);
-      if (currentIndex !== viewContainerIndex) {
-        const targetIndex = this.#getSafeViewContainerIndex(currentIndex, viewContainerIndex);
-        if (currentIndex >= 0) {
-          if (currentIndex !== targetIndex) {
-            this.#viewContainer.move(view, targetIndex);
-          }
-        } else {
-          this.#viewContainer.insert(view, targetIndex);
-        }
-      }
-
-      // Apply absolute positioning when not using viewport wrapper
-      if (!this.#useViewportPositioning) {
-        let offset = strategy.getOffsetForIndex(entry.visualIndex);
-        if (gap && entry.visualIndex >= gap.index) {
-          offset += gap.height;
-        }
-        this.#applyAbsolutePositioning(view, offset);
-      }
-
-      // Observe for dynamic height measurement
-      if (this.#resizeObserver) {
-        this.#observeViewElements(view, entry.key);
-      }
-
-      viewContainerIndex++;
-    }
-
-    this.#renderChangedViews(changedViews);
-
-    return placeholderDomPosition;
-  }
-
-  /**
-   * Take a row's view out of the container and pool it. It keeps its element, so its shift
-   * animation is cancelled (the item it renders next must not slide from this one's position),
-   * and a drop animation that hides it shows it again.
-   */
-  #poolView(view: EmbeddedViewRef<VirtualForContext<T>>): void {
-    const index = this.#viewContainer.indexOf(view);
-    if (index >= 0) {
-      this.#viewContainer.detach(index);
-    }
-    this.#unobserveViewElements(view);
-    // A leave animation (`animate.leave`) keeps the row in the DOM, and Angular removes it when
-    // the animation ends: in the row of another item by then, if the view were reused. A row
-    // whose element is dragged (its draggable ID is not its track key) is destroyed too, which
-    // cancels the drag instead of handing it to another item.
-    const draggedElement = this.#dragState.draggedItem()?.element;
-    if (
-      view.rootNodes.some(
-        (node: Node) =>
-          node.parentNode !== null || (!!draggedElement && node.contains(draggedElement)),
-      )
-    ) {
-      view.destroy();
-      return;
-    }
-    this.#cancelShiftAnimation(view);
-    revealDropTargetIn(view.rootNodes);
-    this.#viewPool.push(view);
-  }
-
-  /**
-   * Clamp target indices for move/insert to avoid out-of-range operations when
-   * reconciliation is given invalid duplicate keys or transiently inconsistent view state.
-   */
-  #getSafeViewContainerIndex(currentIndex: number, requestedIndex: number): number {
-    const length = this.#viewContainer.length;
-
-    if (currentIndex >= 0) {
-      if (length <= 1) return 0;
-      return Math.min(requestedIndex, length - 1);
-    }
-
-    return Math.min(requestedIndex, length);
-  }
-
-  /**
-   * Duplicate trackBy keys cannot be reconciled to distinct views.
-   * Warn in dev mode and skip duplicates to prevent container corruption.
-   */
-  #warnDuplicateTrackByKey(key: unknown): void {
-    if (isDevMode()) {
-      console.warn(
-        `[ngx-virtual-dnd] Duplicate trackBy key detected in vdndVirtualFor: ${String(key)}. ` +
-          'Skipping duplicate item to avoid view reconciliation errors.',
-      );
-    }
-  }
-
-  /**
-   * Get an existing view or create/recycle one from the pool.
-   * Adds the view to `changedViews` when it needs rendering: new, taken from the pool, or with a
-   * changed context.
-   */
-  #getOrCreateView(
-    key: unknown,
-    context: VirtualForContext<T>,
-    changedViews: EmbeddedViewRef<VirtualForContext<T>>[],
-  ): EmbeddedViewRef<VirtualForContext<T>> {
-    const activeView = this.#activeViews.get(key);
-    let view = activeView ?? this.#viewPool.pop();
-
-    if (view) {
-      // A pooled view was detached, so change detection skipped it: render it even when it
-      // comes back with the same context, as what its template shows may have changed since
-      if (this.#updateContext(view.context, context) || !activeView) {
-        changedViews.push(view);
-      }
-    } else {
-      view = this.#templateRef.createEmbeddedView(context);
-      changedViews.push(view);
-    }
-    this.#activeViews.set(key, view);
-
-    return view;
-  }
-
-  /** Copy the fields of `next` into `context`. Returns whether any of them changed. */
-  #updateContext(context: VirtualForContext<T>, next: VirtualForContext<T>): boolean {
-    if (
-      Object.is(context.$implicit, next.$implicit) &&
-      context.index === next.index &&
-      context.first === next.first &&
-      context.last === next.last &&
-      context.count === next.count
-    ) {
-      return false;
-    }
-    context.$implicit = next.$implicit;
-    context.index = next.index;
-    context.first = next.first;
-    context.last = next.last;
-    context.count = next.count;
-    return true;
-  }
-
-  /**
-   * Render the views whose context changed, and only those. `markForCheck()` would mark every
-   * ancestor view up to the root as well, re-rendering all of them (and every row of the list)
-   * on each scroll step. Untracked, so the rows' signal reads do not become this effect's
-   * dependencies.
-   */
-  #renderChangedViews(changedViews: EmbeddedViewRef<VirtualForContext<T>>[]): void {
-    if (changedViews.length === 0) return;
-    untracked(() => {
-      for (const view of changedViews) {
-        if (!view.destroyed) {
-          view.detectChanges();
-        }
-      }
-    });
-  }
-
-  /**
-   * Apply absolute positioning styles to a view's root nodes.
-   */
-  #applyAbsolutePositioning(view: EmbeddedViewRef<VirtualForContext<T>>, topOffset: number): void {
-    for (const node of view.rootNodes) {
-      if (node instanceof HTMLElement) {
-        node.style.position = 'absolute';
-        node.style.top = `${topOffset}px`;
-        node.style.left = '0';
-        node.style.right = '0';
-      }
-    }
-  }
-
-  /**
    * Position the placeholder element in the DOM at the correct index.
    */
   #positionPlaceholder(
@@ -1114,7 +869,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     // (the reconcile pass counts item views only, so this index maps directly to a
     // ViewContainerRef view). Reading the reference node from that view avoids
     // re-querying and filtering container.children on every placeholder move.
-    const insertBeforeEl = this.#getViewReferenceNode(placeholderDomPosition);
+    const insertBeforeEl = this.#rowRenderer.firstElementOf(placeholderDomPosition);
 
     if (!this.#placeholderInDom) {
       // First insertion
@@ -1134,41 +889,6 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
           container.appendChild(this.#placeholder);
         }
       }
-    }
-  }
-
-  /**
-   * Resolve the DOM node the placeholder should be inserted before, given the
-   * item-view index produced by the reconcile pass. Returns null when the index
-   * is past the last view (placeholder belongs at the end → append).
-   */
-  #getViewReferenceNode(viewIndex: number): Element | null {
-    if (viewIndex < 0 || viewIndex >= this.#viewContainer.length) {
-      return null;
-    }
-    const view = this.#viewContainer.get(viewIndex) as
-      | EmbeddedViewRef<VirtualForContext<T>>
-      | null
-      | undefined;
-    if (!view) {
-      return null;
-    }
-    for (const node of view.rootNodes) {
-      if (node instanceof HTMLElement) {
-        return node;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Trim the view pool to prevent memory bloat, keeping a reasonable buffer.
-   */
-  #trimViewPool(): void {
-    const maxPoolSize = 10;
-    while (this.#viewPool.length > maxPoolSize) {
-      const view = this.#viewPool.pop();
-      view?.destroy();
     }
   }
 
