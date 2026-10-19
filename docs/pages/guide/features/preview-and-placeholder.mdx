@@ -14,9 +14,9 @@ During a drag the original element is hidden. Two elements take its place:
 
 `<vdnd-drag-preview />` clones the dragged element, copies its computed styles and sizes the clone to match the original. The point where the user grabbed the item stays under the pointer.
 
-The clone is a picture of the item. It has no `id` attributes (the item keeps its own, so IDs stay unique in the document), and its controls are disabled and out of the tab order.
+The clone is a picture of the item: its controls are disabled and out of the tab order. Its IDs are namespaced (`task-1` becomes `vdnd-preview-<n>-task-1`), so they stay unique in the document and ID lookups keep finding the item. References inside the clone to its own IDs (`<label for>`, `aria-labelledby`, an SVG's `url(#gradient)` or `<use href>`) follow them. Styles you give the item through an ID (`#task-1`, `#task-1 .title`) still show on the clone: when the item has IDs, the clone copies every computed style, its `::before` and `::after` included, not only the main visual ones.
 
-The clone is made in the frame the item lifts, and copying the styles takes longer the more elements the row has. For rows with many elements on low-end devices, a [custom preview](#custom-preview) is cheaper: with a template, drags skip the clone.
+The clone is made in the frame the item lifts, and copying the styles takes longer the more elements the row has, several times longer when the row has IDs. For rows with many elements on low-end devices, a [custom preview](#custom-preview) is cheaper: with a template, drags skip the clone.
 
 ## Custom preview
 

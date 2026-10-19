@@ -509,7 +509,7 @@ Internal service for cloning DOM elements for drag previews. Exported for advanc
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `cloneElement` | `(source: HTMLElement) => HTMLElement` | Deep-clone an element with its computed styles inlined, for use as drag preview. The clone root drops its own placement (margin, `top`/`right`/`bottom`/`left`, translation; `absolute`/`fixed`/`sticky` becomes `relative`) so it fills the preview box from its origin. The clone is presentation only: `id` attributes are removed (SVG elements keep theirs), `tabindex` becomes `-1`, interactive elements (the root too) are disabled, and the root gets `inert` and `aria-hidden="true"` |
+| `cloneElement` | `(source: HTMLElement) => HTMLElement` | Deep-clone an element with its computed styles inlined, for use as drag preview. The clone root drops its own placement (margin, `top`/`right`/`bottom`/`left`, translation; `absolute`/`fixed`/`sticky` becomes `relative`) so it fills the preview box from its origin. The clone is presentation only: every `id` (HTML and SVG) is namespaced to `vdnd-preview-<n>-<id>` and references inside the clone to its own ids (`href="#…"`, `url(#…)`, `for`, `aria-labelledby` and other idref attributes) follow, while references to other ids stay; a source with ids gets every computed property inlined (and its `::before`/`::after` pinned) so id-based rules keep their effect; `tabindex` becomes `-1`, interactive elements (the root too) are disabled, and the root gets `inert` and `aria-hidden="true"` |
 
 ### KeyboardDragService
 

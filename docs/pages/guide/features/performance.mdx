@@ -41,7 +41,7 @@ Fixed heights cost nothing to measure: every offset is `index * itemHeight`. [`d
 
 ## The drag preview
 
-The default preview clones the dragged row and copies its computed styles, in the frame the item lifts. That takes longer the more elements the row has. For rows with many elements, a [custom preview template](/guide/features/preview-and-placeholder#custom-preview) is cheaper: with a template, drags skip the clone.
+The default preview clones the dragged row and copies its computed styles, in the frame the item lifts. That takes longer the more elements the row has, and several times longer when the row has `id`s (the clone then copies every computed style, so styles given through an ID still apply). For rows with many elements, a [custom preview template](/guide/features/preview-and-placeholder#custom-preview) is cheaper: with a template, drags skip the clone.
 
 ## Placeholder move listeners
 
