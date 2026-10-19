@@ -3,7 +3,8 @@ import { CursorPosition } from '../models/drag-drop.models';
 import { DragStateService } from './drag-state.service';
 import { PositionCalculatorService } from './position-calculator.service';
 import { DragSchedulerService } from './drag-scheduler.service';
-import { depthAcrossShadow } from '../utils/composed-dom';
+import { DroppableRegistryService } from './droppable-registry.service';
+import { containsAcrossShadow, depthAcrossShadow } from '../utils/composed-dom';
 import {
   clipToScrollContainers,
   intersectRects,
@@ -62,6 +63,12 @@ interface OrderedContainer {
    * the first time it has room to scroll: most registered lists never do.
    */
   ancestors: Element[] | null;
+  /**
+   * Whether it had nothing to scroll when the tick last checked it. Such a candidate is checked
+   * again only while it is around or in the drop target (see #participantTick), or once the list
+   * is rebuilt.
+   */
+  unscrollable: boolean;
 }
 
 /** Both axes, to record a container with no room to scroll at all (see #participantTick) */
@@ -77,6 +84,7 @@ export class AutoScrollService {
   readonly #dragState = inject(DragStateService);
   readonly #positionCalculator = inject(PositionCalculatorService);
   readonly #scheduler = inject(DragSchedulerService);
+  readonly #registry = inject(DroppableRegistryService);
 
   /** Currently registered scrollable containers */
   #scrollableContainers = new Map<
@@ -109,12 +117,15 @@ export class AutoScrollService {
   #lastTickCursorX = NaN;
   #lastTickCursorY = NaN;
 
+  /** The drop target (`activeDroppableId`) when the last tick ran (see #participantTick) */
+  #lastTickTargetId: string | null = null;
+
   /**
-   * The containers the last tick that ran asked to scroll but had no room left, and those it
-   * skipped because they had nothing to scroll on either axis: the first #exhaustedCount entries
-   * (the objects are reused from tick to tick). A resting cursor skips the tick only while they
-   * stay as they were on the axes it asked for: content that grows (rows measured taller, items
-   * added), a resize or a scroll can give one room, and the scroll resumes.
+   * The containers the last tick that ran asked to scroll but had no room left, and those around
+   * or in the drop target it skipped because they had nothing to scroll on either axis: the first
+   * #exhaustedCount entries (the objects are reused from tick to tick). A resting cursor skips the
+   * tick only while they stay as they were on the axes it asked for: content that grows (rows
+   * measured taller, items added), a resize or a scroll can give one room, and the scroll resumes.
    */
   readonly #exhausted: ExhaustedContainer[] = [];
   #exhaustedCount = 0;
@@ -184,13 +195,14 @@ export class AutoScrollService {
       // Registration is unconditional (directives can't expose DOM size as a signal, so
       // gating registration on it goes stale — see #27), and so is candidacy: a list can
       // grow scrollable mid-drag (rows arrive or are measured taller). The tick checks the
-      // live scroll range of each candidate before it measures it.
+      // live scroll range of each candidate before it measures it (see #participantTick).
       entries.push({
         id,
         element,
         config,
         depth: this.#domDepth(element),
         ancestors: null,
+        unscrollable: false,
       });
     }
 
@@ -207,6 +219,14 @@ export class AutoScrollService {
    */
   #isScrollable(element: HTMLElement): boolean {
     return element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
+  }
+
+  /** Whether `element` is the drop target's element, around it or in it (no layout read). */
+  #isAroundTarget(element: HTMLElement, target: HTMLElement | null): boolean {
+    return (
+      target !== null &&
+      (containsAcrossShadow(element, target) || containsAcrossShadow(target, element))
+    );
   }
 
   /**
@@ -243,6 +263,7 @@ export class AutoScrollService {
     this.#cursorOverride = null;
     this.#lastTickCursorX = NaN;
     this.#lastTickCursorY = NaN;
+    this.#lastTickTargetId = null;
     this.#exhausted.length = 0;
     this.#exhaustedCount = 0;
     this.#lastScrollTimestamp = 0;
@@ -289,11 +310,14 @@ export class AutoScrollService {
       return;
     }
 
-    // Skip the container iteration when the cursor hasn't moved and scroll is idle, unless a
-    // container it asked to scroll without room has changed since (see #exhausted).
+    // Skip the container iteration when the cursor hasn't moved and scroll is idle, unless the
+    // hit-test found another target under it or a container it asked to scroll without room has
+    // changed since (see #exhausted).
+    const targetId = this.#dragState.activeDroppableId();
     if (
       cursor.x === this.#lastTickCursorX &&
       cursor.y === this.#lastTickCursorY &&
+      targetId === this.#lastTickTargetId &&
       !this.isScrolling() &&
       !this.#exhaustedChanged()
     ) {
@@ -301,7 +325,10 @@ export class AutoScrollService {
     }
     this.#lastTickCursorX = cursor.x;
     this.#lastTickCursorY = cursor.y;
+    this.#lastTickTargetId = targetId;
     this.#exhaustedCount = 0;
+    // The drop target's element: the cursor is over it, and so over the containers around it
+    const target = targetId ? this.#registry.getById(targetId) : null;
 
     let scrollPerformed = false;
     // Frame scale is shared across candidates within a tick; computed lazily on
@@ -312,10 +339,21 @@ export class AutoScrollService {
     // cursor is exhausted at its boundary, the loop falls through to its ancestors.
     for (const candidate of this.#getOrderedContainers()) {
       const { id, element, config } = candidate;
-      // Nothing to scroll on either axis: skip it without measuring. Recorded as exhausted on
-      // both axes, so a resting cursor retries once it grows scrollable.
-      if (!this.#isScrollable(element)) {
-        this.#recordExhausted(element, BOTH_AXES);
+      // A candidate that had nothing to scroll is read again only while it is around or in the
+      // drop target, which the cursor is over: with many lists, checking every one each frame
+      // would be most of the tick's work. Any other one that grows is found when the hit-test
+      // makes it (or a list in it) the target, or the candidates are collected again.
+      const checkedAgain = candidate.unscrollable;
+      if (checkedAgain && !this.#isAroundTarget(element, target)) {
+        continue;
+      }
+      // Nothing to scroll on either axis: skip it without measuring. One around or in the target
+      // is recorded as exhausted on both axes, so a resting cursor retries once it grows.
+      candidate.unscrollable = !this.#isScrollable(element);
+      if (candidate.unscrollable) {
+        if (checkedAgain || this.#isAroundTarget(element, target)) {
+          this.#recordExhausted(element, BOTH_AXES);
+        }
         continue;
       }
       const ancestors = (candidate.ancestors ??= scrollAncestors(element));

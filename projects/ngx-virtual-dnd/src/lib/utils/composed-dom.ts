@@ -85,6 +85,19 @@ export function elementFromPointAcrossShadow(x: number, y: number): Element | nu
   return element;
 }
 
+/**
+ * Like `ancestor.contains(node)`, but a shadow host also contains its shadow tree: whether `node`
+ * is `ancestor` or inside it.
+ */
+export function containsAcrossShadow(ancestor: Element, node: Element): boolean {
+  for (let current: Element | null = node; current; current = parentAcrossShadow(current)) {
+    if (current === ancestor) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** The number of ancestors of `element`, counting shadow hosts as ancestors of their shadow tree. */
 export function depthAcrossShadow(element: Element): number {
   let depth = 0;
