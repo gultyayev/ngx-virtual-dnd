@@ -217,7 +217,7 @@ export class KeyboardDragHandler {
    */
   complete(): void {
     const ctx = this.#deps.getContext();
-    const item = this.#pickedUpItem(ctx);
+    const item = this.#endedItem(ctx);
     const sourceIndex = this.#deps.dragState.sourceIndex() ?? 0;
     const activeDroppableId = this.#deps.dragState.activeDroppableId();
 
@@ -272,7 +272,7 @@ export class KeyboardDragHandler {
    */
   cancel(): void {
     const ctx = this.#deps.getContext();
-    const item = this.#pickedUpItem(ctx);
+    const item = this.#endedItem(ctx);
     const sourceIndex = this.#deps.dragState.sourceIndex() ?? 0;
     // A cancelled item goes back to its source list
     const sourceDroppableId = this.#deps.dragState.sourceDroppableId();
@@ -301,11 +301,14 @@ export class KeyboardDragHandler {
   }
 
   /**
-   * The item this handler's drag picked up, which the drop reports too: the draggable can render
-   * another ID by now. Read before the document listener is removed, which forgets the drag.
+   * The item dragEnd reports. While the draggable still renders the item it picked up, its live ID
+   * and data (the consumer can replace the data mid-gesture). When it renders another ID by now,
+   * the item this handler's drag picked up, which the drop reports too. Read before the document
+   * listener is removed, which forgets the drag.
    */
-  #pickedUpItem(ctx: KeyboardDragContext): Pick<DraggedItem, 'draggableId' | 'data'> {
-    return this.#ownDrag ?? ctx;
+  #endedItem(ctx: KeyboardDragContext): Pick<DraggedItem, 'draggableId' | 'data'> {
+    const pickedUp = this.#ownDrag;
+    return pickedUp && pickedUp.draggableId !== ctx.draggableId ? pickedUp : ctx;
   }
 
   /**

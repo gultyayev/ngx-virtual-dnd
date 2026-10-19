@@ -891,8 +891,14 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     this.#constraintElement = null;
     this.#lastRawPosition = null;
 
-    // The item the drag picked up, which the drop reports too: the ID input can have changed since
+    // The item dragEnd reports. While the draggable still renders the item it picked up, its live ID
+    // and data (the consumer can replace the data mid-gesture). When the ID input changed since (the
+    // item renders under another ID), the item the drag picked up, which the drop reports too.
     const draggedItem = this.#dragState.draggedItem();
+    const endedItem =
+      draggedItem && draggedItem.draggableId !== this.vdndDraggable()
+        ? draggedItem
+        : { draggableId: this.vdndDraggable(), data: this.vdndDraggableData() };
     this.#ownDrag = null;
 
     const sourceIndex = this.#dragState.sourceIndex() ?? 0;
@@ -906,12 +912,12 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
         });
 
     const event: DragEndEvent = {
-      draggableId: draggedItem?.draggableId ?? this.vdndDraggable(),
+      draggableId: endedItem.draggableId,
       // The source list as the drag started from it. Not a DOM lookup first: a draggable
       // destroyed mid-drag (its row removed) is already detached from the list here.
       droppableId: this.#dragState.sourceDroppableId() || this.#getParentDroppableId() || '',
       cancelled,
-      data: draggedItem ? draggedItem.data : this.vdndDraggableData(),
+      data: endedItem.data,
       sourceIndex,
       destinationIndex,
     };
