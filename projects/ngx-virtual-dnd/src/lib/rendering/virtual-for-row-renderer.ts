@@ -103,6 +103,8 @@ export class VirtualForRowRenderer<T> {
     let placeholderDomPosition = -1;
     const renderedKeys = new Set<unknown>();
     const changedViews: EmbeddedViewRef<VirtualForContext<T>>[] = [];
+    const renderedRows: { view: EmbeddedViewRef<VirtualForContext<T>>; entry: RenderEntry<T> }[] =
+      [];
 
     for (const entry of itemsToRender) {
       if (entry.type === 'placeholder') {
@@ -131,6 +133,16 @@ export class VirtualForRowRenderer<T> {
         }
       }
 
+      renderedRows.push({ view, entry });
+      viewContainerIndex++;
+    }
+
+    this.#renderChangedViews(changedViews);
+
+    // After the check, which creates the root nodes of a row whose root is in a control flow
+    // block (`@if`), or replaces them
+    for (const { view, entry } of renderedRows) {
+      if (view.destroyed) continue;
       // Apply absolute positioning when not using viewport wrapper
       if (this.#host.positionRows) {
         let offset = strategy.getOffsetForIndex(entry.visualIndex);
@@ -142,11 +154,8 @@ export class VirtualForRowRenderer<T> {
 
       // Observe for dynamic height measurement
       this.#host.observe(view, entry.key);
-
-      viewContainerIndex++;
     }
 
-    this.#renderChangedViews(changedViews);
     this.#trimViewPool();
 
     return placeholderDomPosition;
