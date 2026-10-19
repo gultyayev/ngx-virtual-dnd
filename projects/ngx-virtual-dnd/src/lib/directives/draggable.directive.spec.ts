@@ -2097,6 +2097,120 @@ describe('DraggableDirective', () => {
     });
   });
 
+  describe('when the item changes to another one during its drag', () => {
+    const rebind = (): void => {
+      component.draggableId.set('other-item');
+      fixture.detectChanges();
+    };
+
+    describe('of a pointer drag', () => {
+      beforeEach(() => {
+        attemptPointerDrag(draggableNative);
+        expect(dragStateService.isDragging()).toBe(true);
+        rebind();
+      });
+
+      it('should end the drag on release, once, as the item it picked up', () => {
+        document.dispatchEvent(
+          new MouseEvent('mouseup', { clientX: 100, clientY: 120, button: 0 }),
+        );
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(dragStateService.wasCancelled()).toBe(false);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({
+            draggableId: 'test-item',
+            data: component.itemData,
+            cancelled: false,
+          }),
+        ]);
+      });
+
+      it('should cancel the drag with Escape', () => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(dragStateService.wasCancelled()).toBe(true);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({ draggableId: 'test-item', cancelled: true }),
+        ]);
+      });
+
+      it('should cancel the drag when destroyed', () => {
+        fixture.destroy();
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(dragStateService.wasCancelled()).toBe(true);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({ draggableId: 'test-item', cancelled: true }),
+        ]);
+      });
+
+      it('should still take presses once the drag has ended', () => {
+        document.dispatchEvent(
+          new MouseEvent('mouseup', { clientX: 100, clientY: 120, button: 0 }),
+        );
+        fixture.detectChanges();
+
+        attemptPointerDrag(draggableNative);
+
+        expect(dragStateService.draggedItem()?.draggableId).toBe('other-item');
+      });
+    });
+
+    describe('of a keyboard drag', () => {
+      beforeEach(() => {
+        draggableNative.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: ' ',
+            code: 'Space',
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        expect(dragStateService.isDragging()).toBe(true);
+        rebind();
+      });
+
+      it('should report the item it picked up when dropped', () => {
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+        );
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({
+            draggableId: 'test-item',
+            data: component.itemData,
+            cancelled: false,
+          }),
+        ]);
+        expect(component.dropEvents[0].source.draggableId).toBe('test-item');
+      });
+
+      it('should report the item it picked up when cancelled', () => {
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({ draggableId: 'test-item', cancelled: true }),
+        ]);
+      });
+
+      it('should cancel the drag when destroyed', () => {
+        fixture.destroy();
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(dragStateService.wasCancelled()).toBe(true);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({ draggableId: 'test-item', cancelled: true }),
+        ]);
+      });
+    });
+  });
+
   describe('outputs inside the Angular zone', () => {
     // The pointer and keyboard listeners run outside Angular's zone. With zone.js, a template
     // listener marks its view dirty but schedules no render, so the outputs must be emitted
