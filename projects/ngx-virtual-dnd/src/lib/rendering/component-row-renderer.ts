@@ -220,22 +220,24 @@ export class ComponentRowRenderer<T> {
     }
     const inPlace = longestIncreasingRun(kept.map((row) => (row ? positions.get(row.view)! : -1)));
 
-    // From the last row up, so each row goes right before the next one, already in place
+    // From the first row down, so each row goes right after the previous one, already in place.
+    // Top down because hydration gives each view the outlet creates the first server-rendered
+    // row left: created bottom up, the last row would take the first one's nodes.
     const rows: RowView<T>[] = new Array(entries.length);
     const toCheck: EmbeddedViewRef<VirtualScrollItemContext<T>>[] = [];
-    let next: EmbeddedViewRef<VirtualScrollItemContext<T>> | null = null;
-    for (let i = entries.length - 1; i >= 0; i--) {
+    let previousView: EmbeddedViewRef<VirtualScrollItemContext<T>> | null = null;
+    for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
       let row = kept[i];
       if (row) {
         if (!inPlace[i]) {
-          this.#moveBefore(outlet, row.view, next);
+          this.#moveAfter(outlet, row.view, previousView);
         }
         if (this.#updateContext(row.view.context, entry)) {
           toCheck.push(row.view);
         }
       } else {
-        const index: number = next ? outlet.indexOf(next) : outlet.length;
+        const index: number = previousView ? outlet.indexOf(previousView) + 1 : 0;
         // A pooled view is checked whatever its context: nothing checked it while detached
         let view = this.#rowPool.pop();
         if (view) {
@@ -253,7 +255,7 @@ export class ComponentRowRenderer<T> {
         toCheck.push(view);
       }
       rows[i] = row;
-      next = row.view;
+      previousView = row.view;
     }
     this.#rows = rows;
     while (this.#rowPool.length > MAX_POOLED_ROWS) {
@@ -262,9 +264,9 @@ export class ComponentRowRenderer<T> {
 
     // When the owner's own view is checked later in this pass, that check renders every row
     if (!viewCheckPending) {
-      // Top to bottom (toCheck lists them bottom up)
-      for (let i = toCheck.length - 1; i >= 0; i--) {
-        toCheck[i].detectChanges();
+      // Top to bottom
+      for (const view of toCheck) {
+        view.detectChanges();
       }
     }
     this.#rowEntries = entries;
@@ -326,15 +328,15 @@ export class ComponentRowRenderer<T> {
     this.#rowPool.push(view);
   }
 
-  /** Move a row's view right before `next` (last without one), unless it is there already. */
-  #moveBefore(
+  /** Move a row's view right after `previous` (first without one), unless it is there already. */
+  #moveAfter(
     outlet: ViewContainerRef,
     view: EmbeddedViewRef<VirtualScrollItemContext<T>>,
-    next: EmbeddedViewRef<VirtualScrollItemContext<T>> | null,
+    previous: EmbeddedViewRef<VirtualScrollItemContext<T>> | null,
   ): void {
-    const target = next ? outlet.indexOf(next) : outlet.length;
+    const target = previous ? outlet.indexOf(previous) + 1 : 0;
     const current = outlet.indexOf(view);
-    if (current === target - 1) return;
+    if (current === target) return;
     // move() takes the view out before inserting it, which shifts the views after it
     outlet.move(view, current < target ? target - 1 : target);
   }

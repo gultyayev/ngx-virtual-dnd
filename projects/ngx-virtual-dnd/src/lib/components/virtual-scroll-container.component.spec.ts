@@ -2207,9 +2207,9 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
 
       await scrollTo(200);
 
-      // The view of item-0 moves to the end, to render the last new row
-      expect(rowElement('item-11')).toBe(first);
-      expect(removedRows()).toEqual(['item-11']);
+      // The view of item-0 moves to the end, to render the first new row
+      expect(rowElement('item-8')).toBe(first);
+      expect(removedRows()).toEqual(['item-8']);
     });
 
     it('destroys the row of the dragged item instead of recycling it', async () => {
