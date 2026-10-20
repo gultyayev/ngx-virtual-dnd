@@ -1760,3 +1760,90 @@ describe('VirtualForDirective (lists sharing a vdndScrollable)', () => {
     expect(scroller().style.position).toBe('relative');
   });
 });
+
+/** Rows whose root element is in a control flow block: the row's check creates it */
+@Component({
+  template: `
+    <div class="scroller" vdndScrollable>
+      <ng-container
+        *vdndVirtualFor="
+          let item of items();
+          itemHeight: 50;
+          dynamicItemHeight: true;
+          trackBy: trackByFn
+        "
+      >
+        @if (item.wide) {
+          <div class="item wide" [attr.data-id]="item.key">{{ item.key }}</div>
+        } @else {
+          <div class="item" [attr.data-id]="item.key">{{ item.key }}</div>
+        }
+      </ng-container>
+    </div>
+  `,
+  imports: [ScrollableDirective, VirtualForDirective],
+})
+class ConditionalRootHostComponent {
+  readonly items = signal(Array.from({ length: 10 }, (_, i) => ({ key: `k${i}`, wide: false })));
+  readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+}
+
+describe('VirtualForDirective (row root in a control flow block)', () => {
+  let fixture: ComponentFixture<ConditionalRootHostComponent>;
+  let appRef: ApplicationRef;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  const render = (): void => {
+    fixture.detectChanges();
+    appRef.tick();
+  };
+  const rows = (): HTMLElement[] =>
+    Array.from(fixture.nativeElement.querySelectorAll('[data-id]') as NodeListOf<HTMLElement>);
+  const observed = (): Set<Element> =>
+    new Set(
+      RecordingResizeObserver.instances
+        .filter((observer) => !observer.disconnected)
+        .flatMap((observer) => [...observer.observed]),
+    );
+
+  beforeEach(() => {
+    RecordingResizeObserver.instances = [];
+    globalThis.ResizeObserver = RecordingResizeObserver as unknown as typeof ResizeObserver;
+    // jsdom has no layout: give the scroller its 200px height (4 rows of 50px)
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(200);
+    TestBed.configureTestingModule({ imports: [ConditionalRootHostComponent] });
+    appRef = TestBed.inject(ApplicationRef);
+    fixture = TestBed.createComponent(ConditionalRootHostComponent);
+    render();
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    jest.restoreAllMocks();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  it('positions and measures the rows it renders first', () => {
+    const rendered = rows();
+    expect(rendered.length).toBeGreaterThan(1);
+    expect(rendered.map((row) => row.style.position)).toEqual(rendered.map(() => 'absolute'));
+    expect(rendered.map((row) => row.style.top)).toEqual(rendered.map((_, i) => `${i * 50}px`));
+    expect(rendered.filter((row) => !observed().has(row))).toEqual([]);
+  });
+
+  it('positions and measures the root a row renders instead of its old one', () => {
+    const before = rows();
+
+    fixture.componentInstance.items.update((items) =>
+      items.map((item) => ({ ...item, wide: true })),
+    );
+    render();
+
+    const rendered = rows();
+    expect(rendered.length).toBe(before.length);
+    expect(rendered.every((row) => row.classList.contains('wide'))).toBe(true);
+    expect(rendered.map((row) => row.style.position)).toEqual(rendered.map(() => 'absolute'));
+    expect(rendered.map((row) => row.style.top)).toEqual(rendered.map((_, i) => `${i * 50}px`));
+    expect(rendered.filter((row) => !observed().has(row))).toEqual([]);
+  });
+});
