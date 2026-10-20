@@ -3,74 +3,6 @@ import { Injectable } from '@angular/core';
 /** A CSS property to copy, or a shorthand with the longhands to copy in its place */
 type StyleToCopy = string | readonly [shorthand: string, longhands: readonly string[]];
 
-/** An element with an inline `style` */
-type StyledElement = HTMLElement | SVGElement;
-
-/** The computed style of a source pseudo-element, to pin on the clone element's */
-interface PseudoElementStyle {
-  readonly target: StyledElement;
-  readonly pseudo: '::before' | '::after';
-  readonly declarations: readonly (readonly [property: string, value: string])[];
-}
-
-interface StyleCopyOptions {
-  /** Every computed property (a row with ids), or only the listed ones */
-  readonly copyAll: boolean;
-  /** Whether the focus in the row shows a ring, which a full copy leaves out */
-  readonly focusRing: boolean;
-  /** Collects the pseudo-elements to pin, in a full copy where the engine can adopt a sheet */
-  readonly pseudoElements: PseudoElementStyle[] | null;
-}
-
-/** A clone's pinned pseudo-element rules, kept in the shared sheet while the clone is shown */
-interface PseudoElementRules {
-  readonly clone: HTMLElement;
-  readonly css: string;
-}
-
-/** Counts the clones that get their own id namespace (`vdnd-preview-<n>-<id>`) */
-let namespacedClones = 0;
-
-const XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink';
-
-/** Attributes holding an id, or a space-separated list of ids, of an element in the same tree */
-const ID_REFERENCE_ATTRIBUTES = new Set([
-  'for',
-  'form',
-  'list',
-  'headers',
-  'itemref',
-  'anchor',
-  'popovertarget',
-  'commandfor',
-  'interestfor',
-  'aria-activedescendant',
-  'aria-controls',
-  'aria-describedby',
-  'aria-details',
-  'aria-errormessage',
-  'aria-flowto',
-  'aria-labelledby',
-  'aria-owns',
-]);
-
-/** `url(#id)`, quoted or not, possibly with the document's own URL before the `#` */
-const URL_REFERENCE = /url\(\s*(['"]?)([^'"()]*)#([^'"()\s]+)\1\s*\)/g;
-
-/**
- * Computed properties a full copy leaves out. Logical properties: their physical twins carry the
- * same values, and they would win over a later write to those (the root's margin and offset
- * reset). `pointer-events`: the clone inherits `none` from the preview box, which keeps it out of
- * hit-testing. Animations and transitions: turned off on the clone. Names that must stay unique
- * in the document (view transition and anchor names), and anchor positioning, which would
- * anchor the clone's elements to the source's (their resolved offsets are copied instead).
- */
-const SKIPPED_IN_FULL_COPY =
-  /^(?:pointer-events|animation|transition|view-transition|anchor-|position-)|(?:^|-)(?:block|inline)(?:-|$)/;
-
-const isStyled = (node: Element): node is StyledElement =>
-  node instanceof HTMLElement || node instanceof SVGElement;
-
 /**
  * Service for cloning DOM elements with their computed styles.
  * Used to create visual copies of dragged elements for the drag preview.
@@ -116,35 +48,15 @@ export class ElementCloneService {
     'box-sizing',
   ];
 
-  /** The shared sheet that pins the pseudo-elements of the clones with ids */
-  #pseudoElementSheet: CSSStyleSheet | null = null;
-  #pseudoElementRules: PseudoElementRules[] = [];
-
   /**
    * Clone an element with its computed styles.
    * Returns an HTMLElement ready for use as a drag preview.
-   *
-   * The clone's ids are namespaced (`vdnd-preview-<n>-<id>`), so they never repeat an id of the
-   * document, and its references to them follow. Rules that match the row by an id no longer
-   * match the clone, so a row with ids gets every computed property inlined (and its
-   * pseudo-elements pinned), not only the listed ones: the clone looks the same.
    */
   cloneElement(source: HTMLElement): HTMLElement {
     const clone = source.cloneNode(true) as HTMLElement;
-    this.#prunePseudoElementRules();
-
-    // Rules can reach any element of the row through an id (`#row .title`, `#a + .b`,
-    // `:has(#a)`, `:not(#a)`). Only rows with ids pay for the full copy.
-    const hasIds = source.id !== '' || source.querySelector('[id]:not([id=""])') !== null;
-    const pseudoElements: PseudoElementStyle[] | null =
-      hasIds && this.#canAdoptStyleSheets() ? [] : null;
 
     // Apply computed styles as inline styles
-    const rootComputed = this.#applyComputedStyles(source, clone, {
-      copyAll: hasIds,
-      focusRing: hasIds && this.#showsFocusRing(source),
-      pseudoElements,
-    });
+    const rootComputed = this.#applyComputedStyles(source, clone);
     this.#resetRootPlacement(rootComputed, clone);
 
     // Handle special elements (canvas, video, etc.)
@@ -153,88 +65,17 @@ export class ElementCloneService {
     // Sanitize the clone for safe use as preview
     this.#sanitizeClone(clone);
 
-    if (hasIds) {
-      const prefix = this.#uniqueIdPrefix();
-      const ids = this.#namespaceIds(clone, prefix);
-      if (pseudoElements?.length) {
-        this.#pinPseudoElements(clone, prefix, pseudoElements, ids);
-      }
-    }
-
     return clone;
   }
 
   /**
-   * Apply computed styles from source to target element: the listed properties, or with
-   * `copyAll` every property (and the pseudo-elements to pin into `pseudoElements`, when given).
+   * Apply computed styles from source to target element.
    * Recursively applies to all child elements. Returns the source's computed style.
    */
-  #applyComputedStyles(
-    source: StyledElement,
-    target: StyledElement,
-    options: StyleCopyOptions,
-  ): CSSStyleDeclaration {
+  #applyComputedStyles(source: HTMLElement, target: HTMLElement): CSSStyleDeclaration {
     const computed = window.getComputedStyle(source);
-    const { copyAll, pseudoElements } = options;
 
-    if (copyAll) {
-      // A focus ring is the source's state, not its look: the clone never has focus
-      const focused = options.focusRing && source.matches(':focus-within');
-      this.#copyAllStyles(computed, target, focused);
-      if (pseudoElements && source instanceof HTMLElement) {
-        this.#collectPseudoElements(source, target, focused, pseudoElements);
-      }
-    } else {
-      this.#copyListedStyles(computed, target);
-    }
-
-    // Disable animations and transitions on clone
-    target.style.animation = 'none';
-    target.style.transition = 'none';
-
-    // Recursively apply to children (SVG ones too in a full copy: an id rule can reach them)
-    const sourceChildren = source.children;
-    const targetChildren = target.children;
-
-    for (let i = 0; i < sourceChildren.length && i < targetChildren.length; i++) {
-      const sourceChild = sourceChildren[i];
-      const targetChild = targetChildren[i];
-
-      if (
-        isStyled(sourceChild) &&
-        isStyled(targetChild) &&
-        (copyAll || (sourceChild instanceof HTMLElement && targetChild instanceof HTMLElement))
-      ) {
-        this.#applyComputedStyles(sourceChild, targetChild, options);
-      }
-    }
-
-    return computed;
-  }
-
-  /**
-   * Whether the source, or an element in it, has focus that shows (a keyboard drag): its focus
-   * ring (an outline) is left out of a full copy. Not for a pointer press, which focuses the
-   * row without `:focus-visible`: an outline then is the row's look.
-   */
-  #showsFocusRing(source: HTMLElement): boolean {
-    // The focused element of the source's own tree: a row in a shadow root sees the host
-    // as the document's active element
-    const root = source.getRootNode();
-    const focused =
-      root instanceof Document || root instanceof ShadowRoot ? root.activeElement : null;
-    if (!focused || !source.contains(focused)) {
-      return false;
-    }
-    try {
-      return focused.matches(':focus-visible');
-    } catch {
-      return true; // An engine without :focus-visible: any focus may show a ring
-    }
-  }
-
-  /** Copy the listed visual properties (keys are already kebab-case) */
-  #copyListedStyles(computed: CSSStyleDeclaration, target: StyledElement): void {
+    // Copy essential visual properties (keys are already kebab-case)
     for (const style of this.#stylesToCopy) {
       if (typeof style === 'string') {
         this.#copyStyle(computed, target, style);
@@ -255,54 +96,25 @@ export class ElementCloneService {
         }
       }
     }
-  }
 
-  /** Copy every computed property but the skipped ones (and the outline of a focused element) */
-  #copyAllStyles(computed: CSSStyleDeclaration, target: StyledElement, focused: boolean): void {
-    // One declaration block, parsed once (cheaper than a setProperty() per property in Firefox
-    // and WebKit). Appended, so the computed values win over the inline ones the clone carries
-    // from the source, and the inline ones the engine does not enumerate (custom properties) stay.
-    let css = '';
-    for (const property of Array.from(computed)) {
-      const value = computed.getPropertyValue(property);
-      if (value && !this.#skipsInFullCopy(property, focused)) {
-        css += `${property}: ${value}; `;
+    // Disable animations and transitions on clone
+    target.style.animation = 'none';
+    target.style.transition = 'none';
+
+    // Recursively apply to children
+    const sourceChildren = source.children;
+    const targetChildren = target.children;
+
+    for (let i = 0; i < sourceChildren.length && i < targetChildren.length; i++) {
+      const sourceChild = sourceChildren[i];
+      const targetChild = targetChildren[i];
+
+      if (sourceChild instanceof HTMLElement && targetChild instanceof HTMLElement) {
+        this.#applyComputedStyles(sourceChild, targetChild);
       }
     }
-    if (css) {
-      target.style.cssText = `${target.style.cssText} ${css}`;
-    }
-  }
 
-  #skipsInFullCopy(property: string, focused: boolean): boolean {
-    return SKIPPED_IN_FULL_COPY.test(property) || (focused && property.startsWith('outline'));
-  }
-
-  /**
-   * Record the computed style of the source's generated `::before` and `::after`. Read now: the
-   * source is hidden once the drag starts.
-   */
-  #collectPseudoElements(
-    source: HTMLElement,
-    target: StyledElement,
-    focused: boolean,
-    pseudoElements: PseudoElementStyle[],
-  ): void {
-    for (const pseudo of ['::before', '::after'] as const) {
-      const computed = window.getComputedStyle(source, pseudo);
-      const content = computed.getPropertyValue('content');
-      if (!content || content === 'none' || content === 'normal') {
-        continue;
-      }
-      const declarations: (readonly [string, string])[] = [];
-      for (const property of Array.from(computed)) {
-        const value = computed.getPropertyValue(property);
-        if (value && !this.#skipsInFullCopy(property, focused)) {
-          declarations.push([property, value]);
-        }
-      }
-      pseudoElements.push({ target, pseudo, declarations });
-    }
+    return computed;
   }
 
   /**
@@ -351,7 +163,7 @@ export class ElementCloneService {
    * Copy one computed property to the target's inline style. Returns whether the engine gave a
    * value for it.
    */
-  #copyStyle(computed: CSSStyleDeclaration, target: StyledElement, property: string): boolean {
+  #copyStyle(computed: CSSStyleDeclaration, target: HTMLElement, property: string): boolean {
     const value = computed.getPropertyValue(property);
     if (!value) {
       return false;
@@ -422,7 +234,7 @@ export class ElementCloneService {
   /**
    * Sanitize the clone to prevent interaction issues. The clone is a picture of the row: the
    * root gets the same treatment as its descendants, and nothing in it can take focus or reach
-   * assistive technology. (Its ids are namespaced afterwards, see #namespaceIds.)
+   * assistive technology. Ids stay, so rules that style the row through an id style the clone.
    */
   #sanitizeClone(clone: HTMLElement): void {
     const elements = [clone, ...Array.from(clone.querySelectorAll('*'))];
@@ -480,168 +292,5 @@ export class ElementCloneService {
     // Remove focus styling classes that might interfere
     clone.classList.remove('vdnd-draggable-dragging');
     clone.classList.remove('vdnd-draggable-disabled');
-  }
-
-  /**
-   * Give every id in the clone (HTML and SVG elements alike) a replacement no element of the
-   * document has, so ID lookups and the references of the rest of the page keep finding the
-   * source. References inside the clone to its own ids (`href="#x"`, `url(#x)` in attributes and
-   * inline styles, idref attributes such as `for` or `aria-labelledby`) follow, so the clone's
-   * gradients, `<use>` and labels resolve inside the clone. References to other ids stay.
-   * Returns the replacements by original id.
-   */
-  #namespaceIds(clone: HTMLElement, prefix: string): Map<string, string> {
-    const ids = new Map<string, string>();
-    const elements = [clone, ...Array.from(clone.querySelectorAll('*'))];
-    for (const el of elements) {
-      const id = el.getAttribute('id');
-      if (!id) {
-        continue;
-      }
-      // Ids the source repeats map to one replacement, as they matched one another
-      let replacement = ids.get(id);
-      if (replacement === undefined) {
-        replacement = prefix + id;
-        ids.set(id, replacement);
-      }
-      el.setAttribute('id', replacement);
-    }
-    if (ids.size > 0) {
-      for (const el of elements) {
-        this.#rewriteIdReferences(el, ids);
-      }
-    }
-    return ids;
-  }
-
-  /** `vdnd-preview-<n>-`, which no id of the document starts with */
-  #uniqueIdPrefix(): string {
-    let prefix: string;
-    do {
-      prefix = `vdnd-preview-${++namespacedClones}-`;
-    } while (document.querySelector(`[id^="${prefix}"]`));
-    return prefix;
-  }
-
-  #rewriteIdReferences(el: Element, ids: ReadonlyMap<string, string>): void {
-    for (const attr of Array.from(el.attributes)) {
-      const name = attr.localName;
-      if (name === 'style') {
-        continue; // Rewritten through the CSSOM below
-      }
-      if (
-        name === 'href' &&
-        (attr.namespaceURI === null || attr.namespaceURI === XLINK_NAMESPACE)
-      ) {
-        const replacement = attr.value.startsWith('#') ? ids.get(attr.value.slice(1)) : undefined;
-        if (replacement !== undefined) {
-          attr.value = `#${replacement}`;
-        }
-      } else if (attr.namespaceURI === null && ID_REFERENCE_ATTRIBUTES.has(name)) {
-        const value = attr.value
-          .split(/\s+/)
-          .map((token) => ids.get(token) ?? token)
-          .join(' ');
-        if (value !== attr.value) {
-          attr.value = value;
-        }
-      } else if (attr.value.includes('url(')) {
-        const value = this.#rewriteUrlReferences(attr.value, ids);
-        if (value !== attr.value) {
-          attr.value = value;
-        }
-      }
-    }
-
-    // Inline styles hold the copied computed values (`fill: url("#gradient")`). Through the
-    // CSSOM: a strict CSP blocks writing the style attribute, not the CSSOM.
-    if (!isStyled(el) || !el.style.cssText.includes('url(')) {
-      return;
-    }
-    const style = el.style;
-    for (const property of Array.from(style)) {
-      const value = style.getPropertyValue(property);
-      if (value.includes('url(')) {
-        const rewritten = this.#rewriteUrlReferences(value, ids);
-        if (rewritten !== value) {
-          style.setProperty(property, rewritten, style.getPropertyPriority(property));
-        }
-      }
-    }
-  }
-
-  /** Point `url(#id)` references to ids of the clone at their replacements */
-  #rewriteUrlReferences(value: string, ids: ReadonlyMap<string, string>): string {
-    const documentUrl = document.URL.split('#')[0];
-    return value.replace(URL_REFERENCE, (match, quote: string, base: string, id: string) => {
-      const replacement = ids.get(id);
-      return replacement !== undefined && (base === '' || base === documentUrl)
-        ? `url(${quote}${base}#${replacement}${quote})`
-        : match;
-    });
-  }
-
-  #canAdoptStyleSheets(): boolean {
-    return (
-      typeof CSSStyleSheet === 'function' &&
-      'replaceSync' in CSSStyleSheet.prototype &&
-      'adoptedStyleSheets' in Document.prototype
-    );
-  }
-
-  /**
-   * Pseudo-elements take no inline style, so a shared adopted sheet pins the source's generated
-   * `::before` and `::after` on the clone's elements (marked with `data-vdnd-preview-pseudo`),
-   * `!important` so the rules the clone still matches don't change them. Rules of clones that
-   * left the page are dropped on the next clone.
-   */
-  #pinPseudoElements(
-    clone: HTMLElement,
-    prefix: string,
-    pseudoElements: readonly PseudoElementStyle[],
-    ids: ReadonlyMap<string, string>,
-  ): void {
-    const tokens = new Map<StyledElement, string>();
-    const rules: string[] = [];
-    for (const { target, pseudo, declarations } of pseudoElements) {
-      let token = tokens.get(target);
-      if (token === undefined) {
-        token = `${prefix}${tokens.size}`;
-        tokens.set(target, token);
-        target.setAttribute('data-vdnd-preview-pseudo', token);
-      }
-      const body = declarations
-        .map(
-          ([property, value]) =>
-            `${property}: ${this.#rewriteUrlReferences(value, ids)} !important`,
-        )
-        .join('; ');
-      rules.push(
-        `[data-vdnd-preview-pseudo="${token}"]${pseudo} { ${body}; ` +
-          'animation: none !important; transition: none !important; }',
-      );
-    }
-    this.#pseudoElementRules.push({ clone, css: rules.join('\n') });
-    this.#writePseudoElementSheet();
-  }
-
-  /** Drop the pinned pseudo-element rules of clones that are no longer on the page */
-  #prunePseudoElementRules(): void {
-    const rules = this.#pseudoElementRules.filter(({ clone }) => clone.isConnected);
-    if (rules.length !== this.#pseudoElementRules.length) {
-      this.#pseudoElementRules = rules;
-      this.#writePseudoElementSheet();
-    }
-  }
-
-  #writePseudoElementSheet(): void {
-    if (!this.#pseudoElementSheet) {
-      this.#pseudoElementSheet = new CSSStyleSheet();
-    }
-    const sheet = this.#pseudoElementSheet;
-    sheet.replaceSync(this.#pseudoElementRules.map(({ css }) => css).join('\n'));
-    if (!document.adoptedStyleSheets.includes(sheet)) {
-      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
-    }
   }
 }
