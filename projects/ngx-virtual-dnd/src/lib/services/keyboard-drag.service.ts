@@ -17,7 +17,11 @@ export class KeyboardDragService {
   readonly #registry = inject(DroppableRegistryService);
   readonly #injector = inject(Injector);
 
-  /** Total item count for the current droppable (set by droppable on keyboard drag start) */
+  /**
+   * Item count of the current droppable, as given at drag start or on a move to another list.
+   * Only a fallback for a list that is not registered: a registered list's count is read live,
+   * since its data can change during the drag.
+   */
   readonly #totalItemCount = signal<number>(0);
 
   /** Per-droppable callbacks that scroll the placeholder into view (see `registerRevealer`) */
@@ -164,9 +168,41 @@ export class KeyboardDragService {
   }
 
   /**
+   * Clamp the target index to the items the active list has now. Its data can change during
+   * the drag, so a target chosen before can lie past its end. A no-op without a keyboard drag.
+   * @internal
+   */
+  clampTargetIndex(): void {
+    const targetIndex = this.targetIndex();
+    if (!this.isActive() || targetIndex === null) {
+      return;
+    }
+    const maxIndex = this.#maxTargetIndex(this.activeDroppableId());
+    if (targetIndex > maxIndex) {
+      this.#dragState.setKeyboardTargetIndex(maxIndex);
+    }
+  }
+
+  /**
    * Complete the keyboard drag (Space or Enter to drop).
    */
   completeKeyboardDrag(): void {
+    if (!this.isActive()) {
+      return;
+    }
+
+    this.clampTargetIndex();
+    this.endKeyboardDrag();
+  }
+
+  /**
+   * End the keyboard drag at its target as it stands, without clamping it again: for a caller
+   * that settled the target (`clampTargetIndex`) before it emitted `dragEnd`. A `dragEnd`
+   * listener can change the list's data, and the drop must report the destination `dragEnd`
+   * did. A no-op without a keyboard drag.
+   * @internal
+   */
+  endKeyboardDrag(): void {
     if (!this.isActive()) {
       return;
     }
@@ -186,7 +222,8 @@ export class KeyboardDragService {
   }
 
   /**
-   * Update the total item count (when navigating to a new list).
+   * Update the total item count (when navigating to a new list). Used only while the list is
+   * not registered: a registered list's count is read live.
    */
   setTotalItemCount(count: number): void {
     this.#totalItemCount.set(count);
@@ -230,9 +267,26 @@ export class KeyboardDragService {
    * while any other list can be appended to at `totalItemCount`.
    */
   #maxTargetIndex(droppableId: string | null): number {
-    const totalItems = this.#totalItemCount();
     const isSourceList =
       droppableId !== null && droppableId === this.#dragState.sourceDroppableId();
+    const totalItems = this.#itemCount(droppableId, isSourceList);
     return isSourceList ? Math.max(0, totalItems - 1) : totalItems;
+  }
+
+  /**
+   * The number of items in the droppable now, read from the list (its strategy, or what it
+   * renders) rather than the count given when the drag got there: its data can change during
+   * the drag. Falls back to that count when the list is not registered.
+   */
+  #itemCount(droppableId: string | null, isSameList: boolean): number {
+    const element = droppableId !== null ? this.#registry.getById(droppableId) : null;
+    if (!element) {
+      return this.#totalItemCount();
+    }
+    return this.#dragIndexCalculator.getTotalItemCount({
+      droppableElement: element,
+      isSameList,
+      draggedItemHeight: this.#dragState.draggedItem()?.height ?? 0,
+    });
   }
 }

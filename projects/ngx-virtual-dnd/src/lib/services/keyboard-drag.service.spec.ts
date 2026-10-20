@@ -680,6 +680,46 @@ describe('KeyboardDragService', () => {
       expect(list.scrollTop).toBe(500 - 40);
     });
 
+    describe('when the list shrinks during the drag', () => {
+      const strategy = (): FixedHeightStrategy =>
+        TestBed.inject(DragIndexCalculatorService).getStrategyForDroppable(
+          'list',
+        ) as FixedHeightStrategy;
+
+      it('should clamp a move to the items the list has now', () => {
+        strategy().setItemCount(5);
+        start(0);
+        strategy().setItemCount(2);
+
+        expect(service.moveToIndex(4)).toBe(1);
+        expect(dragState.placeholderIndex()).toBe(2);
+      });
+
+      it('should clamp the target to the items the list has now when dropped', () => {
+        strategy().setItemCount(5);
+        start(0);
+        service.moveToIndex(4);
+        strategy().setItemCount(2);
+
+        service.completeKeyboardDrag();
+
+        expect(dragState.endedDragState()?.placeholderIndex).toBe(2);
+      });
+
+      it('should end at the target it settled before the list shrank', () => {
+        strategy().setItemCount(5);
+        start(0);
+        service.moveToIndex(4);
+        service.clampTargetIndex();
+        // Like a dragEnd listener that removes items before the drop is delivered
+        strategy().setItemCount(2);
+
+        service.endKeyboardDrag();
+
+        expect(dragState.endedDragState()?.placeholderIndex).toBe(5);
+      });
+    });
+
     it('should leave a list with its own reveal to it', () => {
       const reveal = jest.fn();
       service.registerRevealer('list', reveal);
