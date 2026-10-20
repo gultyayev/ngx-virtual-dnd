@@ -506,6 +506,64 @@ describe('PointerDragHandler', () => {
     });
   });
 
+  describe('a draggable disabled during a press', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should drop the press instead of starting a drag when the threshold is crossed', () => {
+      const removeSpy = jest.spyOn(document, 'removeEventListener');
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      mockContext.disabled = true;
+
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+      expect(mockCallbacks.onDragMove).not.toHaveBeenCalled();
+      expect(handler.getStartPosition()).toBeNull();
+      expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+    });
+
+    it('should drop a delayed press instead of marking it ready', () => {
+      jest.useFakeTimers();
+      mockContext.dragDelay = 200;
+      handler.onPointerDown(createTouchStart(150, 220), true);
+      mockContext.disabled = true;
+
+      jest.advanceTimersByTime(200);
+
+      expect(mockCallbacks.onPendingChange).not.toHaveBeenCalledWith(true);
+      expect(handler.getStartPosition()).toBeNull();
+    });
+
+    it('should drop a press that is ready to drag instead of starting the drag', () => {
+      jest.useFakeTimers();
+      mockContext.dragDelay = 200;
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      jest.advanceTimersByTime(200);
+      expect(mockCallbacks.onPendingChange).toHaveBeenLastCalledWith(true);
+      mockContext.disabled = true;
+
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+      expect(mockCallbacks.onPendingChange).toHaveBeenLastCalledWith(false);
+      expect(handler.getStartPosition()).toBeNull();
+    });
+
+    it('should keep a drag that started before the draggable was disabled', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+      mockContext.disabled = true;
+
+      document.dispatchEvent(createMouseEvent('mousemove', 170, 220));
+      document.dispatchEvent(createMouseEvent('mouseup', 170, 220));
+
+      expect(mockCallbacks.onDragMove).toHaveBeenLastCalledWith({ x: 170, y: 220 });
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(false);
+    });
+  });
+
   describe('drag move notification', () => {
     it('should call onDragMove directly on each pointer move while dragging', () => {
       // The handler no longer owns a RAF — it calls onDragMove synchronously so that
