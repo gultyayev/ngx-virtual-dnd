@@ -431,6 +431,93 @@ describe('PositionCalculatorService', () => {
       // No beginDragSession() — one-shot path reads the registry directly.
       expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBe(drop);
     });
+
+    describe('hidden droppables', () => {
+      // Keyboard navigation skips them too (findAdjacentDroppable): the user can't see them
+      const dragged = document.createElement('div');
+      const box = { top: 100, left: 100, right: 300, bottom: 400 };
+
+      it('excludes a visibility: hidden droppable', () => {
+        const drop = makeDroppable('list', 'g', box);
+        drop.style.visibility = 'hidden';
+
+        service.beginDragSession('g');
+        expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBeNull();
+      });
+
+      it('excludes a droppable inside a visibility: hidden ancestor', () => {
+        const panel = document.createElement('div');
+        panel.style.visibility = 'hidden';
+        document.body.appendChild(panel);
+        created.push(panel);
+        const drop = makeDroppable('list', 'g', box);
+        panel.appendChild(drop);
+
+        service.beginDragSession('g');
+        expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBeNull();
+      });
+
+      it('excludes a droppable that checkVisibility() reports as not visible', () => {
+        const drop = makeDroppable('list', 'g', box);
+        // jsdom lacks checkVisibility(); browsers have it (content-visibility, ancestors, ...)
+        const checkVisibility = jest.fn(() => false);
+        Object.assign(drop, { checkVisibility });
+
+        service.beginDragSession('g');
+        expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBeNull();
+        expect(checkVisibility).toHaveBeenCalledWith({ visibilityProperty: true });
+      });
+
+      it('a hidden droppable does not occlude a visible one it overlaps', () => {
+        const visible = makeDroppable('visible', 'g', { top: 0, left: 0, right: 300, bottom: 300 });
+        // Later in document order (would win the painter-order tie-break) but hidden
+        const hidden = makeDroppable('hidden', 'g', { top: 50, left: 50, right: 350, bottom: 350 });
+        hidden.style.visibility = 'hidden';
+
+        service.beginDragSession('g');
+        expect(service.findDroppableAtPoint(100, 100, dragged, 'g')).toBe(visible);
+      });
+
+      it('follows a droppable hidden and shown again during the drag session', () => {
+        // Changing visibility resizes nothing and scrolls nothing, so no cached rect goes stale
+        const drop = makeDroppable('list', 'g', box);
+
+        service.beginDragSession('g');
+        expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBe(drop);
+
+        drop.style.visibility = 'hidden';
+        expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBeNull();
+
+        drop.style.visibility = '';
+        expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBe(drop);
+      });
+
+      it('excludes a hidden droppable on the one-shot (no-session) path', () => {
+        const drop = makeDroppable('list', 'g', box);
+        drop.style.visibility = 'hidden';
+
+        expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBeNull();
+      });
+
+      it('checks the visibility only of droppables under the point', () => {
+        const under = makeDroppable('under', 'g', box);
+        const elsewhere = makeDroppable('elsewhere', 'g', {
+          top: 500,
+          left: 100,
+          right: 300,
+          bottom: 800,
+        });
+        const checkUnder = jest.fn(() => true);
+        const checkElsewhere = jest.fn(() => true);
+        Object.assign(under, { checkVisibility: checkUnder });
+        Object.assign(elsewhere, { checkVisibility: checkElsewhere });
+
+        service.beginDragSession('g');
+        expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBe(under);
+        expect(checkUnder).toHaveBeenCalled();
+        expect(checkElsewhere).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('mid-drag candidate changes', () => {

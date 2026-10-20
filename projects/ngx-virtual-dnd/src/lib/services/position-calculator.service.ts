@@ -384,9 +384,12 @@ export class PositionCalculatorService {
    * tie-break that `elementFromPoint` provided for free — a nested or later
    * overlapping droppable is painted on top of an earlier/ancestor one.
    *
-   * Currently-disabled candidates are skipped here (not filtered from the snapshot) so
-   * that toggling `disabled` mid-drag takes effect on the very next frame. The check is
-   * a cheap `hasAttribute` read that does not force layout, keeping the loop hot.
+   * Currently-disabled and hidden (`visibility: hidden`, itself or an ancestor) candidates
+   * are skipped here (not filtered from the snapshot) so that toggling either mid-drag takes
+   * effect on the very next frame: neither resizes or scrolls anything, so the cached rects
+   * would not notice. The disabled check is a cheap `hasAttribute` read; the visibility check
+   * reads style (no layout), so it runs only for the candidates under the point, scanning from
+   * the topmost down, which is usually one per frame.
    */
   #hitTest(
     x: number,
@@ -394,18 +397,18 @@ export class PositionCalculatorService {
     candidates: HTMLElement[],
     rects: (DOMRect | null)[],
   ): HTMLElement | null {
-    let match: HTMLElement | null = null;
-    for (let i = 0; i < candidates.length; i++) {
-      const candidate = candidates[i];
-      if (this.#isDroppableDisabled(candidate)) {
+    for (let i = candidates.length - 1; i >= 0; i--) {
+      const r = rects[i];
+      if (!r || x < r.left || x > r.right || y < r.top || y > r.bottom) {
         continue;
       }
-      const r = rects[i];
-      if (r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
-        match = candidate;
+      const candidate = candidates[i];
+      if (this.#isDroppableDisabled(candidate) || !this.#isStyleVisible(candidate)) {
+        continue;
       }
+      return candidate;
     }
-    return match;
+    return null;
   }
 
   /**
@@ -627,14 +630,23 @@ export class PositionCalculatorService {
    * Whether a droppable is on screen, so keyboard navigation can move a drag into it. A
    * mounted droppable that is `display: none` (itself or an ancestor), collapsed to zero
    * size, or `visibility: hidden` is not: the user can't see it, and the dropped item's row
-   * could not take focus there. (The pointer can't reach a `display: none` or zero-size
-   * droppable either; pointer hit-testing doesn't check `visibility`.)
+   * could not take focus there. (Pointer hit-testing skips the same droppables: one that is
+   * `display: none` or zero-size has no rect to hit, and it checks {@link #isStyleVisible}.)
    */
   #isDroppableVisible(el: HTMLElement, rect: DOMRect): boolean {
     // display: none (all-zero rect) or a collapsed container
     if (rect.right <= rect.left || rect.bottom <= rect.top) {
       return false;
     }
+    return this.#isStyleVisible(el);
+  }
+
+  /**
+   * Whether the droppable's style lets it show: not `visibility: hidden` or `collapse` (itself
+   * or an ancestor) and, where `checkVisibility()` exists, not `display: none` or skipped by
+   * `content-visibility` either. Reads style, never layout.
+   */
+  #isStyleVisible(el: HTMLElement): boolean {
     if (typeof el.checkVisibility === 'function') {
       return el.checkVisibility({ visibilityProperty: true });
     }

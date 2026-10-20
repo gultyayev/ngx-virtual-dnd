@@ -335,7 +335,7 @@ Measurement relies on rules 3 and 7: the measured element is the one whose `data
 
 These inputs exist on `vdndDroppable` and on `vdnd-sortable-list`:
 
-- **`disabled`** — the droppable is skipped as a target: pointer hit-testing falls through to whatever enabled droppable is underneath, and keyboard ArrowLeft/ArrowRight skip it. Releasing over it emits no `(drop)`; `(dragEnd)` still fires with `cancelled: false` and `destinationIndex: null`. It gets `vdnd-droppable-disabled`.
+- **`disabled`** — the droppable is skipped as a target: pointer hit-testing falls through to whatever enabled droppable is underneath, and keyboard ArrowLeft/ArrowRight skip it. Releasing over it emits no `(drop)`; `(dragEnd)` still fires with `cancelled: false` and `destinationIndex: null`. It gets `vdnd-droppable-disabled`. A hidden droppable (`visibility: hidden` on it or an ancestor, `display: none`, or zero size) is skipped the same way, also when it is hidden or shown mid-drag.
 
   **Accepting only some items:** there is no enter predicate, and returning early from `(drop)` still lets the list open a placeholder slot during the drag (a drop that then does not happen). Instead bind `disabled` from the drag state; it is read on every hit-test, so a change mid-drag applies from the next frame:
 
