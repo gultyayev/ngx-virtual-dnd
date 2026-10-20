@@ -217,6 +217,7 @@ export class KeyboardDragHandler {
    */
   complete(): void {
     const ctx = this.#deps.getContext();
+    const item = this.#endedItem(ctx);
     const sourceIndex = this.#deps.dragState.sourceIndex() ?? 0;
     const activeDroppableId = this.#deps.dragState.activeDroppableId();
 
@@ -244,10 +245,10 @@ export class KeyboardDragHandler {
     this.#deps.dragIndexCalculator.clearCache();
 
     const event: DragEndEvent = {
-      draggableId: ctx.draggableId,
+      draggableId: item.draggableId,
       droppableId: this.#deps.callbacks.getParentDroppableId() ?? '',
       cancelled: false,
-      data: ctx.data,
+      data: item.data,
       sourceIndex,
       destinationIndex,
     };
@@ -261,7 +262,7 @@ export class KeyboardDragHandler {
       this.#deps.callbacks.onDragEnd(event);
       // Ends the drag state, which delivers the drop
       this.#deps.keyboardDrag.completeKeyboardDrag();
-      // Restore focus to the moved element after state updates
+      // Restore focus to the moved element after state updates (by the ID it renders now)
       this.#restoreFocus(ctx.draggableId, fallbackDroppableId);
     });
   }
@@ -271,6 +272,7 @@ export class KeyboardDragHandler {
    */
   cancel(): void {
     const ctx = this.#deps.getContext();
+    const item = this.#endedItem(ctx);
     const sourceIndex = this.#deps.dragState.sourceIndex() ?? 0;
     // A cancelled item goes back to its source list
     const sourceDroppableId = this.#deps.dragState.sourceDroppableId();
@@ -282,10 +284,10 @@ export class KeyboardDragHandler {
     this.#deps.dragIndexCalculator.clearCache();
 
     const event: DragEndEvent = {
-      draggableId: ctx.draggableId,
+      draggableId: item.draggableId,
       droppableId: this.#deps.callbacks.getParentDroppableId() ?? '',
       cancelled: true,
-      data: ctx.data,
+      data: item.data,
       sourceIndex,
       destinationIndex: null,
     };
@@ -296,6 +298,17 @@ export class KeyboardDragHandler {
       // Restore focus to the original element after state updates
       this.#restoreFocus(ctx.draggableId, sourceDroppableId);
     });
+  }
+
+  /**
+   * The item dragEnd reports. While the draggable still renders the item it picked up, its live ID
+   * and data (the consumer can replace the data mid-gesture). When it renders another ID by now,
+   * the item this handler's drag picked up, which the drop reports too. Read before the document
+   * listener is removed, which forgets the drag.
+   */
+  #endedItem(ctx: KeyboardDragContext): Pick<DraggedItem, 'draggableId' | 'data'> {
+    const pickedUp = this.#ownDrag;
+    return pickedUp && pickedUp.draggableId !== ctx.draggableId ? pickedUp : ctx;
   }
 
   /**

@@ -24,6 +24,7 @@ import { DragSchedulerService } from '../services/drag-scheduler.service';
 import {
   CursorPosition,
   DragEndEvent,
+  DraggedItem,
   DragStartEvent,
   GrabOffset,
 } from '../models/drag-drop.models';
@@ -185,6 +186,18 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
   #keyboardHandler!: KeyboardDragHandler;
   #pointerHandler!: PointerDragHandler;
 
+  /**
+   * The pointer drag this draggable started. The gesture owns the item it picked up: the ID input
+   * can change mid-drag (the item renders under another ID), and the drag still moves, ends and
+   * cancels as the item it picked up.
+   */
+  #ownDrag: DraggedItem | null = null;
+
+  /** Whether the drag in progress is the pointer drag this draggable started */
+  #isOwnPointerDrag(): boolean {
+    return this.#ownDrag !== null && this.#dragState.draggedItem() === this.#ownDrag;
+  }
+
   /** Set by ngOnInit, which creates the handlers */
   #initialized = false;
 
@@ -301,8 +314,8 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
         },
         onDragEnd: (cancelled) => this.#endDrag(cancelled),
         onPendingChange: (pending) => this.#setPending(pending),
-        isDragging: () => this.isDragging(),
-        isOtherDragActive: () => this.#dragState.isDragging() && !this.isDragging(),
+        isDragging: () => this.#isOwnPointerDrag(),
+        isOtherDragActive: () => this.#dragState.isDragging() && !this.#isOwnPointerDrag(),
       },
       getContext: () => ({
         element: this.#elementRef.nativeElement,
@@ -333,8 +346,9 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       return;
     }
 
-    // If destroyed mid-drag, cancel to avoid stale global state / ongoing RAF loops.
-    if (this.isDragging()) {
+    // If destroyed mid-drag, cancel to avoid stale global state / ongoing RAF loops. The drag is
+    // this draggable's when it started it, whatever ID it renders now.
+    if (this.#isOwnPointerDrag() || this.#keyboardHandler.isActive()) {
       this.#endDrag(true);
     }
     this.#pointerHandler.destroy();
@@ -485,7 +499,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       this.#keyboardHandler.cancel();
       return false;
     }
-    if (this.isDragging()) {
+    if (this.#isOwnPointerDrag() || this.isDragging()) {
       this.#endDrag(true);
       this.#pointerHandler.cleanup();
       return false; // Prevents default
@@ -604,11 +618,12 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       lockAxis ? startPos : undefined,
       this.#pointerHandler.isTouchPress(),
     );
+    this.#ownDrag = this.#dragState.draggedItem();
 
     // Start the scheduler RAF loop (drives pointer-move updates + autoscroll participant).
     // onTick is called each frame: when cursor is dirty, run full #updateDrag.
     this.#scheduler.start((cursor, cursorDirty) => {
-      if (cursorDirty && cursor && this.isDragging()) {
+      if (cursorDirty && cursor && this.#isOwnPointerDrag()) {
         this.#updateDrag(cursor);
       }
     });
@@ -694,7 +709,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
    */
   #recalculatePlaceholder(): void {
     const cursorPosition = this.#dragState.cursorPosition();
-    if (!cursorPosition || !this.isDragging()) {
+    if (!cursorPosition || !this.#isOwnPointerDrag()) {
       return;
     }
 
@@ -857,7 +872,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     // droppable could otherwise land on the previously-targeted one. Guarded on group
     // presence so it never re-enters #endDrag via #updateDrag's group-lost cancel path.
     // Cancels skip this: their destination is intentionally null.
-    if (!cancelled && this.#lastRawPosition && this.isDragging() && this.#effectiveGroup()) {
+    if (!cancelled && this.#lastRawPosition && this.#isOwnPointerDrag() && this.#effectiveGroup()) {
       this.#updateDrag(this.#lastRawPosition);
     }
 
@@ -876,6 +891,16 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     this.#constraintElement = null;
     this.#lastRawPosition = null;
 
+    // The item dragEnd reports. While the draggable still renders the item it picked up, its live ID
+    // and data (the consumer can replace the data mid-gesture). When the ID input changed since (the
+    // item renders under another ID), the item the drag picked up, which the drop reports too.
+    const draggedItem = this.#dragState.draggedItem();
+    const endedItem =
+      draggedItem && draggedItem.draggableId !== this.vdndDraggable()
+        ? draggedItem
+        : { draggableId: this.vdndDraggable(), data: this.vdndDraggableData() };
+    this.#ownDrag = null;
+
     const sourceIndex = this.#dragState.sourceIndex() ?? 0;
     const destinationIndex = cancelled
       ? null
@@ -887,12 +912,12 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
         });
 
     const event: DragEndEvent = {
-      draggableId: this.vdndDraggable(),
+      draggableId: endedItem.draggableId,
       // The source list as the drag started from it. Not a DOM lookup first: a draggable
       // destroyed mid-drag (its row removed) is already detached from the list here.
       droppableId: this.#dragState.sourceDroppableId() || this.#getParentDroppableId() || '',
       cancelled,
-      data: this.vdndDraggableData(),
+      data: endedItem.data,
       sourceIndex,
       destinationIndex,
     };

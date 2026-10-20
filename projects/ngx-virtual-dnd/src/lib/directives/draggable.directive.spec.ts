@@ -46,7 +46,7 @@ if (!customElements.get('test-shadow-input')) {
       <div
         [vdndDraggable]="draggableId()"
         vdndDraggableGroup="test-group"
-        [vdndDraggableData]="itemData"
+        [vdndDraggableData]="itemData()"
         [disabled]="disabled()"
         [dragHandle]="dragHandle()"
         [dragThreshold]="dragThreshold()"
@@ -73,7 +73,7 @@ if (!customElements.get('test-shadow-input')) {
 })
 class TestHostComponent {
   draggableId = signal('test-item');
-  itemData = { id: 1, name: 'Test Item' };
+  itemData = signal<unknown>({ id: 1, name: 'Test Item' });
   disabled = signal(false);
   dragHandle = signal<string | undefined>(undefined);
   dragThreshold = signal(5);
@@ -2094,6 +2094,217 @@ describe('DraggableDirective', () => {
       attemptPointerDrag(draggableNative);
 
       expect(dragStateService.draggedItem()?.draggableId).toBe('other-item');
+    });
+  });
+
+  describe('when the item changes to another one during its drag', () => {
+    const pickedUpData = { id: 1, name: 'Test Item' };
+
+    const rebind = (): void => {
+      component.draggableId.set('other-item');
+      component.itemData.set({ id: 2, name: 'Other Item' });
+      fixture.detectChanges();
+    };
+
+    describe('of a pointer drag', () => {
+      beforeEach(() => {
+        attemptPointerDrag(draggableNative);
+        expect(dragStateService.isDragging()).toBe(true);
+        rebind();
+      });
+
+      it('should end the drag on release, once, as the item it picked up', () => {
+        document.dispatchEvent(
+          new MouseEvent('mouseup', { clientX: 100, clientY: 120, button: 0 }),
+        );
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(dragStateService.wasCancelled()).toBe(false);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({
+            draggableId: 'test-item',
+            data: pickedUpData,
+            cancelled: false,
+          }),
+        ]);
+      });
+
+      it('should cancel the drag with Escape', () => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(dragStateService.wasCancelled()).toBe(true);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({ draggableId: 'test-item', cancelled: true }),
+        ]);
+      });
+
+      it('should cancel the drag when destroyed', () => {
+        fixture.destroy();
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(dragStateService.wasCancelled()).toBe(true);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({ draggableId: 'test-item', cancelled: true }),
+        ]);
+      });
+
+      it('should still take presses once the drag has ended', () => {
+        document.dispatchEvent(
+          new MouseEvent('mouseup', { clientX: 100, clientY: 120, button: 0 }),
+        );
+        fixture.detectChanges();
+
+        attemptPointerDrag(draggableNative);
+
+        expect(dragStateService.draggedItem()?.draggableId).toBe('other-item');
+      });
+    });
+
+    describe('of a keyboard drag', () => {
+      beforeEach(() => {
+        draggableNative.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: ' ',
+            code: 'Space',
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        expect(dragStateService.isDragging()).toBe(true);
+        rebind();
+      });
+
+      it('should report the item it picked up when dropped', () => {
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+        );
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({
+            draggableId: 'test-item',
+            data: pickedUpData,
+            cancelled: false,
+          }),
+        ]);
+        expect(component.dropEvents[0].source.draggableId).toBe('test-item');
+      });
+
+      it('should report the item it picked up when cancelled', () => {
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({ draggableId: 'test-item', cancelled: true }),
+        ]);
+      });
+
+      it('should cancel the drag when destroyed', () => {
+        fixture.destroy();
+
+        expect(dragStateService.isDragging()).toBe(false);
+        expect(dragStateService.wasCancelled()).toBe(true);
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({ draggableId: 'test-item', cancelled: true }),
+        ]);
+      });
+    });
+  });
+
+  describe('when the item keeps its ID and its data is replaced during its drag', () => {
+    const pickedUpData = { id: 1, name: 'Picked Up Item' };
+    const replacedData = { id: 1, name: 'Renamed Item' };
+
+    const replaceData = (): void => {
+      component.itemData.set(replacedData);
+      fixture.detectChanges();
+    };
+
+    beforeEach(() => {
+      component.itemData.set(pickedUpData);
+      fixture.detectChanges();
+    });
+
+    describe('of a pointer drag', () => {
+      beforeEach(() => {
+        attemptPointerDrag(draggableNative);
+        expect(dragStateService.isDragging()).toBe(true);
+        replaceData();
+      });
+
+      it('should report the current data when dropped', () => {
+        document.dispatchEvent(
+          new MouseEvent('mouseup', { clientX: 100, clientY: 120, button: 0 }),
+        );
+
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({
+            draggableId: 'test-item',
+            data: replacedData,
+            cancelled: false,
+          }),
+        ]);
+      });
+
+      it('should report the current data when cancelled', () => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({
+            draggableId: 'test-item',
+            data: replacedData,
+            cancelled: true,
+          }),
+        ]);
+      });
+    });
+
+    describe('of a keyboard drag', () => {
+      beforeEach(() => {
+        draggableNative.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: ' ',
+            code: 'Space',
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        expect(dragStateService.isDragging()).toBe(true);
+        replaceData();
+      });
+
+      it('should report the current data when dropped', () => {
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+        );
+
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({
+            draggableId: 'test-item',
+            data: replacedData,
+            cancelled: false,
+          }),
+        ]);
+        // The drop reports the item as the drag picked it up
+        expect(component.dropEvents[0].source.data).toBe(pickedUpData);
+      });
+
+      it('should report the current data when cancelled', () => {
+        document.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+
+        expect(component.dragEndEvents).toEqual([
+          expect.objectContaining({
+            draggableId: 'test-item',
+            data: replacedData,
+            cancelled: true,
+          }),
+        ]);
+      });
     });
   });
 
