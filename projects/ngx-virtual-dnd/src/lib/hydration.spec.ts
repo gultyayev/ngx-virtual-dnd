@@ -7,9 +7,15 @@ import { bootstrapApplication, provideClientHydration } from '@angular/platform-
 import { provideServerRendering, renderApplication } from '@angular/platform-server';
 import type { JSDOM as JSDOMInstance } from 'jsdom';
 import { VirtualScrollContainerComponent } from './components/virtual-scroll-container.component';
+import { VirtualContentComponent } from './components/virtual-content.component';
 import { VirtualSortableListComponent } from './components/virtual-sortable-list.component';
+import { VirtualViewportComponent } from './components/virtual-viewport.component';
+import { ContentHeaderDirective } from './directives/content-header.directive';
 import { DraggableDirective } from './directives/draggable.directive';
 import { DroppableGroupDirective } from './directives/droppable-group.directive';
+import { DroppableDirective } from './directives/droppable.directive';
+import { ScrollableDirective } from './directives/scrollable.directive';
+import { VirtualForDirective } from './directives/virtual-for.directive';
 
 /**
  * Server render, then client hydration, the way an SSR app runs: the HTML comes from
@@ -37,6 +43,7 @@ const ROW_COUNT = 20;
 abstract class RowsHost {
   readonly rows: Row[] = Array.from({ length: ROW_COUNT }, (_, i) => ({ id: `row-${i}` }));
   readonly rowId = (row: Row): string => row.id;
+  readonly trackById = (_index: number, row: Row): string => row.id;
 }
 
 @Component({
@@ -81,6 +88,64 @@ class ScrollContainerHostComponent extends RowsHost {}
 })
 class SortableListHostComponent extends RowsHost {}
 
+@Component({
+  selector: 'vdnd-hydration-root',
+  template: `
+    <p data-static>Static</p>
+    <div vdndGroup="hydration">
+      <vdnd-virtual-viewport vdndDroppable="list" [itemHeight]="50" style="height: 200px">
+        <ng-container *vdndVirtualFor="let row of rows; trackBy: trackById">
+          <div [vdndDraggable]="row.id" data-row>{{ row.id }}</div>
+        </ng-container>
+      </vdnd-virtual-viewport>
+    </div>
+  `,
+  imports: [
+    DroppableGroupDirective,
+    VirtualViewportComponent,
+    DroppableDirective,
+    VirtualForDirective,
+    DraggableDirective,
+  ],
+})
+class ViewportHostComponent extends RowsHost {}
+
+@Component({
+  selector: 'vdnd-hydration-root',
+  template: `
+    <p data-static>Static</p>
+    <div vdndScrollable style="height: 300px; overflow: auto">
+      <vdnd-virtual-content [itemHeight]="50">
+        <div vdndContentHeader>Header</div>
+        <ng-container *vdndVirtualFor="let row of rows; trackBy: trackById">
+          <div data-row>{{ row.id }}</div>
+        </ng-container>
+      </vdnd-virtual-content>
+    </div>
+  `,
+  imports: [
+    ScrollableDirective,
+    VirtualContentComponent,
+    ContentHeaderDirective,
+    VirtualForDirective,
+  ],
+})
+class ContentHostComponent extends RowsHost {}
+
+@Component({
+  selector: 'vdnd-hydration-root',
+  template: `
+    <p data-static>Static</p>
+    <div vdndScrollable style="height: 300px; overflow: auto">
+      <ng-container *vdndVirtualFor="let row of rows; trackBy: trackById; itemHeight: 50">
+        <div data-row>{{ row.id }}</div>
+      </ng-container>
+    </div>
+  `,
+  imports: [ScrollableDirective, VirtualForDirective],
+})
+class StandaloneHostComponent extends RowsHost {}
+
 const ROOT_DOCUMENT =
   '<html><head></head><body><vdnd-hydration-root></vdnd-hydration-root></body></html>';
 
@@ -108,20 +173,37 @@ async function renderOnServer(component: Type<unknown>): Promise<string> {
 /** The globals of Node itself, before a server render adds those of its DOM emulation */
 const NODE_GLOBALS = new Set(Object.getOwnPropertyNames(globalThis));
 
+/** jsdom has no ResizeObserver (and no layout to report) */
+class NoopResizeObserver {
+  observe(): void {
+    // Nothing to report
+  }
+  unobserve(): void {
+    // Nothing observed
+  }
+  disconnect(): void {
+    // Nothing observed
+  }
+}
+
 /**
  * Make a jsdom window the client's browser environment: every global of it that Node lacks
- * (replacing those the server's DOM emulation set). Returns a function that restores them.
+ * (replacing those the server's DOM emulation set), and a ResizeObserver. Returns a function
+ * that restores the previous globals.
  */
 function installBrowserGlobals(dom: JSDOMInstance): () => void {
   const target = globalThis as Record<string, unknown>;
   const source = dom.window as unknown as Record<string, unknown>;
   const previous = new Map<string, PropertyDescriptor | undefined>();
+  const install = (name: string, value: unknown): void => {
+    previous.set(name, Object.getOwnPropertyDescriptor(target, name));
+    Object.defineProperty(target, name, { value, configurable: true, writable: true });
+  };
   for (const name of Object.getOwnPropertyNames(dom.window)) {
     if (NODE_GLOBALS.has(name)) continue;
-    previous.set(name, Object.getOwnPropertyDescriptor(target, name));
-    const value = name === 'window' ? dom.window : source[name];
-    Object.defineProperty(target, name, { value, configurable: true, writable: true });
+    install(name, name === 'window' ? dom.window : source[name]);
   }
+  install('ResizeObserver', NoopResizeObserver);
   return () => {
     for (const [name, descriptor] of previous) {
       if (descriptor) {
@@ -183,6 +265,7 @@ describe('Client hydration of server-rendered rows', () => {
   /** The client shows the server's row nodes, in the server's order. */
   function expectServerRowsKept(hydrated: Hydrated): void {
     const { document: doc, serverRows, serverTexts, serverStatic } = hydrated;
+    expect(consoleError).not.toHaveBeenCalled();
     // Control: the server rendered rows 0..n, and hydration kept a static element's node
     expect(serverRows.length).toBeGreaterThan(1);
     expect(serverTexts).toEqual(serverTexts.map((_, i) => `row-${i}`));
@@ -193,12 +276,14 @@ describe('Client hydration of server-rendered rows', () => {
     expect(clientRows.map(rowText)).toEqual(clientRows.map((_, i) => `row-${i}`));
     // The same nodes: claimed from the server's markup, not created anew
     expect(serverRows.map((row, i) => clientRows[i] === row)).toEqual(serverRows.map(() => true));
-    expect(consoleError).not.toHaveBeenCalled();
   }
 
   it.each([
     ['vdnd-virtual-scroll', ScrollContainerHostComponent],
     ['vdnd-sortable-list', SortableListHostComponent],
+    ['*vdndVirtualFor in vdnd-virtual-viewport', ViewportHostComponent],
+    ['*vdndVirtualFor in vdnd-virtual-content', ContentHostComponent],
+    ['*vdndVirtualFor in a vdndScrollable', StandaloneHostComponent],
   ])('%s keeps the server rows, in order', async (_name, host) => {
     expectServerRowsKept(await hydrate(host));
   });
