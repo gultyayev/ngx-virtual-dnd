@@ -3,6 +3,7 @@ import { AutoScrollService, AutoScrollConfig } from './auto-scroll.service';
 import { DragStateService } from './drag-state.service';
 import { PositionCalculatorService } from './position-calculator.service';
 import { DragSchedulerService } from './drag-scheduler.service';
+import { DroppableRegistryService } from './droppable-registry.service';
 
 /**
  * Mock requestAnimationFrame to give synchronous control of the tick loop.
@@ -1397,7 +1398,7 @@ describe('AutoScrollService', () => {
 
   // ---------------------------------------------------------------------------
   // Scrollability filtering (registration is unconditional; the candidate list
-  // is filtered by live scroll geometry, refreshed per drag)
+  // is checked against live scroll geometry on each tick)
   // ---------------------------------------------------------------------------
   describe('scrollability filtering', () => {
     /** Element whose content fits its box — nothing to scroll. */
@@ -1488,6 +1489,267 @@ describe('AutoScrollService', () => {
       expect(el.scrollTop).toBeGreaterThan(0);
 
       service.unregisterContainer('grow-list');
+    });
+
+    /** A list whose content fits until `grow()` adds rows (no re-registration). */
+    function makeGrowable(): { el: HTMLElement; rectSpy: jest.Mock; grow: () => void } {
+      const { el, rectSpy } = makeNonScrollable();
+      let scrollHeight = 400;
+      Object.defineProperty(el, 'scrollHeight', { get: () => scrollHeight, configurable: true });
+      return {
+        el,
+        rectSpy,
+        grow: () => {
+          scrollHeight = 1000;
+        },
+      };
+    }
+
+    function moveCursor(
+      cursorPosition: { x: number; y: number },
+      activeDroppableId: string | null = null,
+    ): void {
+      dragStateService.updateDragPosition({
+        cursorPosition,
+        activeDroppableId,
+        placeholderId: null,
+        placeholderIndex: null,
+      });
+    }
+
+    /**
+     * Put `el` in the page as the droppable `id`, as `DroppableDirective` does, so the hit-test's
+     * target (`activeDroppableId`) resolves to it. Returns the cleanup.
+     */
+    function renderDroppable(el: HTMLElement, id: string, parent: HTMLElement = document.body) {
+      parent.appendChild(el);
+      const unregister = TestBed.inject(DroppableRegistryService).register(el, id, 'group');
+      return () => {
+        unregister();
+        el.remove();
+      };
+    }
+
+    /** Put the cursor over the droppable `id` without moving it (a hit-test under a resting cursor). */
+    function hitDroppable(id: string | null): void {
+      dragStateService.setActiveDroppable(id);
+    }
+
+    it('should scroll a container that grows scrollable during the drag once the cursor moves', () => {
+      const { el, grow } = makeGrowable();
+      // The cursor is over the list: it is the drag's target
+      const cleanup = renderDroppable(el, 'grow-list');
+      service.registerContainer('grow-list', el);
+      setupDrag({ x: 150, y: 480 }); // near the bottom edge
+      hitDroppable('grow-list');
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(el.scrollTop).toBe(0);
+
+      grow(); // rows arrive during the same drag
+      moveCursor({ x: 151, y: 481 }, 'grow-list');
+      flushRAF();
+
+      expect(el.scrollTop).toBeGreaterThan(0);
+      expect(service.isScrolling()).toBe(true);
+
+      service.unregisterContainer('grow-list');
+      cleanup();
+    });
+
+    it('should check a grown container that is not the target again once the containers are collected again', () => {
+      const { el, grow } = makeGrowable();
+      service.registerContainer('grow-list', el); // over no droppable: never the target
+      setupDrag({ x: 150, y: 480 });
+      startMonitoringWithScheduler();
+      flushRAF();
+
+      grow();
+      moveCursor({ x: 151, y: 481 });
+      flushRAF();
+      expect(el.scrollTop).toBe(0); // known to have nothing to scroll: not read again
+
+      service.refresh(); // as a (un)registration or a scroll inset change does
+      flushRAF();
+
+      expect(el.scrollTop).toBeGreaterThan(0);
+
+      service.unregisterContainer('grow-list');
+    });
+
+    it('should scroll a container that grows scrollable while the cursor rests at its edge', () => {
+      const { el, grow } = makeGrowable();
+      // The cursor rests over the list: it is the drag's target
+      const cleanup = renderDroppable(el, 'grow-list');
+      service.registerContainer('grow-list', el);
+      setupDrag({ x: 150, y: 480 }); // near the bottom edge
+      hitDroppable('grow-list');
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(el.scrollTop).toBe(0);
+
+      grow();
+      flushRAF();
+
+      expect(el.scrollTop).toBeGreaterThan(0);
+      expect(service.isScrolling()).toBe(true);
+
+      service.unregisterContainer('grow-list');
+      cleanup();
+    });
+
+    it('should scroll a container around the target that grows scrollable while the cursor rests', () => {
+      // A scroll container (vdndScrollable) around a list that never scrolls itself: rows that
+      // arrive make the container scrollable
+      const { el: scroller, grow } = makeGrowable();
+      document.body.appendChild(scroller);
+      const list = document.createElement('div');
+      const cleanup = renderDroppable(list, 'list-in-scroller', scroller);
+      service.registerContainer('scroller', scroller);
+      setupDrag({ x: 150, y: 480 });
+      hitDroppable('list-in-scroller');
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(scroller.scrollTop).toBe(0);
+
+      grow();
+      flushRAF();
+
+      expect(scroller.scrollTop).toBeGreaterThan(0);
+
+      service.unregisterContainer('scroller');
+      cleanup();
+      scroller.remove();
+    });
+
+    it('should scroll a container in the target that grows scrollable while the cursor rests', () => {
+      // The droppable wraps the scroller of its rows (vdnd-sortable-list's vdnd-virtual-scroll)
+      const list = document.createElement('div');
+      const cleanup = renderDroppable(list, 'sortable');
+      const { el: scroller, grow } = makeGrowable();
+      list.appendChild(scroller);
+      service.registerContainer('rows', scroller);
+      setupDrag({ x: 150, y: 480 });
+      hitDroppable('sortable');
+      startMonitoringWithScheduler();
+      flushRAF();
+      expect(scroller.scrollTop).toBe(0);
+
+      grow();
+      flushRAF();
+
+      expect(scroller.scrollTop).toBeGreaterThan(0);
+
+      service.unregisterContainer('rows');
+      cleanup();
+    });
+
+    it('should scroll a container that grows scrollable once a resting cursor hits it', () => {
+      const { el, grow } = makeGrowable();
+      const cleanup = renderDroppable(el, 'grow-list');
+      service.registerContainer('grow-list', el);
+      setupDrag({ x: 150, y: 480 }); // over no droppable yet
+      startMonitoringWithScheduler();
+      flushRAF();
+
+      // The hit-test finds the list under the resting cursor (it rendered there), then it grows
+      hitDroppable('grow-list');
+      flushRAF();
+      grow();
+      flushRAF();
+
+      expect(el.scrollTop).toBeGreaterThan(0);
+
+      service.unregisterContainer('grow-list');
+      cleanup();
+    });
+
+    it('should read no unscrollable container the cursor is not over while it moves or rests', () => {
+      const sizeProps = [
+        'scrollHeight',
+        'clientHeight',
+        'scrollWidth',
+        'clientWidth',
+        'scrollTop',
+        'scrollLeft',
+      ];
+      let reads = 0;
+      const lists: HTMLElement[] = [];
+      for (let i = 0; i < 200; i++) {
+        const el = document.createElement('div');
+        for (const prop of sizeProps) {
+          const value = prop === 'scrollTop' || prop === 'scrollLeft' ? 0 : 400;
+          Object.defineProperty(el, prop, {
+            get: () => {
+              reads++;
+              return value;
+            },
+            configurable: true,
+          });
+        }
+        document.body.appendChild(el);
+        service.registerContainer(`unrelated-${i}`, el);
+        lists.push(el);
+      }
+      // The cursor rests over another list, at its bottom edge
+      const { el: target } = makeNonScrollable();
+      const cleanup = renderDroppable(target, 'target-list');
+      service.registerContainer('target-list', target);
+      setupDrag({ x: 150, y: 480 });
+      hitDroppable('target-list');
+      startMonitoringWithScheduler();
+      flushRAF();
+
+      reads = 0;
+      // The cursor moves along the target's bottom edge, then rests there
+      for (let frame = 0; frame < 60; frame++) {
+        moveCursor({ x: 100 + frame, y: 480 }, 'target-list');
+        flushRAF();
+      }
+      for (let frame = 0; frame < 60; frame++) {
+        flushRAF();
+      }
+
+      expect(reads).toBe(0);
+
+      service.unregisterContainer('target-list');
+      cleanup();
+      lists.forEach((el, i) => {
+        service.unregisterContainer(`unrelated-${i}`);
+        el.remove();
+      });
+    });
+
+    it('should not read an unscrollable container again while the cursor rests and it does not grow', () => {
+      const { el, rectSpy } = makeGrowable();
+      service.registerContainer('grow-list', el);
+      setupDrag({ x: 150, y: 480 });
+      startMonitoringWithScheduler();
+      flushRAF();
+      flushRAF();
+      flushRAF();
+      moveCursor({ x: 151, y: 481 });
+      flushRAF();
+
+      // Still nothing to scroll: never measured, never scrolled
+      expect(rectSpy).not.toHaveBeenCalled();
+      expect(el.scrollTop).toBe(0);
+      expect(service.isScrolling()).toBe(false);
+
+      service.unregisterContainer('grow-list');
+    });
+
+    it('should scroll a container registered while the cursor rests at its edge', () => {
+      setupDrag({ x: 150, y: 480 }); // near the bottom edge of mockElement
+      startMonitoringWithScheduler();
+      flushRAF();
+
+      // The list renders (or is created) mid-drag under the resting cursor
+      service.registerContainer('test-container', mockElement);
+      flushRAF();
+
+      expect(mockElement.scrollTop).toBeGreaterThan(200);
+      expect(service.isScrolling()).toBe(true);
     });
   });
 
