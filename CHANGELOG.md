@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.6.2](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.1...v3.6.2) (2026-10-21)
+
+### Bug Fixes
+
+- **lib:** autoscroll lists that grow scrollable or register mid-drag ([#152](https://github.com/gultyayev/ngx-virtual-dnd/issues/152)) ([531a9c0](https://github.com/gultyayev/ngx-virtual-dnd/commit/531a9c0b97792c60129ce718a2906d9d3686d38a))
+- **lib:** claim the server's rows when vdndVirtualFor hydrates ([#153](https://github.com/gultyayev/ngx-virtual-dnd/issues/153)) ([4e759b2](https://github.com/gultyayev/ngx-virtual-dnd/commit/4e759b2acb0b49e616e978901913c4e05fbdccfe))
+- **lib:** clamp keyboard targets to the list's live item count ([#149](https://github.com/gultyayev/ngx-virtual-dnd/issues/149)) ([1b3f249](https://github.com/gultyayev/ngx-virtual-dnd/commit/1b3f2491df0e97b836d8c9740a17a9f4a55f7443))
+- **lib:** drop a pending press once its draggable is disabled ([#148](https://github.com/gultyayev/ngx-virtual-dnd/issues/148)) ([2e18d21](https://github.com/gultyayev/ngx-virtual-dnd/commit/2e18d21b746e60d8b9a77f4117f841c442e7e106))
+- **lib:** end a drag whose draggable ID changes mid-drag ([#146](https://github.com/gultyayev/ngx-virtual-dnd/issues/146)) ([d4583ed](https://github.com/gultyayev/ngx-virtual-dnd/commit/d4583edbb88fe07b3dfe9b4745365c386ac1f8f1))
+- **lib:** keep drag previews out of focus and the accessibility tree ([#151](https://github.com/gultyayev/ngx-virtual-dnd/issues/151)) ([f8f4606](https://github.com/gultyayev/ngx-virtual-dnd/commit/f8f46069941d25b86fc685a8add839e4b508eafb))
+- **lib:** keep the server's row order when vdnd-virtual-scroll hydrates ([#145](https://github.com/gultyayev/ngx-virtual-dnd/issues/145)) ([8a8104b](https://github.com/gultyayev/ngx-virtual-dnd/commit/8a8104b262699434fc394b0671b7447da14ba321))
+- **lib:** position and measure vdndVirtualFor rows after their check ([#147](https://github.com/gultyayev/ngx-virtual-dnd/issues/147)) ([470e1fb](https://github.com/gultyayev/ngx-virtual-dnd/commit/470e1fbe3077601861dd7d3dcdbb3b9994addb0a))
+- **lib:** skip visibility-hidden droppables in pointer hit-testing ([#150](https://github.com/gultyayev/ngx-virtual-dnd/issues/150)) ([7932d58](https://github.com/gultyayev/ngx-virtual-dnd/commit/7932d58f9af5e6dace1c8f2ea4087a1c04e219d5))
+
 ## [3.6.1](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.0...v3.6.1) (2026-10-14)
 
 ### Bug Fixes
