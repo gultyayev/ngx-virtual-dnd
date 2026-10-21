@@ -226,6 +226,18 @@ describe('DragPreviewComponent', () => {
       it('should not register as a template preview', () => {
         expect(overlayContainerService.hasTemplatePreview()).toBe(false);
       });
+
+      it('should keep the clone out of the tab order and the accessibility tree', () => {
+        const item = createMockDraggedItem();
+        dragStateService.startDrag(item, { x: 100, y: 100 });
+        fixture.detectChanges();
+        fixture.detectChanges();
+
+        const preview = queryPreview('[data-testid="vdnd-drag-preview"]');
+        expect(preview!.hasAttribute('inert')).toBe(true);
+        expect(preview!.getAttribute('aria-hidden')).toBe('true');
+        expect(preview!.contains(item.clonedElement!)).toBe(true);
+      });
     });
 
     describe('default preview', () => {
@@ -308,6 +320,18 @@ describe('DragPreviewComponent', () => {
       fixture.destroy();
 
       expect(document.querySelector('.vdnd-overlay-container vdnd-drag-preview')).toBeNull();
+    });
+
+    it('should keep a custom preview out of the tab order and the accessibility tree', () => {
+      const item = createMockDraggedItem();
+      dragStateService.startDrag(item, { x: 100, y: 100 });
+      fixture.detectChanges();
+      fixture.detectChanges();
+
+      const customPreview = queryPreview('.custom-preview');
+      const preview = customPreview!.closest<HTMLElement>('[data-testid="vdnd-drag-preview"]');
+      expect(preview!.hasAttribute('inert')).toBe(true);
+      expect(preview!.getAttribute('aria-hidden')).toBe('true');
     });
 
     it('should use custom template instead of cloned element', () => {

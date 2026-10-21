@@ -200,6 +200,57 @@ describe('ElementCloneService', () => {
       expect(link.style.pointerEvents).toBe('none');
     });
 
+    it('should take a focusable root out of the tab order and the accessibility tree', () => {
+      const source = document.createElement('div');
+      source.setAttribute('tabindex', '0');
+      source.setAttribute('role', 'listitem');
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.getAttribute('tabindex')).toBe('-1');
+      expect(clone.getAttribute('aria-hidden')).toBe('true');
+      expect(clone.hasAttribute('inert')).toBe(true);
+    });
+
+    it('should disable an interactive root like an interactive descendant', () => {
+      const source = document.createElement('button');
+      source.setAttribute('onclick', 'alert(1)');
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.style.pointerEvents).toBe('none');
+      expect(clone.getAttribute('tabindex')).toBe('-1');
+      expect(clone.hasAttribute('disabled')).toBe(true);
+      expect(clone.hasAttribute('onclick')).toBe(false);
+    });
+
+    it('should take focusable descendants out of the tab order', () => {
+      const source = document.createElement('div');
+      source.innerHTML = '<div class="cell" tabindex="0"></div>';
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.querySelector('.cell')!.getAttribute('tabindex')).toBe('-1');
+    });
+
+    // Duplicate ids in the document are a known limitation: the clone keeps them, so rules that
+    // style the row through an id (`#task .title`) keep styling the preview
+    it('should keep the ids of the root and its descendants', () => {
+      const source = document.createElement('div');
+      source.id = 'task-1';
+      source.innerHTML =
+        '<label id="task-1-title">Title</label>' +
+        '<svg><defs><linearGradient id="fill"></linearGradient></defs>' +
+        '<rect fill="url(#fill)"></rect></svg>';
+
+      const clone = service.cloneElement(source);
+
+      expect(clone.id).toBe('task-1');
+      expect(clone.querySelector('label')!.id).toBe('task-1-title');
+      expect(clone.querySelector('linearGradient')!.id).toBe('fill');
+      expect(clone.querySelector('rect')!.getAttribute('fill')).toBe('url(#fill)');
+    });
+
     it('should keep cloned radio buttons out of the source radio group', () => {
       const source = attach(document.createElement('div'));
       source.innerHTML =

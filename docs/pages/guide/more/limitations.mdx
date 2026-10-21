@@ -20,6 +20,10 @@ Because hit-testing uses geometry rather than `elementFromPoint()`, some browser
 
 If your layout depends on either, keep overlapping droppables in different groups, or avoid painting interactive overlays across active drop targets during a drag.
 
+## Drag preview
+
+- **The default preview duplicates IDs.** The clone keeps the `id` attributes of the item and everything in it, so styles that select the item through an ID keep applying to the preview. During a drag the item is hidden (`display: none`), not removed, so the document has two elements with each of those IDs. `getElementById()` and `querySelector('#…')` find whichever comes first in the document, usually the item. A `<label for>`, an `aria-labelledby`, or an SVG reference such as `url(#gradient)` or `<use href="#icon">` in the preview can resolve to the hidden item, and browsers may not paint an SVG gradient or symbol that is inside a hidden element. The preview is `inert` and `aria-hidden="true"`, so nothing in it takes focus or reaches screen readers. If duplicate IDs matter in your app, use a [custom preview template](/guide/features/preview-and-placeholder#custom-preview).
+
 ## Shadow DOM
 
 Lists, items and the drag preview work inside an open shadow root, for example in a component with `ViewEncapsulation.ShadowDom`. Droppables register themselves rather than being found by a document query, and the lookups that walk up from an element (the list of an item, the `vdndScrollable` container of a list) continue from a shadow root to its host. Some things still need care:

@@ -378,6 +378,7 @@ By default the preview is a styled clone of the dragged element. Supply a templa
 - `$implicit` is the draggable's `vdndDraggableData` (`null` if none was set), so pass `[vdndDraggableData]` when using a template.
 - The default clone is made when the drag starts, copying computed styles for every element of the row. For rows with many elements (low-end devices), a template preview is cheaper: with a template, drags skip the clone.
 - The preview box is sized to the dragged element's width and height and keeps the point where the user grabbed the item under the pointer. `cursorOffset` (default `{ x: 8, y: 8 }`) is only a fallback for when no grab offset is known; library-started drags always have one.
+- The preview element is `inert` and `aria-hidden="true"` (focus and screen readers skip it; announce drags yourself). The default clone keeps the item's `id` attributes (ID-based styles still apply), so during a drag the document has each of those IDs twice; a custom template avoids that.
 - The preview element has class `vdnd-drag-preview` and is moved into a body-level `div.vdnd-overlay-container` (this escapes ancestor `transform`s that would break `position: fixed`). Your component's styles still apply to elements in the preview template, but selectors that depend on ancestors (e.g. `.board .card`) no longer match — style the preview by its own classes.
 
 The drop-position placeholder rendered inside lists is an empty element with height equal to the dragged item. Style it globally:

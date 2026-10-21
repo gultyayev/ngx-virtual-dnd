@@ -149,7 +149,7 @@ Virtual content for external scroll containers (page-level scroll). Must be plac
 
 **Selector:** `vdnd-drag-preview`
 
-Renders the dragged item preview. Teleports its host into a body-level `div.vdnd-overlay-container` to escape ancestor CSS transforms (ancestor-dependent selectors stop matching). Without `previewTemplate` it shows a styled clone of the dragged element. The preview box is sized to the dragged element. With `VDND_ANIMATION_CONFIG` it stays up after a drop or cancel to play the drop animation (class `vdnd-drag-preview-dropping`).
+Renders the dragged item preview. Teleports its host into a body-level `div.vdnd-overlay-container` to escape ancestor CSS transforms (ancestor-dependent selectors stop matching). Without `previewTemplate` it shows a styled clone of the dragged element. The preview box is sized to the dragged element, and is `inert` and `aria-hidden="true"` (default and custom previews alike: no focus, nothing for screen readers). With `VDND_ANIMATION_CONFIG` it stays up after a drop or cancel to play the drop animation (class `vdnd-drag-preview-dropping`).
 
 **Required** — place once in your template.
 
@@ -509,7 +509,7 @@ Internal service for cloning DOM elements for drag previews. Exported for advanc
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `cloneElement` | `(source: HTMLElement) => HTMLElement` | Deep-clone an element with its computed styles inlined, for use as drag preview. The clone root drops its own placement (margin, `top`/`right`/`bottom`/`left`, translation; `absolute`/`fixed`/`sticky` becomes `relative`) so it fills the preview box from its origin |
+| `cloneElement` | `(source: HTMLElement) => HTMLElement` | Deep-clone an element with its computed styles inlined, for use as drag preview. The clone root drops its own placement (margin, `top`/`right`/`bottom`/`left`, translation; `absolute`/`fixed`/`sticky` becomes `relative`) so it fills the preview box from its origin. The clone is presentation only: `tabindex` becomes `-1`, interactive elements (the root too) are disabled, and the root gets `inert` and `aria-hidden="true"`. `id` attributes are kept, so the document has duplicate IDs while the clone is shown |
 
 ### KeyboardDragService
 
