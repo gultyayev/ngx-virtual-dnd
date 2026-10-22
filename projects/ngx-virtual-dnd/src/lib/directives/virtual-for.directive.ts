@@ -21,12 +21,11 @@ import { isPlatformBrowser } from '@angular/common';
 import { VDND_SCROLL_CONTAINER } from '../tokens/scroll-container.token';
 import { VDND_OFFSET_ROWS_VIEWPORT, VDND_VIRTUAL_VIEWPORT } from '../tokens/virtual-viewport.token';
 import { DragStateService } from '../services/drag-state.service';
-import { DragIndexCalculatorService } from '../services/drag-index-calculator.service';
 import { DroppableDirective } from './droppable.directive';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
-import { setStrategyItems } from '../strategies/strategy-items';
+import { bindListStrategy, createHeightStrategy } from '../strategies/strategy-binding';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
 import { RenderEntry, VirtualForRowRenderer } from '../rendering/virtual-for-row-renderer';
@@ -110,7 +109,6 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   readonly #ngZone = inject(NgZone);
   readonly #isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   readonly #dragState = inject(DragStateService);
-  readonly #dragIndexCalculator = inject(DragIndexCalculatorService);
 
   /**
    * Optional viewport component that provides wrapper-based positioning.
@@ -224,9 +222,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
       }
       return new FixedHeightStrategy(50);
     }
-    return this.vdndVirtualForDynamicItemHeight()
-      ? new DynamicHeightStrategy(height)
-      : new FixedHeightStrategy(height);
+    return createHeightStrategy(height, this.vdndVirtualForDynamicItemHeight());
   });
 
   // ========== Placeholder Computed Values ==========
@@ -382,34 +378,13 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   });
 
   constructor() {
-    // Keep the strategy's items in sync. A fixed-height strategy needs only their count, which
-    // spares computing every item's track key on each items change (each drop).
-    effect(() => {
-      setStrategyItems(this.#strategy(), this.vdndVirtualForOf().length, () => this.#itemKeys());
-    });
-
-    // Register strategy with drag index calculator for accurate position lookups
-    effect((onCleanup) => {
-      const droppableId = this.#effectiveDroppableId();
-      const strategy = this.#strategy();
-      if (droppableId) {
-        this.#dragIndexCalculator.registerStrategy(droppableId, strategy);
-        onCleanup(() => this.#dragIndexCalculator.unregisterStrategy(droppableId));
-      }
-    });
-
-    // Set excluded index persistently during same-list drag.
-    // This ensures ALL strategy methods (getTotalHeight, getOffsetForIndex, etc.)
-    // correctly skip the hidden item — not just findIndexAtOffset.
-    effect(() => {
-      const strategy = this.#strategy();
-      const draggedIndex = this.#excludedDraggedIndex();
-
-      if (draggedIndex >= 0) {
-        strategy.setExcludedIndex(draggedIndex);
-      } else {
-        strategy.setExcludedIndex(null);
-      }
+    // The strategy's items, registration and dragged-item exclusion
+    bindListStrategy({
+      strategy: this.#strategy,
+      itemCount: () => this.vdndVirtualForOf().length,
+      itemKeys: this.#itemKeys,
+      droppableId: this.#effectiveDroppableId,
+      excludedIndex: this.#excludedDraggedIndex,
     });
 
     // Measure item heights in dynamic height mode: the directive's own input, or the viewport's
