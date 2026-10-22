@@ -85,6 +85,9 @@ describe('KeyboardDragHandler', () => {
     mockDragIndexCalculator = {
       getTotalItemCount: jest.fn().mockReturnValue(5),
       clearCache: jest.fn(),
+      getScrollGeometry: jest.fn().mockReturnValue({ rect: { top: 200 }, scrollTop: 0 }),
+      // The item is the list's first row
+      getStrategyForDroppable: jest.fn().mockReturnValue({ findIndexAtOffset: () => 0 }),
     };
 
     mockElementClone = {
@@ -102,7 +105,6 @@ describe('KeyboardDragHandler', () => {
       onDragStart: jest.fn(),
       onDragEnd: jest.fn(),
       getParentDroppableId: jest.fn().mockReturnValue('list-1'),
-      calculateSourceIndex: jest.fn().mockReturnValue(0),
     };
 
     mockContext = {
