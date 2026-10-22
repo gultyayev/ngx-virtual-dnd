@@ -32,8 +32,13 @@ import { VDND_GROUP_TOKEN } from './droppable-group.directive';
 import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
+import {
+  createDraggedItem,
+  createDragStartEvent,
+  type DragSourceDeps,
+  measureDragSource,
+} from '../handlers/drag-source';
 import { placeholderToInsertionIndex } from '../utils/index-semantics';
-import { listDraggables } from '../utils/list-draggables';
 import { constraintElementOf, constraintRectOf } from '../utils/constraint-rect';
 import {
   findNestedControl,
@@ -183,6 +188,14 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     return draggedItem?.draggableId === this.vdndDraggable();
   });
 
+  /** The services picking an item up (see `drag-source.ts`) uses */
+  readonly #dragSourceDeps: DragSourceDeps = {
+    positionCalculator: this.#positionCalculator,
+    dragIndexCalculator: this.#dragIndexCalculator,
+    elementClone: this.#elementClone,
+    overlayContainer: this.#overlayContainer,
+  };
+
   #keyboardHandler!: KeyboardDragHandler;
   #pointerHandler!: PointerDragHandler;
 
@@ -292,7 +305,6 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
         // The keyboard handler ends the drag inside the zone (dragEnd, drop, focus restore)
         onDragEnd: (event) => this.dragEnd.emit(event),
         getParentDroppableId: () => this.#getParentDroppableId(),
-        calculateSourceIndex: (el, droppable) => this.#calculateSourceIndex(el, droppable),
       },
       getContext: () => ({
         element: this.#elementRef.nativeElement,
@@ -514,8 +526,23 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     // Clear pending state - drag is now active
     this.#setPending(false);
 
+    const groupName = this.#effectiveGroup();
+    if (!groupName) {
+      // Misconfigured - cancel tracking and don't start drag.
+      this.#pointerHandler.cleanup();
+      return;
+    }
+
+    // Measure and clone the item BEFORE updating drag state (which triggers display:none via
+    // host binding): a hidden element's rect is all zeros
     const element = this.#elementRef.nativeElement;
-    const rect = element.getBoundingClientRect();
+    const source = measureDragSource(this.#dragSourceDeps, element, groupName);
+    const { rect, droppableElement: parentDroppableElement, sourceIndex } = source;
+    const item = createDraggedItem(
+      this.#dragSourceDeps,
+      { element, draggableId: this.vdndDraggable(), data: this.vdndDraggableData() },
+      source,
+    );
 
     // Calculate grab offset using the START position (where user initially pressed down)
     // NOT the current position (where drag threshold was exceeded)
@@ -526,31 +553,12 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       y: startPos.y - rect.top,
     };
 
-    // Clone element BEFORE updating drag state (which triggers display:none via host binding).
-    // Template-first: skip the costly getComputedStyle deep-walk when a template-based
-    // preview is mounted, since that clone would never be rendered.
-    const clonedElement = this.#overlayContainer.hasTemplatePreview()
-      ? undefined
-      : this.#elementClone.cloneElement(element);
-
-    // Find droppable and calculate initial placeholder position
-    // This fixes the UI glitch by ensuring placeholder is set before the element is hidden
-    const groupName = this.#effectiveGroup();
-    if (!groupName) {
-      // Misconfigured - cancel tracking and don't start drag.
-      this.#pointerHandler.cleanup();
-      return;
-    }
-
-    const parentDroppableElement = this.#positionCalculator.getDroppableParent(element, groupName);
-    const parentDroppableId = parentDroppableElement
-      ? this.#positionCalculator.getDroppableId(parentDroppableElement)
-      : null;
-
     // Snapshot droppable rects for this drag session so subsequent hit-testing is
     // pure geometry (no elementFromPoint layout flush per pointermove).
     this.#positionCalculator.beginDragSession(groupName);
 
+    // Find the droppable under the pointer and the initial placeholder position, so the
+    // placeholder is set before the element is hidden
     const droppableElement = this.#positionCalculator.findDroppableAtPoint(
       position.x,
       position.y,
@@ -569,11 +577,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
 
     const activeDroppableId = droppableElement
       ? this.#positionCalculator.getDroppableId(droppableElement)
-      : parentDroppableId;
-
-    // Calculate source index BEFORE the element is hidden (display: none)
-    // This is critical because getBoundingClientRect() returns all zeros for hidden elements
-    const sourceIndex = this.#calculateSourceIndex(element, parentDroppableElement);
+      : source.droppableId;
 
     let initialPlaceholderId: string | null = null;
     let initialPlaceholderIndex: number | null = null;
@@ -585,7 +589,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
         previousPosition: null,
         grabOffset,
         draggedItemHeight: rect.height,
-        sourceDroppableId: parentDroppableId,
+        sourceDroppableId: source.droppableId,
         sourceIndex,
       });
       initialPlaceholderIndex = indexResult.index;
@@ -598,15 +602,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     // which will apply display:none via host binding
     // No ngZone.run() needed - signals work outside zone and effects react automatically
     this.#dragState.startDrag(
-      {
-        draggableId: this.vdndDraggable(),
-        droppableId: parentDroppableId ?? '',
-        element,
-        clonedElement,
-        height: rect.height,
-        width: rect.width,
-        data: this.vdndDraggableData(),
-      },
+      item,
       position,
       grabOffset,
       lockAxis,
@@ -631,68 +627,10 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     // Start auto-scroll monitoring — registers as a scheduler participant.
     this.#autoScroll.startMonitoring(() => this.#recalculatePlaceholder());
 
-    // Emit drag start event
     // Pointer listeners run outside Angular's zone. With zone.js a template listener marks
     // its view dirty but schedules no render, so emit inside the zone (a no-op when zoneless).
-    const event: DragStartEvent = {
-      draggableId: this.vdndDraggable(),
-      droppableId: parentDroppableId ?? '',
-      data: this.vdndDraggableData(),
-      position,
-      sourceIndex,
-    };
+    const event = createDragStartEvent(item, sourceIndex, position);
     this.#ngZone.run(() => this.dragStart.emit(event));
-  }
-
-  /**
-   * Calculate the source index of the dragged element BEFORE it's hidden.
-   * This must be called before startDrag updates the state (which triggers display:none).
-   * Uses strategy-based lookup when available for accurate handling of variable heights.
-   */
-  #calculateSourceIndex(element: HTMLElement, droppableElement: HTMLElement | null): number {
-    if (!droppableElement) {
-      return 0;
-    }
-
-    const rect = element.getBoundingClientRect();
-    // The same measurement that places the placeholder: it knows each container's scroll
-    // element and subtracts space reserved above the rows (contentOffset, page headers).
-    const geometry = this.#dragIndexCalculator.getScrollGeometry(droppableElement, rect.height);
-    const relativeY = rect.top - geometry.rect.top + geometry.scrollTop;
-
-    // Try to use registered strategy for accurate offset-based lookup
-    const droppableId = this.#positionCalculator.getDroppableId(droppableElement);
-    if (droppableId) {
-      const strategy = this.#dragIndexCalculator.getStrategyForDroppable(droppableId);
-      if (strategy) {
-        return strategy.findIndexAtOffset(relativeY);
-      }
-    }
-
-    // Preserve the geometry fallback for a virtual container whose strategy is unavailable.
-    if (geometry.isVirtual) {
-      const itemHeight = rect.height || 50;
-      return Math.round(relativeY / itemHeight);
-    }
-
-    // Non-virtual fallback: derive the logical index from the list's draggables in page order.
-    // Geometry-based division is incorrect when the list has padding, gaps, margins,
-    // or variable-height items.
-    const index = listDraggables(droppableElement).indexOf(element);
-    if (index !== -1) {
-      return index;
-    }
-
-    // An item in a shadow tree inside the list is not among them: count its preceding siblings
-    let sourceIndex = 0;
-    let sibling = element.previousElementSibling;
-    while (sibling) {
-      if (sibling.matches('[data-draggable-id]')) {
-        sourceIndex++;
-      }
-      sibling = sibling.previousElementSibling;
-    }
-    return sourceIndex;
   }
 
   /**

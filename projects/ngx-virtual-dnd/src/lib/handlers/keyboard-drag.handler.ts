@@ -8,6 +8,7 @@ import { OverlayContainerService } from '../services/overlay-container.service';
 import { DragEndEvent, DraggedItem, DragStartEvent } from '../models/drag-drop.models';
 import { queryByAttribute } from '../utils/attribute-selectors';
 import { placeholderToInsertionIndex } from '../utils/index-semantics';
+import { createDraggedItem, createDragStartEvent, measureDragSource } from './drag-source';
 
 /**
  * Context from the directive needed for keyboard drag operations.
@@ -26,7 +27,6 @@ export interface KeyboardDragCallbacks {
   onDragStart: (event: DragStartEvent) => void;
   onDragEnd: (event: DragEndEvent) => void;
   getParentDroppableId: () => string | null;
-  calculateSourceIndex: (element: HTMLElement, droppableElement: HTMLElement | null) => number;
 }
 
 /**
@@ -93,54 +93,21 @@ export class KeyboardDragHandler {
       return;
     }
 
-    const element = ctx.element;
-    const rect = element.getBoundingClientRect();
-
-    // Find the parent droppable
-    const droppableElement = this.#deps.positionCalculator.getDroppableParent(
-      element,
-      ctx.groupName,
-    );
-    if (!droppableElement) {
+    // A keyboard drag moves between lists by arrow keys, so it starts only from one
+    const source = measureDragSource(this.#deps, ctx.element, ctx.groupName);
+    const { droppableElement, droppableId, rect, sourceIndex } = source;
+    if (!droppableElement || !droppableId) {
       return;
     }
 
-    const droppableId = this.#deps.positionCalculator.getDroppableId(droppableElement);
-    if (!droppableId) {
-      return;
-    }
-
-    // Calculate source index
-    const sourceIndex = this.#deps.callbacks.calculateSourceIndex(element, droppableElement);
-
-    // Get total item count from the droppable
     const totalItemCount = this.#deps.dragIndexCalculator.getTotalItemCount({
       droppableElement,
       isSameList: false,
       draggedItemHeight: rect.height,
     });
 
-    // Clone element BEFORE updating drag state.
-    // Template-first: skip the clone when a template-based preview is mounted.
-    const clonedElement = this.#deps.overlayContainer.hasTemplatePreview()
-      ? undefined
-      : this.#deps.elementClone.cloneElement(element);
-
-    // Start keyboard drag
-    this.#deps.keyboardDrag.startKeyboardDrag(
-      {
-        draggableId: ctx.draggableId,
-        droppableId,
-        element,
-        clonedElement,
-        height: rect.height,
-        width: rect.width,
-        data: ctx.data,
-      },
-      sourceIndex,
-      totalItemCount,
-      droppableId,
-    );
+    const item = createDraggedItem(this.#deps, ctx, source);
+    this.#deps.keyboardDrag.startKeyboardDrag(item, sourceIndex, totalItemCount, droppableId);
     this.#ownDrag = this.#deps.dragState.draggedItem();
 
     // Add document-level keyboard listener (since element is hidden with display:none)
@@ -148,14 +115,9 @@ export class KeyboardDragHandler {
       document.addEventListener('keydown', this.#boundKeyDown!);
     });
 
-    // Emit drag start event
-    this.#deps.callbacks.onDragStart({
-      draggableId: ctx.draggableId,
-      droppableId,
-      data: ctx.data,
-      position: { x: rect.left, y: rect.top },
-      sourceIndex,
-    });
+    this.#deps.callbacks.onDragStart(
+      createDragStartEvent(item, sourceIndex, { x: rect.left, y: rect.top }),
+    );
   }
 
   /**
