@@ -1,6 +1,11 @@
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { CursorPosition, DraggedItem, DragState, GrabOffset } from '../models/drag-drop.models';
 import { DroppableRegistryService } from './droppable-registry.service';
+import {
+  type InsertionIndex,
+  insertionToPlaceholderIndex,
+  type PlaceholderIndex,
+} from '../utils/index-semantics';
 
 /**
  * Internal state type without high-frequency fields.
@@ -341,21 +346,10 @@ export class DragStateService {
       return;
     }
 
-    const state = this.#state();
-    // Same-list adjustment: if target is at or after source, add 1
-    // This accounts for the hidden item shifting everything up visually
-    const sourceDroppableId = state.draggedItem?.droppableId;
-    const activeDroppableId = this.#activeDroppableId();
-    const isSameList = sourceDroppableId === activeDroppableId;
-    const sourceIndex = state.sourceIndex ?? -1;
-
-    let placeholderIndex = targetIndex;
-    if (isSameList && sourceIndex >= 0 && targetIndex >= sourceIndex) {
-      placeholderIndex = targetIndex + 1;
-    }
-
     this.#keyboardTargetIndex.set(targetIndex);
-    this.#placeholderIndex.set(placeholderIndex);
+    this.#placeholderIndex.set(
+      this.#keyboardPlaceholderIndex(this.#activeDroppableId(), targetIndex),
+    );
   }
 
   /**
@@ -366,19 +360,21 @@ export class DragStateService {
       return;
     }
 
-    const state = this.#state();
-    // Same-list adjustment: if moving back to source list and target is at or after source, add 1
-    const sourceDroppableId = state.draggedItem?.droppableId;
-    const isSameList = sourceDroppableId === droppableId;
-    const sourceIndex = state.sourceIndex ?? -1;
-
-    let placeholderIndex = targetIndex;
-    if (isSameList && sourceIndex >= 0 && targetIndex >= sourceIndex) {
-      placeholderIndex = targetIndex + 1;
-    }
-
     this.#keyboardTargetIndex.set(targetIndex);
     this.#activeDroppableId.set(droppableId);
-    this.#placeholderIndex.set(placeholderIndex);
+    this.#placeholderIndex.set(this.#keyboardPlaceholderIndex(droppableId, targetIndex));
+  }
+
+  /**
+   * Where the placeholder renders for a keyboard target (an insertion index) in `droppableId`:
+   * in the source list, a target at or after the source counts the hidden item in.
+   */
+  #keyboardPlaceholderIndex(
+    droppableId: string | null,
+    targetIndex: InsertionIndex,
+  ): PlaceholderIndex {
+    const state = this.#state();
+    const isSameList = state.draggedItem?.droppableId === droppableId;
+    return insertionToPlaceholderIndex(targetIndex, state.sourceIndex, isSameList);
   }
 }
