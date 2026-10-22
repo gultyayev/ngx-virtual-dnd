@@ -42,3 +42,7 @@ Keep modality-specific behaviour (thresholds, navigation, focus) in its handler;
 ## Virtual list strategies
 
 `vdnd-virtual-scroll`, `vdnd-virtual-viewport` and `vdnd-virtual-content` create their strategy with `createHeightStrategy`; `*vdndVirtualFor` uses its viewport's, or creates its own. The two renderers keep their strategy in step through `bindListStrategy` (`lib/strategies/strategy-binding.ts`): three effects, created before the ones that render rows, for the items (count only for a fixed-height strategy), the registration under the droppable ID, and the dragged item's exclusion. Keep the exclusion apart from the items: a drag starting or ending must not enumerate every track key.
+
+## Drag state
+
+`DragStateService` holds the drag's state in signals (core state plus separate high-frequency signals) and delivers the drop on `endDrag()`. It touches no DOM itself: the grabbing cursor (body classes `vdnd-dragging`/`vdnd-dragging-touch` and the style element) is `bindDragCursor` (`lib/utils/drag-cursor.ts`), which its constructor calls so every app that drags gets it, and which does nothing on the server.

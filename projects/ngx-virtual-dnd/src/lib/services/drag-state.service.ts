@@ -1,6 +1,7 @@
-import { computed, effect, inject, Injectable, signal } from '@angular/core';
+import { computed, inject, Injectable, signal } from '@angular/core';
 import { CursorPosition, DraggedItem, DragState, GrabOffset } from '../models/drag-drop.models';
 import { DroppableRegistryService } from './droppable-registry.service';
+import { bindDragCursor } from '../utils/drag-cursor';
 import {
   type InsertionIndex,
   insertionToPlaceholderIndex,
@@ -131,33 +132,7 @@ export class DragStateService {
   readonly keyboardTargetIndex = this.#keyboardTargetIndex.asReadonly();
 
   constructor() {
-    // Inject the grabbing cursor styles once. They target lists and items only: a rule matching
-    // every element (`body.vdnd-dragging *`, or a `*` anywhere right of the body class) restyles
-    // the whole document each time the body class changes, at drag start and at drop. Touch drags
-    // show no cursor, so they skip it.
-    if (typeof document !== 'undefined') {
-      const styleId = 'vdnd-cursor-styles';
-      if (!document.getElementById(styleId)) {
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.textContent = `
-          body.vdnd-dragging:not(.vdnd-dragging-touch) .vdnd-droppable,
-          body.vdnd-dragging:not(.vdnd-dragging-touch) .vdnd-draggable {
-            cursor: grabbing !important;
-          }
-        `;
-        document.head.appendChild(style);
-      }
-    }
-
-    // Effect to toggle the body classes during drag
-    effect(() => {
-      if (typeof document === 'undefined') return;
-      const isDragging = this.isDragging();
-      const classList = document.body.classList;
-      classList.toggle('vdnd-dragging', isDragging);
-      classList.toggle('vdnd-dragging-touch', isDragging && this.#isTouchDrag());
-    });
+    bindDragCursor(this.isDragging, this.#isTouchDrag);
   }
 
   /**
