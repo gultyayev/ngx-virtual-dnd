@@ -7,7 +7,7 @@ import { ElementCloneService } from '../services/element-clone.service';
 import { OverlayContainerService } from '../services/overlay-container.service';
 import { DragEndEvent, DraggedItem, DragStartEvent } from '../models/drag-drop.models';
 import { queryByAttribute } from '../utils/attribute-selectors';
-import { placeholderToInsertionIndex } from '../utils/index-semantics';
+import { createDragEndEvent, endDragInZone } from './drag-end';
 import { createDraggedItem, createDragStartEvent, measureDragSource } from './drag-source';
 
 /**
@@ -181,111 +181,71 @@ export class KeyboardDragHandler {
     // The list's data may have changed since the last move: drop inside the items it has now.
     // Settled once, here: dragEnd and drop both report this target.
     this.#deps.keyboardDrag.clampTargetIndex();
-    const ctx = this.#deps.getContext();
-    const item = this.#endedItem(ctx);
-    const sourceIndex = this.#deps.dragState.sourceIndex() ?? 0;
     const activeDroppableId = this.#deps.dragState.activeDroppableId();
 
     // Revalidate the active target: it may have been disabled after the drag navigated
     // into it. A disabled (or missing) target is not a valid drop — report no destination.
     // The droppable's own disabled guard suppresses the drop event, keeping dragEnd and
     // drop consistent (non-cancelled dragEnd with destinationIndex: null, no drop).
-    const hasValidTarget =
+    const hasTarget =
       activeDroppableId !== null &&
       !this.#deps.positionCalculator.isDroppableDisabledById(activeDroppableId);
 
-    const destinationIndex = hasValidTarget
-      ? placeholderToInsertionIndex({
-          sourceIndex,
-          placeholderIndex: this.#deps.dragState.placeholderIndex(),
-          sourceDroppableId: this.#deps.dragState.sourceDroppableId(),
-          activeDroppableId,
-        })
-      : null;
-
-    // Remove document listener
-    this.#cleanupDocumentListener();
-
-    // Clear droppable metadata cache from this drag session
-    this.#deps.dragIndexCalculator.clearCache();
-
-    const event: DragEndEvent = {
-      draggableId: item.draggableId,
-      droppableId: this.#deps.callbacks.getParentDroppableId() ?? '',
-      cancelled: false,
-      data: item.data,
-      sourceIndex,
-      destinationIndex,
-    };
-
     // The item stays in its source list when there is no valid target
-    const fallbackDroppableId = hasValidTarget
+    const focusDroppableId = hasTarget
       ? activeDroppableId
       : this.#deps.dragState.sourceDroppableId();
 
-    this.#endInZone(() => {
-      this.#deps.callbacks.onDragEnd(event);
+    this.#end({ cancelled: false, hasTarget, focusDroppableId }, () =>
       // Ends the drag state, which delivers the drop. Not clamped again: a dragEnd listener
       // may have changed the list, and drop must report the destination dragEnd did.
-      this.#deps.keyboardDrag.endKeyboardDrag();
-      // Restore focus to the moved element after state updates (by the ID it renders now)
-      this.#restoreFocus(ctx.draggableId, fallbackDroppableId);
-    });
+      this.#deps.keyboardDrag.endKeyboardDrag(),
+    );
   }
 
   /**
    * Cancel a keyboard drag operation.
    */
   cancel(): void {
-    const ctx = this.#deps.getContext();
-    const item = this.#endedItem(ctx);
-    const sourceIndex = this.#deps.dragState.sourceIndex() ?? 0;
     // A cancelled item goes back to its source list
-    const sourceDroppableId = this.#deps.dragState.sourceDroppableId();
+    const focusDroppableId = this.#deps.dragState.sourceDroppableId();
+    this.#end({ cancelled: true, hasTarget: false, focusDroppableId }, () =>
+      this.#deps.keyboardDrag.cancelKeyboardDrag(),
+    );
+  }
 
-    // Remove document listener
+  /**
+   * End the drag: emit dragEnd, end the drag state with `endDragState` (which delivers the drop),
+   * then restore focus to the item (by the ID it renders now) or a row of `focusDroppableId`.
+   */
+  #end(
+    {
+      cancelled,
+      hasTarget,
+      focusDroppableId,
+    }: { cancelled: boolean; hasTarget: boolean; focusDroppableId: string | null },
+    endDragState: () => void,
+  ): void {
+    const ctx = this.#deps.getContext();
+    // Read before the document listener is removed, which forgets the drag
+    const event = createDragEndEvent(this.#deps.dragState, {
+      pickedUp: this.#ownDrag,
+      live: ctx,
+      parentDroppableId: this.#deps.callbacks.getParentDroppableId,
+      cancelled,
+      hasTarget,
+    });
+
     this.#cleanupDocumentListener();
-
     // Clear droppable metadata cache from this drag session
     this.#deps.dragIndexCalculator.clearCache();
 
-    const event: DragEndEvent = {
-      draggableId: item.draggableId,
-      droppableId: this.#deps.callbacks.getParentDroppableId() ?? '',
-      cancelled: true,
-      data: item.data,
-      sourceIndex,
-      destinationIndex: null,
-    };
-
-    this.#endInZone(() => {
-      this.#deps.callbacks.onDragEnd(event);
-      this.#deps.keyboardDrag.cancelKeyboardDrag();
-      // Restore focus to the original element after state updates
-      this.#restoreFocus(ctx.draggableId, sourceDroppableId);
-    });
-  }
-
-  /**
-   * The item dragEnd reports. While the draggable still renders the item it picked up, its live ID
-   * and data (the consumer can replace the data mid-gesture). When it renders another ID by now,
-   * the item this handler's drag picked up, which the drop reports too. Read before the document
-   * listener is removed, which forgets the drag.
-   */
-  #endedItem(ctx: KeyboardDragContext): Pick<DraggedItem, 'draggableId' | 'data'> {
-    const pickedUp = this.#ownDrag;
-    return pickedUp && pickedUp.draggableId !== ctx.draggableId ? pickedUp : ctx;
-  }
-
-  /**
-   * Run a drag end (dragEnd, the state reset that delivers drop, the focus restore) in one
-   * entry into Angular's zone. The document listener runs outside it; with zone.js a
-   * template listener marks its view dirty but schedules no render, and each entry renders
-   * when it is left, so this renders the end once, with focus restored in that render. A
-   * no-op when zoneless.
-   */
-  #endInZone(end: () => void): void {
-    this.#deps.ngZone.run(end);
+    endDragInZone(
+      this.#deps.ngZone,
+      () => this.#deps.callbacks.onDragEnd(event),
+      endDragState,
+      () => this.#restoreFocus(ctx.draggableId, focusDroppableId),
+    );
   }
 
   /**

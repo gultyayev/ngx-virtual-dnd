@@ -38,7 +38,7 @@ import {
   type DragSourceDeps,
   measureDragSource,
 } from '../handlers/drag-source';
-import { placeholderToInsertionIndex } from '../utils/index-semantics';
+import { createDragEndEvent, endDragInZone } from '../handlers/drag-end';
 import { constraintElementOf, constraintRectOf } from '../utils/constraint-rect';
 import {
   findNestedControl,
@@ -829,50 +829,21 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     this.#constraintElement = null;
     this.#lastRawPosition = null;
 
-    // The item dragEnd reports. While the draggable still renders the item it picked up, its live ID
-    // and data (the consumer can replace the data mid-gesture). When the ID input changed since (the
-    // item renders under another ID), the item the drag picked up, which the drop reports too.
-    const draggedItem = this.#dragState.draggedItem();
-    const endedItem =
-      draggedItem && draggedItem.draggableId !== this.vdndDraggable()
-        ? draggedItem
-        : { draggableId: this.vdndDraggable(), data: this.vdndDraggableData() };
+    const event = createDragEndEvent(this.#dragState, {
+      pickedUp: this.#dragState.draggedItem(),
+      live: { draggableId: this.vdndDraggable(), data: this.vdndDraggableData() },
+      parentDroppableId: () => this.#getParentDroppableId(),
+      cancelled,
+      // Hit-testing skips disabled lists, so a list under the pointer takes the drop
+      hasTarget: this.#dragState.activeDroppableId() !== null,
+    });
     this.#ownDrag = null;
 
-    const sourceIndex = this.#dragState.sourceIndex() ?? 0;
-    const destinationIndex = cancelled
-      ? null
-      : placeholderToInsertionIndex({
-          sourceIndex,
-          placeholderIndex: this.#dragState.placeholderIndex(),
-          sourceDroppableId: this.#dragState.sourceDroppableId(),
-          activeDroppableId: this.#dragState.activeDroppableId(),
-        });
-
-    const event: DragEndEvent = {
-      draggableId: endedItem.draggableId,
-      // The source list as the drag started from it. Not a DOM lookup first: a draggable
-      // destroyed mid-drag (its row removed) is already detached from the list here.
-      droppableId: this.#dragState.sourceDroppableId() || this.#getParentDroppableId() || '',
-      cancelled,
-      data: endedItem.data,
-      sourceIndex,
-      destinationIndex,
-    };
-
-    // dragEnd, then the state reset that delivers drop, in ONE zone entry: listeners run
-    // outside Angular's zone, and with zone.js each entry renders when it is left, so
-    // separate entries would render the drag end twice. A no-op when zoneless.
-    this.#ngZone.run(() => {
-      this.dragEnd.emit(event);
-
-      // Clear drag state - this triggers isDragging computed to become false
-      if (cancelled) {
-        this.#dragState.cancelDrag();
-      } else {
-        this.#dragState.endDrag();
-      }
-    });
+    endDragInZone(
+      this.#ngZone,
+      () => this.dragEnd.emit(event),
+      () => (cancelled ? this.#dragState.cancelDrag() : this.#dragState.endDrag()),
+    );
   }
 
   /**

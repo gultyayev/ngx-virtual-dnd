@@ -36,7 +36,7 @@ if (!customElements.get('test-shadow-input')) {
 @Component({
   template: `
     <div
-      vdndDroppable="test-list"
+      [vdndDroppable]="listId()"
       vdndDroppableGroup="test-group"
       style="height: 400px; overflow: auto; padding-top: 20px; row-gap: 10px;"
       (drop)="onDrop($event)"
@@ -72,6 +72,7 @@ if (!customElements.get('test-shadow-input')) {
   imports: [DraggableDirective, DroppableDirective],
 })
 class TestHostComponent {
+  listId = signal('test-list');
   draggableId = signal('test-item');
   itemData = signal<unknown>({ id: 1, name: 'Test Item' });
   disabled = signal(false);
@@ -2294,6 +2295,39 @@ describe('DraggableDirective', () => {
           expect.objectContaining({ draggableId: 'test-item', cancelled: true }),
         ]);
       });
+    });
+  });
+
+  describe("when its list's ID changes during its drag", () => {
+    const renameList = (): void => {
+      component.listId.set('renamed-list');
+      fixture.detectChanges();
+    };
+
+    it('should report the list a pointer drag started from in dragEnd', () => {
+      attemptPointerDrag(draggableNative);
+      renameList();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+      expect(component.dragEndEvents).toEqual([
+        expect.objectContaining({ droppableId: 'test-list', cancelled: true }),
+      ]);
+    });
+
+    it('should report the list a keyboard drag started from in dragEnd', () => {
+      draggableNative.dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+      );
+      renameList();
+
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+
+      expect(component.dragEndEvents).toEqual([
+        expect.objectContaining({ droppableId: 'test-list', cancelled: true }),
+      ]);
     });
   });
 
