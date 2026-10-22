@@ -32,7 +32,7 @@ import { VDND_GROUP_TOKEN } from './droppable-group.directive';
 import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { KeyboardDragHandler } from '../handlers/keyboard-drag.handler';
 import { PointerDragHandler } from '../handlers/pointer-drag.handler';
-import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
+import { placeholderToInsertionIndex } from '../utils/index-semantics';
 import { listDraggables } from '../utils/list-draggables';
 import { constraintElementOf, constraintRectOf } from '../utils/constraint-rect';
 import {
@@ -904,7 +904,7 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     const sourceIndex = this.#dragState.sourceIndex() ?? 0;
     const destinationIndex = cancelled
       ? null
-      : normalizeDropDestinationIndex({
+      : placeholderToInsertionIndex({
           sourceIndex,
           placeholderIndex: this.#dragState.placeholderIndex(),
           sourceDroppableId: this.#dragState.sourceDroppableId(),
