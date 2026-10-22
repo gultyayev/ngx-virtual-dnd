@@ -1,6 +1,6 @@
 # Placeholder Index Algorithm — Detailed Design
 
-This document covers the internals of `DragIndexCalculatorService`'s placeholder index calculation. Read this before modifying placeholder behavior.
+This document covers the internals of `DragIndexCalculatorService`'s placeholder index calculation. Read this before modifying placeholder behavior. The service measures the list (rect, scroll offset, item count, edges); the probe itself (capped center, midpoint refinement, same-list adjustment) is the pure `probePlaceholderIndex` in `lib/utils/placeholder-probe.ts`, unit-tested without a DOM.
 
 ## Capped Center Probe + Midpoint Refinement
 
@@ -12,7 +12,7 @@ The placeholder index probe uses two complementary mechanisms for dynamic height
 
 ### Midpoint Refinement (Strategy Path Only)
 
-After `findIndexAtOffset` returns an index, checks whether the preview's top edge has passed the target item's midpoint. Only then advances `visualIndex` by 1. Prevents a short preview (e.g. 60px entering a 150px item) from triggering displacement at ~20% overlap — displacement now requires 50% of the target item's actual height.
+After `findIndexAtOffset` returns an index, checks whether the preview's top edge has passed the target item's midpoint. Only then advances the probed index by 1. Prevents a short preview (e.g. 60px entering a 150px item) from triggering displacement at ~20% overlap — displacement now requires 50% of the target item's actual height.
 
 ### Why Both Are Needed
 
@@ -32,11 +32,11 @@ Uses `Math.floor(relativeY / itemHeight)` directly (no refinement needed since a
 
 ## Same-List Adjustment
 
-When dragging within the same list, apply +1 adjustment when `visualIndex >= sourceIndex` to compensate for the hidden item.
+When dragging within the same list, apply +1 adjustment when the probed index is `>= sourceIndex` to compensate for the hidden item (`insertionToPlaceholderIndex`).
 
 ## Virtual Scroll Integration
 
-During same-list drag, the strategy's excluded index (`setExcludedIndex`) closes up the offsets after the dragged item, which is why `#isSourceIndexExcluded` skips the +1 adjustment once exclusion is applied. The total height keeps all N items, and `getTotalItemCount()` returns the logical N (strategy item count or `data-total-items`).
+During same-list drag, the strategy's excluded index (`setExcludedIndex`) closes up the offsets after the dragged item, which is why `isSourceIndexExcluded` (in `placeholder-probe.ts`) skips the +1 adjustment once exclusion is applied. The total height keeps all N items, and `getTotalItemCount()` returns the logical N (strategy item count or `data-total-items`).
 
 ## Reading State After the Drag Ends
 

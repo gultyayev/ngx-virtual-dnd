@@ -34,3 +34,7 @@ Example: `[A, B, C, D]`, dragging B (source 1) to the end. Placeholder index 4, 
 | `KeyboardDragHandler` + `KeyboardDragService` | Document key listener, arrow navigation between slots and lists, reveal, focus restore                                                                                                            |
 
 Keep modality-specific behaviour (thresholds, navigation, focus) in its handler; move a decision into the shared functions only when both modalities make it the same way.
+
+## Placeholder geometry
+
+`DragIndexCalculatorService.calculatePlaceholderIndex` runs every pointer frame. It reads the DOM (the list's rect and scroll offset through cached per-drag metadata, the item count, the uncovered edges), hands the numbers to the pure `probePlaceholderIndex` (`lib/utils/placeholder-probe.ts`), then applies the edge snaps and the clamp to the item count, which need the DOM again. Keep DOM reads out of the probe, and keep its strategy calls lazy (the fixed-height path is O(1)). The algorithm is in `.claude/history/placeholder-algorithm.md`.
