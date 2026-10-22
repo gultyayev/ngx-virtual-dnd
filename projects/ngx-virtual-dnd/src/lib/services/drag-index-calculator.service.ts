@@ -5,7 +5,7 @@ import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { closestAcrossShadow } from '../utils/composed-dom';
 import { listDraggables, listVirtualScroll } from '../utils/list-draggables';
 import { constraintElementOf, constraintRectOf } from '../utils/constraint-rect';
-import { insertionToPlaceholderIndex, type PlaceholderIndex } from '../utils/index-semantics';
+import { probePlaceholderIndex } from '../utils/placeholder-probe';
 import {
   ownUncoveredRect,
   readScrollInset,
@@ -293,9 +293,8 @@ export class DragIndexCalculatorService {
       isConstrainedToContainer,
     } = cache;
 
-    // Calculate preview center position mathematically
+    // Calculate preview position mathematically
     // The preview is positioned at: cursorPosition - grabOffset (see drag-preview.component.ts)
-    // So preview center = cursorPosition.y - grabOffset.y + previewHeight/2
     // Using math avoids Safari's stale getBoundingClientRect() issue during autoscroll
     // Use actual dragged item height when available (important for dynamic heights)
     const previewHeight = this.#getDraggedItemHeightFallback(draggedItemHeight, itemHeight);
@@ -303,56 +302,16 @@ export class DragIndexCalculatorService {
     const previewBottomY = previewTopY + previewHeight;
     const previewCenterY = previewTopY + previewHeight / 2;
 
-    // Capped center probe: use preview center but limit how deep the probe reaches.
-    // The cap prevents a tall preview (e.g. 120px among 60px items) from overshooting
-    // multiple positions — the center would land 2+ items away, but the cap keeps it
-    // within one item of the top edge.
-    const indexProbeY = Math.min(previewCenterY, previewTopY + itemHeight / 2);
-
-    // Convert to visual index
-    const relativeY = indexProbeY - rect.top + currentScrollTop;
-
-    // Determine same-list drag info before strategy branch
     const isSameList = sourceDroppableId !== null && sourceDroppableId === currentDroppableId;
-    const sourceIndexValue = isSameList ? (sourceIndex ?? -1) : -1;
-
-    // The slot under the probe. Rows render without the hidden source, so a slot counted from them
-    // is an insertion index. A strategy that excludes the source maps its offsets back onto the
-    // list as it is, so its slot is a placeholder index already.
-    let probedIndex: number;
-    if (strategy) {
-      probedIndex = strategy.findIndexAtOffset(relativeY);
-
-      // Midpoint refinement for variable heights:
-      // Only advance past an item when the preview top has crossed its midpoint.
-      // Without this, a short preview entering a tall item's range triggers
-      // displacement at ~20% overlap, which looks like unnatural overlapping.
-      const topRelativeY = previewTopY - rect.top + currentScrollTop;
-      const targetTop = strategy.getOffsetForIndex(probedIndex);
-      const targetBottom = strategy.getOffsetForIndex(probedIndex + 1);
-      const targetMidpoint = (targetTop + targetBottom) / 2;
-      if (topRelativeY >= targetMidpoint) {
-        probedIndex += 1;
-      }
-    } else {
-      // Fixed height: simple division
-      probedIndex = Math.floor(relativeY / itemHeight);
-    }
-
-    // Count the hidden source in, unless the strategy has excluded it already (it has not in the
-    // first frames of a drag, and then counts its slots without the source too)
-    let placeholderIndex: PlaceholderIndex = insertionToPlaceholderIndex(
-      probedIndex,
-      sourceIndexValue,
-      isSameList,
-    );
-    if (
-      placeholderIndex !== probedIndex &&
-      strategy &&
-      this.#isSourceIndexExcluded(strategy, sourceIndexValue)
-    ) {
-      placeholderIndex = probedIndex;
-    }
+    let placeholderIndex = probePlaceholderIndex({
+      previewTopY,
+      previewHeight,
+      itemHeight,
+      listTopY: rect.top,
+      scrollTop: currentScrollTop,
+      strategy,
+      sourceIndex: isSameList ? sourceIndex : null,
+    });
 
     // Get total items using cached strategy to avoid duplicate DOM queries
     let totalItems: number;
@@ -592,23 +551,5 @@ export class DragIndexCalculatorService {
 
   #getDraggedItemHeightFallback(height: number, fallback: number): number {
     return Number.isFinite(height) && height > 0 ? height : fallback;
-  }
-
-  /**
-   * Detect whether a strategy has already excluded the source index.
-   *
-   * With exclusion applied, the source slot collapses in visual space:
-   * offset(sourceIndex + 1) <= offset(sourceIndex). Without exclusion,
-   * the next offset is strictly greater.
-   */
-  #isSourceIndexExcluded(strategy: VirtualScrollStrategy, sourceIndex: number): boolean {
-    if (sourceIndex < 0) {
-      return false;
-    }
-
-    const sourceOffset = strategy.getOffsetForIndex(sourceIndex);
-    const nextOffset = strategy.getOffsetForIndex(sourceIndex + 1);
-
-    return nextOffset <= sourceOffset;
   }
 }
