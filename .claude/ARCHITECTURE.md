@@ -45,4 +45,4 @@ Keep modality-specific behaviour (thresholds, navigation, focus) in its handler;
 
 ## Drag state
 
-`DragStateService` holds the drag's state in signals (core state plus separate high-frequency signals) and delivers the drop on `endDrag()`. It touches no DOM itself: the grabbing cursor (body classes `vdnd-dragging`/`vdnd-dragging-touch` and the style element) is `bindDragCursor` (`lib/utils/drag-cursor.ts`), which its constructor calls so every app that drags gets it, and which does nothing on the server.
+`DragStateService` holds the drag's state in signals (core state plus separate high-frequency signals) and delivers the drop on `endDrag()`. It touches no DOM itself: the grabbing cursor (body classes `vdnd-dragging`/`vdnd-dragging-touch` and the style element) is `bindDragCursor` (`lib/utils/drag-cursor.ts`), which its constructor calls (with getters, so a subclass's own `isDragging` counts) so every app that drags gets it, and which does nothing on the server.

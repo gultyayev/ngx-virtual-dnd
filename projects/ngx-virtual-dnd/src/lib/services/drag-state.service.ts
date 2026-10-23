@@ -132,7 +132,10 @@ export class DragStateService {
   readonly keyboardTargetIndex = this.#keyboardTargetIndex.asReadonly();
 
   constructor() {
-    bindDragCursor(this.isDragging, this.#isTouchDrag);
+    bindDragCursor(
+      () => this.isDragging(),
+      () => this.#isTouchDrag(),
+    );
   }
 
   /**
