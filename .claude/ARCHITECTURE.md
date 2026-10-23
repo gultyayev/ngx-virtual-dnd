@@ -41,7 +41,7 @@ Keep modality-specific behaviour (thresholds, navigation, focus) in its handler;
 
 ## Virtual list strategies
 
-`vdnd-virtual-scroll`, `vdnd-virtual-viewport` and `vdnd-virtual-content` create their strategy with `createHeightStrategy`; `*vdndVirtualFor` uses its viewport's, or creates its own. The two renderers keep their strategy in step through `bindListStrategy` (`lib/strategies/strategy-binding.ts`): three effects, created before the ones that render rows, for the items (count only for a fixed-height strategy), the registration under the droppable ID, and the dragged item's exclusion. Keep the exclusion apart from the items: a drag starting or ending must not enumerate every track key.
+`vdnd-virtual-scroll`, `vdnd-virtual-viewport` and `vdnd-virtual-content` create their strategy with `createHeightStrategy`; `*vdndVirtualFor` uses its viewport's, or creates its own. The two renderers keep their strategy in step through `bindListStrategy` (`lib/strategies/strategy-binding.ts`): three effects, created before the ones that render rows, for the items (count only for a fixed-height strategy), the registration under the droppable ID, and the dragged item's exclusion. Keep the exclusion apart from the items: a drag starting or ending must not enumerate every track key. Hand it a getter (`() => this.droppableId()`), not the signal, for a public member: a subclass can override it with a field, which it initializes only after the base constructor captured the reference.
 
 ## Drag state
 
