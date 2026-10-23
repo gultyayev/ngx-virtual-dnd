@@ -1,3 +1,4 @@
+import { computed, Injectable, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { DragStateService } from './drag-state.service';
 import { DroppableRegistryService } from './droppable-registry.service';
@@ -7,6 +8,13 @@ import {
   GrabOffset,
   INITIAL_DRAG_STATE,
 } from '../models/drag-drop.models';
+
+/** A provider subclass that overrides a public signal with a class field */
+@Injectable()
+class OverridingDragStateService extends DragStateService {
+  readonly dragging = signal(false);
+  override readonly isDragging = computed(() => this.dragging());
+}
 
 describe('DragStateService', () => {
   let service: DragStateService;
@@ -479,6 +487,22 @@ describe('DragStateService', () => {
   });
 
   describe('body dragging class', () => {
+    it("should follow a provider subclass's own isDragging", () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [{ provide: DragStateService, useClass: OverridingDragStateService }],
+      });
+      const overriding = TestBed.inject(DragStateService) as OverridingDragStateService;
+
+      overriding.dragging.set(true);
+      TestBed.tick();
+      expect(document.body.classList.contains('vdnd-dragging')).toBe(true);
+
+      overriding.dragging.set(false);
+      TestBed.tick();
+      expect(document.body.classList.contains('vdnd-dragging')).toBe(false);
+    });
+
     it('should add vdnd-dragging to body only while a drag is active', () => {
       service.startDrag(createMockDraggedItem());
       TestBed.tick();
