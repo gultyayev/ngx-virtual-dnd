@@ -2634,7 +2634,7 @@ describe('VirtualScrollContainerComponent (shift animation of recycled rows)', (
   `,
 })
 class OverridingVirtualScrollComponent<T> extends VirtualScrollContainerComponent<T> {
-  override droppableId = input<string>('subclass-list');
+  override droppableId = input<string | undefined>('subclass-list');
 }
 
 @Component({
