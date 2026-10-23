@@ -628,7 +628,8 @@ export class VirtualScrollContainerComponent<T>
       strategy: this.#strategy,
       itemCount: () => this.items().length,
       itemKeys: this.#itemIds,
-      droppableId: this.droppableId,
+      // Read when the effect runs: a subclass can override the input with a field of its own
+      droppableId: () => this.droppableId(),
       excludedIndex: this.#draggedItemIndex,
     });
 

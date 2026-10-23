@@ -49,7 +49,11 @@ export function createHeightStrategy(
     : new FixedHeightStrategy(itemHeight);
 }
 
-/** What a virtual list hands `bindListStrategy`, all read reactively */
+/**
+ * What a virtual list hands `bindListStrategy`, all read reactively. Pass a getter, not the
+ * signal, for a public member: a subclass can override it with a field, which it initializes only
+ * after the base constructor has run.
+ */
 export interface ListStrategySource {
   /** The list's strategy; replaced when its height inputs change */
   strategy: () => VirtualScrollStrategy;
