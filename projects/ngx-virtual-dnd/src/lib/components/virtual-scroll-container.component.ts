@@ -29,7 +29,6 @@ import { isPlatformBrowser } from '@angular/common';
 import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
-import { DragIndexCalculatorService } from '../services/drag-index-calculator.service';
 import { DragPlaceholderComponent } from './drag-placeholder.component';
 import {
   bindRafThrottledScrollTopSignal,
@@ -37,9 +36,7 @@ import {
 } from '../utils/dom-signal-bindings';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
-import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
-import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
-import { setStrategyItems } from '../strategies/strategy-items';
+import { bindListStrategy, createHeightStrategy } from '../strategies/strategy-binding';
 import { mapByAttribute } from '../utils/attribute-selectors';
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
@@ -160,7 +157,6 @@ export class VirtualScrollContainerComponent<T>
   readonly #dragState = inject(DragStateService);
   readonly #elementRef = inject(ElementRef<HTMLElement>);
   readonly #autoScrollService = inject(AutoScrollService);
-  readonly #dragIndexCalculator = inject(DragIndexCalculatorService);
   readonly #keyboardDrag = inject(KeyboardDragService);
   readonly #ngZone = inject(NgZone);
   readonly #injector = inject(Injector);
@@ -322,12 +318,9 @@ export class VirtualScrollContainerComponent<T>
   // ========== Strategy ==========
 
   /** The virtual scroll strategy, created based on dynamicItemHeight input */
-  readonly #strategy = computed<VirtualScrollStrategy>(() => {
-    const height = this.itemHeight();
-    return this.dynamicItemHeight()
-      ? new DynamicHeightStrategy(height)
-      : new FixedHeightStrategy(height);
-  });
+  readonly #strategy = computed<VirtualScrollStrategy>(() =>
+    createHeightStrategy(this.itemHeight(), this.dynamicItemHeight()),
+  );
 
   /**
    * Effective track-by function - uses provided trackByFn or derives from itemIdFn.
@@ -630,27 +623,14 @@ export class VirtualScrollContainerComponent<T>
     });
     refreshDragOnScrollInsetChange(this.scrollInsetTop, this.scrollInsetBottom);
 
-    // Keep the strategy's items in sync. A fixed-height strategy needs only their count, which
-    // spares computing every item's ID on each items change (each drop).
-    effect(() => {
-      setStrategyItems(this.#strategy(), this.items().length, () => this.#itemIds());
-    });
-
-    // Register strategy with drag index calculator for accurate drag calculations
-    effect((onCleanup) => {
-      const droppableId = this.droppableId();
-      const strategy = this.#strategy();
-      if (droppableId) {
-        this.#dragIndexCalculator.registerStrategy(droppableId, strategy);
-        onCleanup(() => this.#dragIndexCalculator.unregisterStrategy(droppableId));
-      }
-    });
-
-    // Set excluded index persistently during same-list drag.
-    effect(() => {
-      const strategy = this.#strategy();
-      const draggedIndex = this.#draggedItemIndex();
-      strategy.setExcludedIndex(draggedIndex >= 0 ? draggedIndex : null);
+    // The strategy's items, registration and dragged-item exclusion
+    bindListStrategy({
+      strategy: this.#strategy,
+      itemCount: () => this.items().length,
+      itemKeys: this.#itemIds,
+      // Read when the effect runs: a subclass can override the input with a field of its own
+      droppableId: () => this.droppableId(),
+      excludedIndex: this.#draggedItemIndex,
     });
 
     // Keyboard drag autoscroll: keep the placeholder visible. Arrow keys call
