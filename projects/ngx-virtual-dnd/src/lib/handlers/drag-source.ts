@@ -114,7 +114,7 @@ function measureSourceIndex(
 
   // The same measurement that places the placeholder: it knows each container's scroll
   // element and subtracts space reserved above the rows (contentOffset, page headers).
-  const geometry = deps.dragIndexCalculator.getScrollGeometry(droppableElement, rect.height);
+  const geometry = deps.dragIndexCalculator.getScrollGeometry(droppableElement);
   // A row still sliding into its slot (shift animation) is drawn away from it: measure the slot
   const relativeY =
     rect.top - slideOffsetY(element, droppableElement) - geometry.rect.top + geometry.scrollTop;
