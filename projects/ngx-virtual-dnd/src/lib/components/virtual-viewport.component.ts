@@ -25,8 +25,7 @@ import { createAutoScrollRegistration } from '../utils/auto-scroll-registration'
 import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
 import { validScrollInset } from '../utils/scroll-insets';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
-import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
-import { DynamicHeightStrategy } from '../strategies/dynamic-height.strategy';
+import { createHeightStrategy } from '../strategies/strategy-binding';
 
 /**
  * A virtual viewport component that provides efficient wrapper-based positioning
@@ -203,12 +202,9 @@ export class VirtualViewportComponent
   // ========== Strategy ==========
 
   /** The virtual scroll strategy, created based on dynamicItemHeight input */
-  readonly #strategy = computed<VirtualScrollStrategy>(() => {
-    const height = this.itemHeight();
-    return this.dynamicItemHeight()
-      ? new DynamicHeightStrategy(height)
-      : new FixedHeightStrategy(height);
-  });
+  readonly #strategy = computed<VirtualScrollStrategy>(() =>
+    createHeightStrategy(this.itemHeight(), this.dynamicItemHeight()),
+  );
 
   get strategy(): VirtualScrollStrategy {
     return this.#strategy();

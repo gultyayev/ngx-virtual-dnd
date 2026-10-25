@@ -5,6 +5,7 @@ import {
   Component,
   Directive,
   inject,
+  input,
   OnDestroy,
   PLATFORM_ID,
   signal,
@@ -2618,5 +2619,54 @@ describe('VirtualScrollContainerComponent (shift animation of recycled rows)', (
     appRef.tick();
 
     expect(hide.animation.cancel).toHaveBeenCalled();
+  });
+});
+
+// A subclass that overrides a public input with a field of its own, initialized only after the
+// base constructor has run
+@Component({
+  selector: 'vdnd-test-overriding-virtual-scroll',
+  template: `
+    <div #spacer class="vdnd-virtual-scroll-spacer"></div>
+    <div #contentWrapper class="vdnd-virtual-scroll-content-wrapper">
+      <ng-container #rows />
+    </div>
+  `,
+})
+class OverridingVirtualScrollComponent<T> extends VirtualScrollContainerComponent<T> {
+  override droppableId = input<string | undefined>('subclass-list');
+}
+
+@Component({
+  template: `
+    <ng-template #itemTpl let-item>
+      <div class="item" [attr.data-draggable-id]="item.id">{{ item.name }}</div>
+    </ng-template>
+    <vdnd-test-overriding-virtual-scroll
+      [items]="items"
+      [itemHeight]="50"
+      [containerHeight]="300"
+      [itemIdFn]="itemIdFn"
+      [itemTemplate]="itemTpl"
+    />
+  `,
+  imports: [OverridingVirtualScrollComponent],
+})
+class OverridingVirtualScrollHostComponent {
+  items: TestItem[] = [{ id: 'a', name: 'A' }];
+  readonly itemIdFn = (item: TestItem): string => item.id;
+}
+
+describe('VirtualScrollContainerComponent (subclass)', () => {
+  it("registers its strategy under a subclass's own droppableId input", () => {
+    const fixture = TestBed.createComponent(OverridingVirtualScrollHostComponent);
+    fixture.detectChanges();
+
+    const strategy = TestBed.inject(DragIndexCalculatorService).getStrategyForDroppable(
+      'subclass-list',
+    );
+    expect(strategy?.getItemCount()).toBe(1);
+
+    fixture.destroy();
   });
 });
