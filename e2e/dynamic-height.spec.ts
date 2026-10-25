@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, Page, test } from '@playwright/test';
 import { waitForAutoscroll, waitForFrames } from './fixtures/drag-sync';
+import { ExamplesPage } from './fixtures/examples.page';
 import { collectPageErrors } from './fixtures/page-errors';
 import { poll } from './fixtures/polling';
 import { TaskDemoPage, taskDemoSelectors } from './fixtures/task-demo.page';
@@ -578,5 +579,49 @@ test.describe('Dynamic Height Demo, short list', () => {
     );
 
     await page.mouse.up();
+  });
+});
+
+test.describe('Row measurement', () => {
+  /**
+   * Give the first row a 40px top border and wait until the list's spacer (its total height, from
+   * its strategy's row heights) grows by it: a border changes the border box but not the content
+   * box, so only an observer of the border box reports it.
+   */
+  async function expectBorderToReachSpacer(page: Page, spacerSelector: string): Promise<void> {
+    const spacer = page.locator(spacerSelector).first();
+    const spacerHeight = () => spacer.evaluate((el) => el.getBoundingClientRect().height);
+    // Measured rows settle the spacer first
+    await expect(async () => {
+      const before = await spacerHeight();
+      await waitForFrames(page, 3);
+      expect(await spacerHeight()).toBe(before);
+    }).toPass();
+    const before = await spacerHeight();
+    const row = page.locator('[data-draggable-id]').first();
+    const rowHeight = (await row.boundingBox())!.height;
+
+    await row.evaluate((el) => (el.style.borderTop = '40px solid currentColor'));
+
+    expect((await row.boundingBox())!.height).toBeCloseTo(rowHeight + 40, 0);
+    // Firefox and WebKit round the measured size (E2E.md, "Content Offset and Cross-Browser Precision")
+    const growth = async () => (await spacerHeight()) - before;
+    await poll(growth, {
+      message: 'The list should measure the row with its border',
+    }).toBeGreaterThan(38.5);
+    expect(await growth()).toBeLessThan(41.5);
+  }
+
+  test('measures the border box of *vdndVirtualFor rows', async ({ page }) => {
+    const taskDemo = new TaskDemoPage(page);
+    await taskDemo.goto('/dynamic-height');
+
+    await expectBorderToReachSpacer(page, '.vdnd-content-spacer');
+  });
+
+  test('measures the border box of vdnd-virtual-scroll rows', async ({ page }) => {
+    await new ExamplesPage(page).goto('dynamic-height');
+
+    await expectBorderToReachSpacer(page, '.vdnd-virtual-scroll-spacer');
   });
 });

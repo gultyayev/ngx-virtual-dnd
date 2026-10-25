@@ -1153,7 +1153,7 @@ export class VirtualScrollContainerComponent<T>
           const currentElement = this.#observedElementByKey.get(key);
           if (currentElement !== nextElement) {
             this.#observedElements.set(nextElement, key);
-            observer.observe(nextElement);
+            observer.observe(nextElement, { box: 'border-box' });
           }
         }
 

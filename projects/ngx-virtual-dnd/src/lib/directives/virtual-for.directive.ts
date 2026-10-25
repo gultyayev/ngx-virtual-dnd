@@ -641,7 +641,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
           this.#resizeObserver.unobserve(node);
         }
         this.#observedElements.set(node, key);
-        this.#resizeObserver.observe(node);
+        this.#resizeObserver.observe(node, { box: 'border-box' });
       }
     }
   }
