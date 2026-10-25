@@ -143,6 +143,29 @@ test.describe('Drag and Drop', () => {
     await expect(demoPage.countBadge('list2')).toHaveText('51');
     expect(await demoPage.getItemId('list2', 0)).toBe(movedId);
   });
+
+  test('hit-tests a list where it is after it moved without resizing', async ({ page }) => {
+    await demoPage.list2VirtualScroll.scrollIntoViewIfNeeded();
+    const targetBox = (await demoPage.list2VirtualScroll.boundingBox())!;
+    await demoPage.startDrag(demoPage.list1Items.first());
+    // Let the drag's observers report the layout it started with
+    await waitForFrames(page, 5);
+
+    // Moving it neither scrolls nor resizes anything
+    await demoPage.list2Container.evaluate((el) => (el.style.transform = 'translateY(250px)'));
+    const oldTopX = targetBox.x + targetBox.width / 2;
+    const oldTopY = targetBox.y + 25;
+    await page.mouse.move(oldTopX, oldTopY, { steps: 10 });
+    await demoPage.settleDragPosition(oldTopX, oldTopY);
+    await page.mouse.up();
+    await expect(demoPage.dragPreview).not.toBeVisible();
+
+    // Released over the space the list left: no drop
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'false');
+    await expect(demoPage.host).not.toHaveAttribute('data-last-drag-end-destination-index');
+    await expect(demoPage.countBadge('list1')).toHaveText('50');
+    await expect(demoPage.countBadge('list2')).toHaveText('50');
+  });
 });
 
 test.describe('Drag and Drop - Simplified API Mode', () => {

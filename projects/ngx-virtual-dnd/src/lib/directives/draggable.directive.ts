@@ -809,8 +809,10 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     // RAF-PROCESSED position — a release that just entered a different (e.g. newly disabled)
     // droppable could otherwise land on the previously-targeted one. Guarded on group
     // presence so it never re-enters #endDrag via #updateDrag's group-lost cancel path.
-    // Cancels skip this: their destination is intentionally null.
+    // Cancels skip this: their destination is intentionally null. The drop is hit-tested against
+    // the lists as they are now, never against rects cached earlier in the drag.
     if (!cancelled && this.#lastRawPosition && this.#isOwnPointerDrag() && this.#effectiveGroup()) {
+      this.#positionCalculator.invalidateDroppableRects();
       this.#updateDrag(this.#lastRawPosition);
     }
 

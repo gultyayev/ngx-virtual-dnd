@@ -458,6 +458,21 @@ describe('DraggableDirective', () => {
     expect(component.dragStartEvents.length).toBe(1);
   });
 
+  it('should hit-test the release against the lists as they are at release', () => {
+    const positionCalculator = TestBed.inject(PositionCalculatorService);
+    attemptPointerDrag(draggableNative);
+    const invalidate = jest.spyOn(positionCalculator, 'invalidateDroppableRects');
+    const hitTest = jest.spyOn(positionCalculator, 'findDroppableAtPoint');
+
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 100, clientY: 120 }));
+
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(hitTest).toHaveBeenCalledTimes(1);
+    expect(invalidate.mock.invocationCallOrder[0]).toBeLessThan(
+      hitTest.mock.invocationCallOrder[0],
+    );
+  });
+
   it('should cancel a pointer drag when the window loses focus mid-drag', () => {
     attemptPointerDrag(draggableNative);
 
