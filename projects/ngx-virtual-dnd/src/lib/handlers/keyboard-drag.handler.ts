@@ -7,7 +7,7 @@ import { ElementCloneService } from '../services/element-clone.service';
 import { OverlayContainerService } from '../services/overlay-container.service';
 import { DragEndEvent, DraggedItem, DragStartEvent } from '../models/drag-drop.models';
 import { queryByAttribute } from '../utils/attribute-selectors';
-import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
+import { placeholderToInsertionIndex } from '../utils/index-semantics';
 
 /**
  * Context from the directive needed for keyboard drag operations.
@@ -233,7 +233,7 @@ export class KeyboardDragHandler {
       !this.#deps.positionCalculator.isDroppableDisabledById(activeDroppableId);
 
     const destinationIndex = hasValidTarget
-      ? normalizeDropDestinationIndex({
+      ? placeholderToInsertionIndex({
           sourceIndex,
           placeholderIndex: this.#deps.dragState.placeholderIndex(),
           sourceDroppableId: this.#deps.dragState.sourceDroppableId(),

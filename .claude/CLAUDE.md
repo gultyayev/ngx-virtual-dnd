@@ -22,7 +22,7 @@ These rules prevent common mistakes that cause hard-to-debug issues:
 
 8. **Test fails = you broke it:** If a test fails after your changes, fix it before declaring done.
 
-9. **Keep instructions in sync:** Any change to code documented in this file must include a corresponding update in the same commit. This includes: code examples (if a pattern shown changes, update the example), architecture descriptions (if behavior in Architecture or a lazy doc changes, update it), and lazy docs (`.ai/E2E.md`, `.claude/history/*.md`, `.claude/TROUBLESHOOTING.md`, `.claude/demo/DESIGN_SYSTEM.md`, `.claude/DOCS_SITE.md`).
+9. **Keep instructions in sync:** Any change to code documented in this file must include a corresponding update in the same commit. This includes: code examples (if a pattern shown changes, update the example), architecture descriptions (if behavior in Architecture or a lazy doc changes, update it), and lazy docs (`.ai/E2E.md`, `.claude/ARCHITECTURE.md`, `.claude/history/*.md`, `.claude/TROUBLESHOOTING.md`, `.claude/demo/DESIGN_SYSTEM.md`, `.claude/DOCS_SITE.md`).
 
 10. **Never use `expect(true).toBe(true)` or similar no-op assertions:** Every test assertion must verify actual behavior. Tests that always pass regardless of code behavior provide false confidence and zero coverage. If you can't write a meaningful assertion, the test shouldn't exist.
 
@@ -136,7 +136,7 @@ Keep a bound handler in a field so the same reference can be removed, attach pro
 
 1. **Placeholder index probe uses capped center + midpoint refinement** for dynamic heights. See `.claude/history/placeholder-algorithm.md` for the detailed algorithm.
 
-2. **Same-list adjustment applied once**: When dragging within the same list, apply +1 adjustment when `visualIndex >= sourceIndex` to compensate for hidden item.
+2. **Same-list adjustment applied once**: When dragging within the same list, apply +1 adjustment when the probed index is `>= sourceIndex` to compensate for hidden item (`insertionToPlaceholderIndex`; index spaces in `.claude/ARCHITECTURE.md`).
 
 3. **Virtual scroll integration**: During same-list drag, the strategy excludes the dragged item's index (`setExcludedIndex`): offsets after it close up, but the total height (spacer) keeps all N items so content below the list does not shift. `getTotalItemCount()` returns the logical N.
 
@@ -181,6 +181,7 @@ Load these ONLY when working on specific areas:
 | Doc                                                  | When to Load                                     |
 | ---------------------------------------------------- | ------------------------------------------------ |
 | `.ai/E2E.md`                                         | Before writing/modifying Playwright tests        |
+| `.claude/ARCHITECTURE.md`                            | Before changing drag, index or gesture code      |
 | `.claude/demo/DESIGN_SYSTEM.md`                      | Before styling demo pages, docs pages, or theme  |
 | `.claude/DOCS_SITE.md`                               | Before working on the docs site or live examples |
 | `.claude/history/safari-autoscroll.md`               | If debugging Safari scroll drift                 |

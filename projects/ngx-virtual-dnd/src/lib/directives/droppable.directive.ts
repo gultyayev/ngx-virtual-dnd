@@ -24,7 +24,7 @@ import {
 import { VDND_GROUP_TOKEN } from './droppable-group.directive';
 import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
-import { normalizeDropDestinationIndex } from '../utils/drop-index-normalization';
+import { placeholderToInsertionIndex } from '../utils/index-semantics';
 import { listDraggables } from '../utils/list-draggables';
 
 /**
@@ -141,7 +141,7 @@ export class DroppableDirective implements OnDestroy {
       return null;
     }
     const sourceIndex = this.#dragState.sourceIndex();
-    return normalizeDropDestinationIndex({
+    return placeholderToInsertionIndex({
       sourceIndex: sourceIndex ?? -1,
       placeholderIndex: this.#dragState.placeholderIndex(),
       // Without a known source index there is no hidden-source adjustment to undo
@@ -283,7 +283,7 @@ export class DroppableDirective implements OnDestroy {
       state.placeholderIndex !== null && state.placeholderIndex !== undefined
         ? state.placeholderIndex
         : this.#getDestinationIndex(placeholderId);
-    const destinationIndex = normalizeDropDestinationIndex({
+    const destinationIndex = placeholderToInsertionIndex({
       sourceIndex,
       placeholderIndex,
       sourceDroppableId,

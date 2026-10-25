@@ -3,6 +3,7 @@ import { DragStateService } from './drag-state.service';
 import { DragIndexCalculatorService } from './drag-index-calculator.service';
 import { DroppableRegistryService } from './droppable-registry.service';
 import { DraggedItem, END_OF_LIST, GrabOffset } from '../models/drag-drop.models';
+import { insertionToPlaceholderIndex } from '../utils/index-semantics';
 
 /**
  * Service for managing keyboard-initiated drag operations.
@@ -61,10 +62,9 @@ export class KeyboardDragService {
     const rect = item.element.getBoundingClientRect();
     const cursorPosition = { x: rect.left, y: rect.top };
 
-    // Same-list adjustment: at start, targetIndex equals sourceIndex
-    // Since sourceIndex >= sourceIndex is always true, add 1 to placeholderIndex
-    // This accounts for the hidden item shifting everything up visually
-    const initialPlaceholderIndex = sourceIndex + 1;
+    // The drag starts with the item where it is: its insertion index is its source index, and the
+    // placeholder renders right after the hidden source
+    const initialPlaceholderIndex = insertionToPlaceholderIndex(sourceIndex, sourceIndex, true);
 
     this.#dragState.startDrag(
       item,
