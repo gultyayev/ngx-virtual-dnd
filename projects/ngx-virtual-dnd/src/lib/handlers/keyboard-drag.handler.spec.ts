@@ -58,6 +58,7 @@ describe('KeyboardDragHandler', () => {
       sourceDroppableId: jest.fn().mockReturnValue('list-1'),
       activeDroppableId: jest.fn().mockReturnValue('list-1'),
       draggedItem: jest.fn().mockReturnValue({ height: 50 }),
+      setActiveDroppable: jest.fn(),
     };
 
     mockKeyboardDrag = {
@@ -77,7 +78,7 @@ describe('KeyboardDragHandler', () => {
       getDroppableParent: jest.fn().mockReturnValue(createElement()),
       getDroppableId: jest.fn().mockReturnValue('list-1'),
       findAdjacentDroppable: jest.fn(),
-      isDroppableDisabledById: jest.fn().mockReturnValue(false),
+      canDropIntoById: jest.fn().mockReturnValue(true),
       getDroppableById: jest.fn((id: string) => droppablesById.get(id) ?? null),
     };
     droppablesById.clear();
@@ -426,7 +427,7 @@ describe('KeyboardDragHandler', () => {
       mockDragState.placeholderIndex.mockReturnValue(3);
       mockDragState.activeDroppableId.mockReturnValue('list-2');
       // list-2 was disabled after the drag navigated into it.
-      mockPositionCalculator.isDroppableDisabledById.mockReturnValue(true);
+      mockPositionCalculator.canDropIntoById.mockReturnValue(false);
 
       handler.complete();
 
@@ -436,6 +437,32 @@ describe('KeyboardDragHandler', () => {
           destinationIndex: null,
         }),
       );
+    });
+
+    it('ends the drag over no list when its target can no longer take the drop', () => {
+      const calls: string[] = [];
+      mockDragState.activeDroppableId.mockReturnValue('list-2');
+      mockDragState.setActiveDroppable = jest.fn((id: string | null) => {
+        calls.push(`active:${id}`);
+        mockDragState.activeDroppableId.mockReturnValue(id);
+      });
+      jest.mocked(mockCallbacks.onDragEnd).mockImplementation(() => calls.push('dragEnd'));
+      mockKeyboardDrag.endKeyboardDrag.mockImplementation(() => calls.push('end'));
+      // list-2 was hidden after the drag navigated into it
+      mockPositionCalculator.canDropIntoById.mockImplementation((id: string) => id !== 'list-2');
+      const source = createElement();
+      droppablesById.set('list-1', source);
+
+      handler.complete();
+
+      // The drag state delivers the drop to its active list: none
+      expect(calls).toEqual(['active:null', 'dragEnd', 'end']);
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(
+        expect.objectContaining({ cancelled: false, destinationIndex: null }),
+      );
+      // Focus goes back to the source list
+      (afterNextRenderMock.mock.calls.at(-1)?.[0] as () => void)();
+      expect(mockPositionCalculator.getDroppableById).toHaveBeenLastCalledWith('list-1');
     });
 
     it('normalizes destination index for a same-list no-op drop', () => {

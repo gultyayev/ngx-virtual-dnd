@@ -183,13 +183,17 @@ export class KeyboardDragHandler {
     this.#deps.keyboardDrag.clampTargetIndex();
     const activeDroppableId = this.#deps.dragState.activeDroppableId();
 
-    // Revalidate the active target: it may have been disabled after the drag navigated
-    // into it. A disabled (or missing) target is not a valid drop — report no destination.
-    // The droppable's own disabled guard suppresses the drop event, keeping dragEnd and
-    // drop consistent (non-cancelled dragEnd with destinationIndex: null, no drop).
+    // Revalidate the active target: it may have been disabled or hidden after the drag
+    // navigated into it. Such a (or a missing) target is not a valid drop — report no
+    // destination, and end the drag over no list: the drag state delivers the drop to its active
+    // list, so dragEnd and drop stay consistent (non-cancelled dragEnd with destinationIndex:
+    // null, no drop).
     const hasTarget =
       activeDroppableId !== null &&
-      !this.#deps.positionCalculator.isDroppableDisabledById(activeDroppableId);
+      this.#deps.positionCalculator.canDropIntoById(activeDroppableId);
+    if (activeDroppableId !== null && !hasTarget) {
+      this.#deps.dragState.setActiveDroppable(null);
+    }
 
     // The item stays in its source list when there is no valid target
     const focusDroppableId = hasTarget

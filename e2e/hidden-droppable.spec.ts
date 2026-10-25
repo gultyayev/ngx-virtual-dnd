@@ -85,3 +85,36 @@ test.describe('visibility: hidden droppable', () => {
     expect(await demoPage.getItemId('list2', 1)).toBe(movedId);
   });
 });
+
+// Keyboard navigation does not move into a hidden list, but a list can be hidden after the drag
+// moved into it. Completing the drag there must not drop into it.
+test.describe('keyboard drop into a list hidden after the drag moved into it', () => {
+  for (const hide of ['visibility: hidden', 'display: none'] as const) {
+    test(`does not drop into it (${hide})`, async ({ page }) => {
+      const demoPage = new DemoPage(page);
+      await demoPage.goto();
+      const list2Card = page.getByTestId('list-2-card');
+      const draggedId = await demoPage.getItemId('list1', 0);
+
+      await demoPage.startKeyboardDrag('list1', 0);
+      await expect(demoPage.dragPreview).toBeVisible();
+      await demoPage.keyboardMoveToList('right');
+      await demoPage.waitForActiveDroppable('list2');
+
+      await list2Card.evaluate((el, style) => el.setAttribute('style', style), hide);
+      await expect(list2Card).toBeHidden();
+      await demoPage.keyboardDrop();
+      await expect(demoPage.dragPreview).not.toBeVisible();
+
+      // dragEnd reports no destination, no drop fired, and nothing moved
+      await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'false');
+      expect(await demoPage.host.getAttribute('data-last-drag-end-destination-index')).toBeNull();
+      expect(await demoPage.host.getAttribute('data-last-drop-destination-index')).toBeNull();
+      await expect(demoPage.countBadge('list1')).toHaveText('50');
+      await expect(demoPage.countBadge('list2')).toHaveText('50');
+      expect(await demoPage.getItemId('list1', 0)).toBe(draggedId);
+      // Focus goes back to the item, in its own list
+      await expect(page.locator(':focus')).toHaveAttribute('data-draggable-id', draggedId!);
+    });
+  }
+});
