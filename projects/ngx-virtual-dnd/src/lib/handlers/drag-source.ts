@@ -3,7 +3,7 @@ import type { DragIndexCalculatorService } from '../services/drag-index-calculat
 import type { ElementCloneService } from '../services/element-clone.service';
 import type { OverlayContainerService } from '../services/overlay-container.service';
 import type { PositionCalculatorService } from '../services/position-calculator.service';
-import { listDraggables } from '../utils/list-draggables';
+import { listItems, PLACEHOLDER_DRAGGABLE_ID } from '../utils/list-draggables';
 import type { ItemIndex } from '../utils/index-semantics';
 import { shiftOffsetY } from '../utils/shift-animator';
 
@@ -134,10 +134,10 @@ function measureSourceIndex(
     return Math.round(relativeY / itemHeight);
   }
 
-  // Non-virtual fallback: derive the logical index from the list's draggables in page order.
+  // Non-virtual fallback: derive the logical index from the list's items in page order.
   // Geometry-based division is incorrect when the list has padding, gaps, margins,
   // or variable-height items.
-  const index = listDraggables(droppableElement).indexOf(element);
+  const index = listItems(droppableElement).indexOf(element);
   if (index !== -1) {
     return index;
   }
@@ -146,7 +146,10 @@ function measureSourceIndex(
   let sourceIndex = 0;
   let sibling = element.previousElementSibling;
   while (sibling) {
-    if (sibling.matches('[data-draggable-id]')) {
+    if (
+      sibling.matches('[data-draggable-id]') &&
+      sibling.getAttribute('data-draggable-id') !== PLACEHOLDER_DRAGGABLE_ID
+    ) {
       sourceIndex++;
     }
     sibling = sibling.previousElementSibling;

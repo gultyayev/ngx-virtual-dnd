@@ -25,7 +25,7 @@ import { VDND_GROUP_TOKEN } from './droppable-group.directive';
 import { createEffectiveGroupSignal } from '../utils/group-resolution';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
 import { placeholderToInsertionIndex } from '../utils/index-semantics';
-import { listDraggables } from '../utils/list-draggables';
+import { listItems } from '../utils/list-draggables';
 
 /**
  * Marks an element as a valid drop target within the virtual scroll drag-and-drop system.
@@ -323,7 +323,7 @@ export class DroppableDirective implements OnDestroy {
       return 0;
     }
 
-    const index = listDraggables(droppable).findIndex(
+    const index = listItems(droppable).findIndex(
       (draggable) => draggable.getAttribute('data-draggable-id') === draggableId,
     );
     return Math.max(index, 0);
@@ -333,10 +333,8 @@ export class DroppableDirective implements OnDestroy {
    * Get the destination index based on the placeholder.
    */
   #getDestinationIndex(placeholderId: string): number {
-    // Exclude placeholder elements from the count
-    const draggables = this.#elementRef.nativeElement.querySelectorAll(
-      '[data-draggable-id]:not([data-draggable-id="placeholder"])',
-    );
+    // Not a vdnd-placeholder, nor the items of a list nested in a row
+    const draggables = listItems(this.#elementRef.nativeElement);
 
     if (placeholderId === END_OF_LIST) {
       return draggables.length;
