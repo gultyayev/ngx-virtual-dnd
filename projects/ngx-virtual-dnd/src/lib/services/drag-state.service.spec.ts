@@ -763,4 +763,46 @@ describe('DragStateService', () => {
       expect(service.placeholderIndex()).toBe(5);
     });
   });
+
+  describe('onDragEnded', () => {
+    const startPointerDrag = (): void =>
+      service.startDrag(createMockDraggedItem(), { x: 0, y: 0 }, { x: 0, y: 0 });
+
+    for (const end of ['endDrag', 'cancelDrag'] as const) {
+      it(`runs the hook once, before the reset, on ${end}()`, () => {
+        let draggingInHook: boolean | null = null;
+        const hook = jest.fn(() => (draggingInHook = service.isDragging()));
+        startPointerDrag();
+        service.onDragEnded(hook);
+
+        service[end]();
+        service[end]();
+
+        expect(hook).toHaveBeenCalledTimes(1);
+        expect(draggingInHook).toBe(true);
+      });
+    }
+
+    it('does not run the hook of a drag for the next one', () => {
+      const hook = jest.fn();
+      startPointerDrag();
+      service.onDragEnded(hook);
+      // A new drag replaces the state of one that never ended
+      startPointerDrag();
+
+      service.endDrag();
+
+      expect(hook).not.toHaveBeenCalled();
+    });
+
+    it('keeps no hook registered while no drag is in progress', () => {
+      const hook = jest.fn();
+      service.onDragEnded(hook);
+      startPointerDrag();
+
+      service.cancelDrag();
+
+      expect(hook).not.toHaveBeenCalled();
+    });
+  });
 });

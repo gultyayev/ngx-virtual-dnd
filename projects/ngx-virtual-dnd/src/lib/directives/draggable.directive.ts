@@ -614,7 +614,16 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       lockAxis ? startPos : undefined,
       this.#pointerHandler.isTouchPress(),
     );
-    this.#ownDrag = this.#dragState.draggedItem();
+    const ownDrag = this.#dragState.draggedItem();
+    this.#ownDrag = ownDrag;
+    // Ended by anything but this draggable (DragStateService.cancelDrag() or endDrag() called by
+    // the app): stop what this drag runs, or its frame loop would keep the next drag's waiting
+    this.#dragState.onDragEnded(() => {
+      if (this.#ownDrag === ownDrag) {
+        this.#stopPointerSession();
+        this.#pointerHandler.cleanup();
+      }
+    });
 
     // Start the scheduler RAF loop (drives pointer-move updates + autoscroll participant).
     // onTick is called each frame: when cursor is dirty, run full #updateDrag.
@@ -816,6 +825,32 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
       this.#updateDrag(this.#lastRawPosition);
     }
 
+    const pickedUp = this.#dragState.draggedItem();
+    this.#stopPointerSession();
+
+    const event = createDragEndEvent(this.#dragState, {
+      pickedUp,
+      live: { draggableId: this.vdndDraggable(), data: this.vdndDraggableData() },
+      parentDroppableId: () => this.#getParentDroppableId(),
+      cancelled,
+      // Hit-testing skips disabled lists, so a list under the pointer takes the drop
+      hasTarget: this.#dragState.activeDroppableId() !== null,
+    });
+
+    endDragInZone(
+      this.#ngZone,
+      () => this.dragEnd.emit(event),
+      () => (cancelled ? this.#dragState.cancelDrag() : this.#dragState.endDrag()),
+    );
+  }
+
+  /**
+   * Stop what a pointer drag runs: the frame loop, autoscroll and the hit-testing session, and
+   * forget the drag, so its end (by this draggable or anything else) runs it once.
+   */
+  #stopPointerSession(): void {
+    this.#ownDrag = null;
+
     // Stop the scheduler RAF loop first, then remove the autoscroll participant.
     this.#scheduler.stop();
     this.#autoScroll.stopMonitoring();
@@ -830,22 +865,6 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     this.#constrainToContainer = false;
     this.#constraintElement = null;
     this.#lastRawPosition = null;
-
-    const event = createDragEndEvent(this.#dragState, {
-      pickedUp: this.#dragState.draggedItem(),
-      live: { draggableId: this.vdndDraggable(), data: this.vdndDraggableData() },
-      parentDroppableId: () => this.#getParentDroppableId(),
-      cancelled,
-      // Hit-testing skips disabled lists, so a list under the pointer takes the drop
-      hasTarget: this.#dragState.activeDroppableId() !== null,
-    });
-    this.#ownDrag = null;
-
-    endDragInZone(
-      this.#ngZone,
-      () => this.dragEnd.emit(event),
-      () => (cancelled ? this.#dragState.cancelDrag() : this.#dragState.endDrag()),
-    );
   }
 
   /**

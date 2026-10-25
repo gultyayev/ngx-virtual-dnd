@@ -50,14 +50,14 @@ export class DragSchedulerService {
   readonly #frameWriters: (() => void)[] = [];
 
   /**
-   * Start the scheduler RAF loop.
-   * No-op if already running.
+   * Start the scheduler RAF loop. Already running, the loop goes on with `onTick`: the latest
+   * drag to start owns it, even when the previous one ended without stopping it.
    */
   start(onTick: SchedulerTickFn): void {
+    this.#onTick = onTick;
     if (this.#rafId !== null) {
       return;
     }
-    this.#onTick = onTick;
     this.#ngZone.runOutsideAngular(() => {
       this.#scheduleNextTick();
     });
