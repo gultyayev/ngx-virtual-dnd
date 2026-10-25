@@ -260,6 +260,70 @@ test.describe('Shift animation', () => {
     expect((await contentTop(displaced, scroll)) - firstTop).toBeCloseTo(100, 0);
   });
 
+  test.describe('picking up a row that is still sliding', () => {
+    /**
+     * Drop list1-0 one slot down, then hold list1-1 (now at index 0) at the start of its slide:
+     * it is drawn in its old slot (index 1) although it sits at index 0.
+     */
+    async function holdSlidingRow(demoPage: DemoPage): Promise<{ id: string; row: Locator }> {
+      await demoPage.goto({ shiftAnimation: SHIFT_MS, dropAnimation: 0 });
+      const id = (await demoPage.getItemId('list1', 1))!;
+      const row = demoPage.list1Container.locator(`[data-draggable-id="${id}"]`);
+
+      await demoPage.startKeyboardDrag('list1', 0);
+      await expect(demoPage.dragPreview).toBeVisible();
+      await demoPage.keyboardMoveDown();
+      await demoPage.keyboardDrop();
+      await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '1');
+      expect(await demoPage.getItemId('list1', 0)).toBe(id);
+
+      await poll(() => activeAnimationCount(row)).toBe(1);
+      await seekShiftAnimation(row, 0);
+      return { id, row };
+    }
+
+    test('keyboard pickup reports its index, not the slot it is drawn in', async ({ page }) => {
+      const demoPage = new DemoPage(page);
+      const { id, row } = await holdSlidingRow(demoPage);
+
+      await row.focus();
+      await page.keyboard.press('Space');
+      await expect(demoPage.dragPreview).toBeVisible();
+      await demoPage.keyboardMoveToList('right');
+      await demoPage.keyboardDrop();
+
+      await expect(demoPage.host).toHaveAttribute('data-last-drop-source-index', '0');
+      await expect(demoPage.list2Container.locator(`[data-draggable-id="${id}"]`)).toHaveCount(1);
+      await expect(demoPage.list1Container.locator(`[data-draggable-id="${id}"]`)).toHaveCount(0);
+    });
+
+    test('pointer pickup reports its index, not the slot it is drawn in', async ({ page }) => {
+      const demoPage = new DemoPage(page);
+      const { id, row } = await holdSlidingRow(demoPage);
+      const box = (await row.boundingBox())!;
+      // The paused slide draws the row over the item that took its old slot
+      expect(
+        await row.evaluate(
+          (el, point) => el.contains(document.elementFromPoint(point.x, point.y)),
+          { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+        ),
+      ).toBe(true);
+
+      await demoPage.startDrag(box);
+      const targetBox = (await demoPage.list2VirtualScroll.boundingBox())!;
+      const targetX = targetBox.x + targetBox.width / 2;
+      const targetY = targetBox.y + 25;
+      await page.mouse.move(targetX, targetY, { steps: 10 });
+      await demoPage.settleDragPosition(targetX, targetY);
+      await demoPage.waitForActiveDroppable('list2');
+      await page.mouse.up();
+
+      await expect(demoPage.host).toHaveAttribute('data-last-drop-source-index', '0');
+      await expect(demoPage.list2Container.locator(`[data-draggable-id="${id}"]`)).toHaveCount(1);
+      await expect(demoPage.list1Container.locator(`[data-draggable-id="${id}"]`)).toHaveCount(0);
+    });
+  });
+
   test('a displaced item slides in a vdndVirtualFor list', async ({ page }) => {
     const taskPage = new TaskDemoPage(page);
     await page.goto(`/dynamic-height?shiftAnimation=${SHIFT_MS}`, {

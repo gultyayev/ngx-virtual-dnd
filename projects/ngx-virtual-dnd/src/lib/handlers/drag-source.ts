@@ -5,6 +5,7 @@ import type { OverlayContainerService } from '../services/overlay-container.serv
 import type { PositionCalculatorService } from '../services/position-calculator.service';
 import { listDraggables } from '../utils/list-draggables';
 import type { ItemIndex } from '../utils/index-semantics';
+import { shiftOffsetY } from '../utils/shift-animator';
 
 /**
  * Picking an item up, shared by the pointer and keyboard drags: where the item is (measured before
@@ -114,7 +115,9 @@ function measureSourceIndex(
   // The same measurement that places the placeholder: it knows each container's scroll
   // element and subtracts space reserved above the rows (contentOffset, page headers).
   const geometry = deps.dragIndexCalculator.getScrollGeometry(droppableElement, rect.height);
-  const relativeY = rect.top - geometry.rect.top + geometry.scrollTop;
+  // A row still sliding into its slot (shift animation) is drawn away from it: measure the slot
+  const relativeY =
+    rect.top - slideOffsetY(element, droppableElement) - geometry.rect.top + geometry.scrollTop;
 
   // Try to use registered strategy for accurate offset-based lookup
   const droppableId = deps.positionCalculator.getDroppableId(droppableElement);
@@ -149,4 +152,13 @@ function measureSourceIndex(
     sibling = sibling.previousElementSibling;
   }
   return sourceIndex;
+}
+
+/** How far running slides draw `element` (or the row around it) from its slot in `list` */
+function slideOffsetY(element: HTMLElement, list: HTMLElement): number {
+  let offset = 0;
+  for (let node: HTMLElement | null = element; node && node !== list; node = node.parentElement) {
+    offset += shiftOffsetY(node);
+  }
+  return offset;
 }
