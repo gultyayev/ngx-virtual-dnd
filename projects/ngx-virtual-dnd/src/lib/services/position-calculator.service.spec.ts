@@ -416,12 +416,23 @@ describe('PositionCalculatorService', () => {
 
       // Simulate the container scrolling up by 100px (rect moves up).
       stubRect(drop, { top: 0, left: 100, right: 300, bottom: 300 });
-      // Without invalidation the cached rect (100..400) is still used...
-      expect(service.findDroppableAtPoint(200, 350, dragged, 'g')).toBe(drop);
-      // ...after invalidation the fresh rect (0..300) is.
       service.invalidateDroppableRects();
       expect(service.findDroppableAtPoint(200, 350, dragged, 'g')).toBeNull();
       expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBe(drop);
+    });
+
+    it('follows a droppable that moves without resizing, scrolling or invalidation', () => {
+      const dragged = document.createElement('div');
+      const drop = makeDroppable('list', 'g', { top: 100, left: 100, right: 300, bottom: 400 });
+
+      service.beginDragSession('g');
+      expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBe(drop);
+
+      // A transform moves it 250px down: no scroll, resize or registration change
+      stubRect(drop, { top: 350, left: 100, right: 300, bottom: 650, height: 300, width: 200 });
+
+      expect(service.findDroppableAtPoint(200, 250, dragged, 'g')).toBeNull();
+      expect(service.findDroppableAtPoint(200, 500, dragged, 'g')).toBe(drop);
     });
 
     it('falls back to a one-shot geometric query when no session is active', () => {

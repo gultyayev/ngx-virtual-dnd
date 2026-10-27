@@ -20,6 +20,12 @@ interface DragSessionSnapshot {
   candidates: HTMLElement[];
   /** Cached hit-test rects, parallel to `candidates`: null where nothing of it shows. */
   rects: (DOMRect | null)[];
+  /**
+   * Each candidate's own rect when `rects` were measured, parallel to `candidates`. A candidate
+   * that moved without resizing (a transform, a sibling's margin) fires no scroll, resize or
+   * registration change, so each hit-test compares its rect with this one.
+   */
+  boxes: DOMRect[];
   /** When true, rects are re-read on the next hit-test (set on scroll/resize). */
   dirty: boolean;
   /**
@@ -105,11 +111,13 @@ export class PositionCalculatorService {
         this.#session.dirty = true;
       }
     };
+    const boxes: DOMRect[] = [];
 
     this.#session = {
       groupName,
       candidates,
-      rects: this.#measureRects(candidates, []),
+      rects: this.#measureRects(candidates, [], boxes),
+      boxes,
       dirty: false,
       candidatesStale: false,
       onViewportChange,
@@ -180,7 +188,8 @@ export class PositionCalculatorService {
       return;
     }
     session.candidates = this.#queryDroppables(session.groupName);
-    session.rects = this.#measureRects(session.candidates, []);
+    session.boxes = [];
+    session.rects = this.#measureRects(session.candidates, [], session.boxes);
     session.dirty = false;
     session.candidatesStale = false;
     this.#observeCandidates(session);
@@ -227,8 +236,8 @@ export class PositionCalculatorService {
       if (session.candidatesStale) {
         // A droppable was added/removed mid-drag: re-query the list (also refreshes rects).
         this.refreshCandidates();
-      } else if (session.dirty) {
-        this.#measureRects(session.candidates, session.rects);
+      } else if (session.dirty || this.#hasCandidateMoved(session)) {
+        this.#measureRects(session.candidates, session.rects, session.boxes);
         session.dirty = false;
       }
       return this.#hitTest(x, y, session.candidates, session.rects);
@@ -283,7 +292,11 @@ export class PositionCalculatorService {
    * a list moved to another scroller mid-drag keeps its registration. A candidate nothing of which
    * shows (scrolled out of view, or all behind sticky content) gets null, which never matches.
    */
-  #measureRects(candidates: readonly HTMLElement[], rects: (DOMRect | null)[]): (DOMRect | null)[] {
+  #measureRects(
+    candidates: readonly HTMLElement[],
+    rects: (DOMRect | null)[],
+    boxes: DOMRect[] = [],
+  ): (DOMRect | null)[] {
     const measured = new Map<Element, DOMRect>();
     const read = (element: Element): DOMRect => {
       let rect = measured.get(element);
@@ -294,9 +307,33 @@ export class PositionCalculatorService {
       return rect;
     };
     for (let i = 0; i < candidates.length; i++) {
+      boxes[i] = read(candidates[i]);
       rects[i] = visibleRect(candidates[i], undefined, read);
     }
     return rects;
+  }
+
+  /**
+   * Whether a candidate's rect differs from the one its hit-test rect was measured with. One rect
+   * read per candidate, no style reads: the frame's placeholder math reads layout anyway, so it
+   * forces no extra layout.
+   */
+  #hasCandidateMoved(session: DragSessionSnapshot): boolean {
+    const { candidates, boxes } = session;
+    for (let i = 0; i < candidates.length; i++) {
+      const was = boxes[i];
+      const now = candidates[i].getBoundingClientRect();
+      if (
+        !was ||
+        now.left !== was.left ||
+        now.top !== was.top ||
+        now.width !== was.width ||
+        now.height !== was.height
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
