@@ -1319,6 +1319,23 @@ describe('PositionCalculatorService', () => {
       expect(result?.element).toBe(right);
     });
 
+    it('reports whether a droppable can take a drop by id via canDropIntoById', () => {
+      make('enabled', 'g', { top: 0, left: 0, right: 100, bottom: 100 });
+      make('off', 'g', { top: 0, left: 200, right: 300, bottom: 100 }, true);
+      make('invisible', 'g', { top: 0, left: 400, right: 500, bottom: 100 }).style.visibility =
+        'hidden';
+      // display: none: jsdom lacks checkVisibility(), which browsers report it with
+      Object.assign(make('undisplayed', 'g', { top: 0, left: 600, right: 700, bottom: 100 }), {
+        checkVisibility: () => false,
+      });
+
+      expect(service.canDropIntoById('enabled')).toBe(true);
+      expect(service.canDropIntoById('off')).toBe(false);
+      expect(service.canDropIntoById('invisible')).toBe(false);
+      expect(service.canDropIntoById('undisplayed')).toBe(false);
+      expect(service.canDropIntoById('nonexistent')).toBe(false);
+    });
+
     it('reports a droppable as disabled by id via isDroppableDisabledById', () => {
       make('enabled', 'g', { top: 0, left: 0, right: 100, bottom: 100 });
       make('off', 'g', { top: 0, left: 200, right: 300, bottom: 100 }, true);

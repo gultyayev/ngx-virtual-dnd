@@ -388,7 +388,7 @@ interface DragEndEvent {
 }
 ```
 
-`droppableId` is the source droppable. `destinationIndex` is `null` when there is no valid drop target — a cancelled drag (Escape, Tab during a keyboard drag, the window losing focus / the page being hidden / a system `touchcancel` during a pointer drag, or the dragged draggable being destroyed) or a release over a disabled droppable / outside every droppable. A non-`null` value pairs with a `drop` event on the destination. `cancelled` is `true` only for cancelled drags (Escape, Tab, focus loss, page hidden, `touchcancel`, dragged draggable destroyed).
+`droppableId` is the source droppable. `destinationIndex` is `null` when there is no valid drop target — a cancelled drag (Escape, Tab during a keyboard drag, the window losing focus / the page being hidden / a system `touchcancel` during a pointer drag, or the dragged draggable being destroyed) a release over a disabled droppable / outside every droppable, or a keyboard drop into a droppable disabled or hidden (`display: none`, `visibility: hidden`) after the drag moved into it. A non-`null` value pairs with a `drop` event on the destination. `cancelled` is `true` only for cancelled drags (Escape, Tab, focus loss, page hidden, `touchcancel`, dragged draggable destroyed).
 
 ### PlaceholderMoveEvent
 

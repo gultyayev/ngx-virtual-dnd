@@ -702,4 +702,17 @@ export class PositionCalculatorService {
     const element = this.getDroppableById(id);
     return element === null || this.#isDroppableDisabled(element);
   }
+
+  /**
+   * Whether the droppable with the given ID can take a drop now: it is rendered, enabled and its
+   * style lets it show (see {@link #isStyleVisible}: not `visibility: hidden`, nor
+   * `display: none` where `checkVisibility()` exists), as pointer hit-testing and keyboard
+   * navigation require. Revalidates a keyboard drag's target at drop time: it may have been
+   * disabled or hidden after the drag navigated into it. Reads style, never layout.
+   * @internal
+   */
+  canDropIntoById(id: string): boolean {
+    const element = this.getDroppableById(id);
+    return element !== null && !this.#isDroppableDisabled(element) && this.#isStyleVisible(element);
+  }
 }

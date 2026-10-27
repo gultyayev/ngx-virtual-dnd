@@ -75,6 +75,7 @@ interface DragEndEvent {
   - the dragged draggable being destroyed (for example its item removed from the list mid-drag)
 - the item was released outside every droppable
 - the item was released over a disabled droppable
+- a keyboard drag was dropped into a list disabled or hidden after the drag moved into it
 
 A non-null value means a `drop` event fired on the destination. `cancelled` is `true` only in the first case, so check `destinationIndex === null` to detect "no drop".
 
