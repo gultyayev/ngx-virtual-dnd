@@ -3,6 +3,7 @@ import {
   DebugElement,
   Directive,
   ErrorHandler,
+  inject,
   NgZone,
   OnInit,
   signal,
@@ -14,6 +15,7 @@ import { DraggableDirective } from './draggable.directive';
 import { DroppableDirective } from './droppable.directive';
 import { ScrollableDirective } from './scrollable.directive';
 import { VirtualViewportComponent } from '../components/virtual-viewport.component';
+import { PlaceholderComponent } from '../components/placeholder.component';
 import { DragStateService } from '../services/drag-state.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
 import { AutoScrollService } from '../services/auto-scroll.service';
@@ -169,6 +171,37 @@ class ViewportRowsHostComponent {
   imports: [DroppableDirective, DraggableDirective],
 })
 class WrappedRowsHostComponent {
+  dragStartEvents: DragStartEvent[] = [];
+  dropEvents: DropEvent[] = [];
+}
+
+// A plain list that renders the public placeholder among its items (always, or while dragging)
+@Component({
+  template: `
+    <div
+      vdndDroppable="placeholder-list"
+      vdndDroppableGroup="test-group"
+      (drop)="dropEvents.push($event)"
+    >
+      <div vdndDraggable="first" vdndDraggableGroup="test-group" style="height: 50px">First</div>
+      @if (alwaysShowPlaceholder() || dragState.isDragging()) {
+        <vdnd-placeholder [height]="50" />
+      }
+      <div
+        vdndDraggable="second"
+        vdndDraggableGroup="test-group"
+        style="height: 50px"
+        (dragStart)="dragStartEvents.push($event)"
+      >
+        Second
+      </div>
+    </div>
+  `,
+  imports: [DroppableDirective, DraggableDirective, PlaceholderComponent],
+})
+class PlaceholderListHostComponent {
+  readonly dragState = inject(DragStateService);
+  readonly alwaysShowPlaceholder = signal(false);
   dragStartEvents: DragStartEvent[] = [];
   dropEvents: DropEvent[] = [];
 }
@@ -1620,6 +1653,50 @@ describe('DraggableDirective', () => {
           dropDestination: dropEvents[0]?.destination.index,
         }).toEqual({ dragStartSource: 2, dropSource: 2, dropDestination: 1 });
       });
+    });
+  });
+
+  describe('in a list that renders a vdnd-placeholder among its items', () => {
+    let placeholderHost: ComponentFixture<PlaceholderListHostComponent>;
+
+    const press = (target: EventTarget, key: string): void => {
+      target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      placeholderHost.detectChanges();
+    };
+    const item = (id: string): HTMLElement =>
+      placeholderHost.nativeElement.querySelector(`[data-draggable-id="${id}"]`);
+
+    beforeEach(() => {
+      placeholderHost = TestBed.createComponent(PlaceholderListHostComponent);
+      placeholderHost.detectChanges();
+    });
+
+    afterEach(() => {
+      placeholderHost.destroy();
+    });
+
+    it('should not move a keyboard drag past the last item', () => {
+      press(item('first'), ' ');
+      expect(placeholderHost.nativeElement.querySelector('vdnd-placeholder')).not.toBeNull();
+      press(document, 'ArrowDown');
+      press(document, 'ArrowDown');
+      press(document, 'Enter');
+
+      const [drop] = placeholderHost.componentInstance.dropEvents;
+      expect({ source: drop?.source.index, destination: drop?.destination.index }).toEqual({
+        source: 0,
+        destination: 1,
+      });
+    });
+
+    it('should not count the placeholder before an item it picks up', () => {
+      placeholderHost.componentInstance.alwaysShowPlaceholder.set(true);
+      placeholderHost.detectChanges();
+
+      press(item('second'), ' ');
+
+      expect(placeholderHost.componentInstance.dragStartEvents[0]?.sourceIndex).toBe(1);
+      press(document, 'Escape');
     });
   });
 

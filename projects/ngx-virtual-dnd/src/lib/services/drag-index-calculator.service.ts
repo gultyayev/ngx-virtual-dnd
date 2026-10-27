@@ -3,7 +3,12 @@ import { type CursorPosition, END_OF_LIST, type GrabOffset } from '../models/dra
 import { PositionCalculatorService } from './position-calculator.service';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { closestAcrossShadow } from '../utils/composed-dom';
-import { listDraggables, listVirtualScroll } from '../utils/list-draggables';
+import {
+  listDraggables,
+  listItems,
+  listVirtualScroll,
+  PLACEHOLDER_DRAGGABLE_ID,
+} from '../utils/list-draggables';
 import { constraintElementOf, constraintRectOf } from '../utils/constraint-rect';
 import { probePlaceholderIndex } from '../utils/placeholder-probe';
 import {
@@ -28,9 +33,6 @@ function isScrolledToEdge(element: Element, edge: 'start' | 'end'): boolean {
   }
   return element.scrollTop >= element.scrollHeight - element.clientHeight - tolerance;
 }
-
-/** The `data-draggable-id` `vdnd-placeholder` marks itself with */
-const PLACEHOLDER_DRAGGABLE_ID = 'placeholder';
 
 interface DroppableCache {
   droppableId: string | null;
@@ -544,8 +546,8 @@ export class DragIndexCalculatorService {
     }
 
     // Fallback for non-virtual scroll — all N items are rendered (the hidden dragged item too),
-    // so no adjustment needed. Not those of a list nested in a row.
-    return listDraggables(droppableElement).length;
+    // so no adjustment needed. Not those of a list nested in a row, nor a vdnd-placeholder.
+    return listItems(droppableElement).length;
   }
 
   /** The `vdnd-virtual-content` the droppable is or is inside (page-level scroll), if any. */

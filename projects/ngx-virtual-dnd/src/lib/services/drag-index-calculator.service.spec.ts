@@ -1202,6 +1202,22 @@ describe('DragIndexCalculatorService', () => {
       expect(matches).not.toHaveBeenCalled();
     });
 
+    it('does not count a vdnd-placeholder the list renders among its items', () => {
+      const droppable = createDroppable('plain-list', 2);
+      const placeholder = document.createElement('vdnd-placeholder');
+      placeholder.setAttribute('data-draggable-id', 'placeholder');
+      droppable.insertBefore(placeholder, droppable.lastElementChild);
+
+      expect(
+        service.getTotalItemCount({
+          droppableElement: droppable,
+          isSameList: true,
+          draggedItemHeight: 50,
+        }),
+      ).toBe(2);
+      expect(service.calculatePlaceholderIndex(atBottomEdge(droppable)).index).toBe(2);
+    });
+
     it('counts the items it renders now', () => {
       const droppable = createDroppable('plain-list', 5);
       expect(service.calculatePlaceholderIndex(atBottomEdge(droppable)).index).toBe(5);
