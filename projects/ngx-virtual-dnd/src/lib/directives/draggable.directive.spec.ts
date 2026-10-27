@@ -1700,6 +1700,78 @@ describe('DraggableDirective', () => {
     });
   });
 
+  describe('when its pointer drag is ended through DragStateService', () => {
+    let rowsHost: ComponentFixture<WrappedRowsHostComponent>;
+    let two: HTMLElement;
+    let three: HTMLElement;
+
+    const nextFrame = (): Promise<void> =>
+      new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    const mouse = (target: EventTarget, type: string, x: number, y: number): void => {
+      target.dispatchEvent(
+        new MouseEvent(type, {
+          clientX: x,
+          clientY: y,
+          button: 0,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    };
+    /** Press `item` and move past the drag threshold, then let a frame process the move */
+    const dragWithPointer = async (item: HTMLElement): Promise<void> => {
+      mouse(item, 'mousedown', 40, 60);
+      mouse(document, 'mousemove', 40, 80);
+      await nextFrame();
+    };
+
+    beforeEach(() => {
+      rowsHost = TestBed.createComponent(WrappedRowsHostComponent);
+      rowsHost.detectChanges();
+      two = rowsHost.nativeElement.querySelector('[data-draggable-id="two"]');
+      three = rowsHost.nativeElement.querySelector('[data-draggable-id="three"]');
+    });
+
+    afterEach(() => {
+      rowsHost.destroy();
+    });
+
+    for (const end of ['cancelDrag', 'endDrag'] as const) {
+      it(`should stop its pointer session on ${end}()`, async () => {
+        const autoScroll = TestBed.inject(AutoScrollService);
+        const positionCalculator = TestBed.inject(PositionCalculatorService);
+        await dragWithPointer(two);
+        const stopMonitoring = jest.spyOn(autoScroll, 'stopMonitoring');
+        const endDragSession = jest.spyOn(positionCalculator, 'endDragSession');
+
+        dragStateService[end]();
+
+        expect(stopMonitoring).toHaveBeenCalledTimes(1);
+        expect(endDragSession).toHaveBeenCalledTimes(1);
+        // The release that follows ends nothing more
+        mouse(document, 'mouseup', 40, 80);
+        expect(stopMonitoring).toHaveBeenCalledTimes(1);
+      });
+    }
+
+    it('should let another item drag right after', async () => {
+      await dragWithPointer(two);
+      dragStateService.cancelDrag();
+      mouse(document, 'mouseup', 40, 80);
+
+      // The next item's drag starts before another frame
+      mouse(three, 'mousedown', 40, 80);
+      mouse(document, 'mousemove', 40, 100);
+      expect(dragStateService.draggedItem()?.draggableId).toBe('three');
+      mouse(document, 'mousemove', 120, 200);
+      await nextFrame();
+
+      expect(dragStateService.cursorPosition()).toEqual({ x: 120, y: 200 });
+      mouse(document, 'mouseup', 120, 200);
+      expect(dragStateService.isDragging()).toBe(false);
+    });
+  });
+
   describe('keyboard handling', () => {
     it('should prevent default on space when not disabled', () => {
       const space = new KeyboardEvent('keydown', {

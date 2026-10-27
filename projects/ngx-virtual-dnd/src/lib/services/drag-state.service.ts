@@ -52,6 +52,9 @@ const INITIAL_CORE_STATE: CoreDragState = {
 export class DragStateService {
   readonly #droppableRegistry = inject(DroppableRegistryService);
 
+  /** Run once when the drag in progress ends, whoever ends it (see `onDragEnded`) */
+  #dragEndedHook: (() => void) | null = null;
+
   /** Core state signal — contains all rarely-changing properties */
   readonly #state = signal<CoreDragState>(INITIAL_CORE_STATE);
 
@@ -157,6 +160,7 @@ export class DragStateService {
     isTouchDrag?: boolean,
   ): void {
     // Reset terminal drag metadata at start of new drag
+    this.#dragEndedHook = null;
     this.#endedDragState.set(null);
     this.#wasCancelled.set(false);
     this.#isTouchDrag.set(isTouchDrag ?? false);
@@ -254,6 +258,7 @@ export class DragStateService {
       return;
     }
 
+    this.#runDragEndedHook();
     const endedState = this.getStateSnapshot();
     this.#endedDragState.set(endedState);
     this.#wasCancelled.set(false);
@@ -276,10 +281,30 @@ export class DragStateService {
       return;
     }
 
+    this.#runDragEndedHook();
     this.#endedDragState.set(this.getStateSnapshot());
     this.#wasCancelled.set(true);
     this.#resetSignalsOutsideCoreState();
     this.#state.set(INITIAL_CORE_STATE);
+  }
+
+  /**
+   * Run `hook` once when the drag in progress ends, by `endDrag()` or `cancelDrag()` from
+   * anywhere, before its state is reset and its drop delivered. The gesture that started the
+   * drag stops its own work there (frame loop, autoscroll, hit-testing) when something else ends
+   * it. The next drag starts without it.
+   * @internal
+   */
+  onDragEnded(hook: () => void): void {
+    if (this.#state().isDragging) {
+      this.#dragEndedHook = hook;
+    }
+  }
+
+  #runDragEndedHook(): void {
+    const hook = this.#dragEndedHook;
+    this.#dragEndedHook = null;
+    hook?.();
   }
 
   /**

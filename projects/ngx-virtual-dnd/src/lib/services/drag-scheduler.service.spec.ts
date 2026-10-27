@@ -68,6 +68,20 @@ describe('DragSchedulerService', () => {
       expect(pendingRAFCount()).toBe(1);
     });
 
+    it('should hand the frames to the tick function of the latest start()', () => {
+      const previous = jest.fn();
+      const latest = jest.fn();
+      service.start(previous);
+      flushRAF();
+
+      service.start(latest);
+      flushRAF();
+
+      expect(previous).toHaveBeenCalledTimes(1);
+      expect(latest).toHaveBeenCalledTimes(1);
+      expect(pendingRAFCount()).toBe(1);
+    });
+
     it('should run the RAF loop outside Angular zone', () => {
       const ngZone = TestBed.inject(NgZone);
       const spy = jest.spyOn(ngZone, 'runOutsideAngular');
