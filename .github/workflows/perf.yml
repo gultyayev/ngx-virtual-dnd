@@ -38,6 +38,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      # Clear a stale PASS before setup; cancellation leaves a current run link.
+      - name: Mark current checks pending
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            await require('./perf/ci-comment.cjs')({ github, context, phase: 'Performance checks running' });
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
@@ -52,13 +59,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      # Clear a stale PASS before setup; cancellation leaves a current run link.
-      - name: Mark current checks pending
-        continue-on-error: true
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        with:
-          script: |
-            await require('./perf/ci-comment.cjs')({ github, context, phase: 'Virtualization checks running' });
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
