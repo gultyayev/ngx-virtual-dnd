@@ -852,6 +852,46 @@ describe('VirtualScrollContainerComponent', () => {
       expect(renderedIndices()).toEqual(expect.arrayContaining(range(0, 7)));
     });
 
+    describe('when the row height inputs change during a drag', () => {
+      /** The placeholder index of a drag from another list with the preview's top at y=210 */
+      const indexAt210 = (): number =>
+        TestBed.inject(DragIndexCalculatorService).calculatePlaceholderIndex({
+          droppableElement: fixture.nativeElement,
+          position: { x: 10, y: 210 },
+          previousPosition: null,
+          grabOffset: { x: 0, y: 0 },
+          draggedItemHeight: 50,
+          sourceDroppableId: 'other',
+          sourceIndex: 0,
+        }).index;
+
+      beforeEach(() => {
+        // The host is the list's droppable; jsdom puts it at the top of the page
+        (fixture.nativeElement as HTMLElement).setAttribute('data-droppable-id', 'list');
+        component.droppableId.set('list');
+        fixture.detectChanges();
+        expect(indexAt210()).toBe(4);
+      });
+
+      it('places the placeholder by the new item height', () => {
+        component.itemHeight.set(100);
+        fixture.detectChanges();
+
+        expect(indexAt210()).toBe(2);
+      });
+
+      it('places the placeholder by the measured heights once they are dynamic', () => {
+        setDynamic(true);
+        const [observer] = MockResizeObserver.measuringRows();
+        for (const row of renderedItems()) {
+          observer.resize(row, 100);
+        }
+        fixture.detectChanges();
+
+        expect(indexAt210()).toBe(2);
+      });
+    });
+
     it('should measure every rendered row again when dynamic heights are turned back on', () => {
       setDynamic(true);
       setDynamic(false);

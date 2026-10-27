@@ -39,9 +39,12 @@ interface DroppableCache {
   virtualScrollElement: HTMLElement | null;
   virtualContentElement: HTMLElement | null;
   scrollableParent: HTMLElement | null;
-  itemHeight: number;
+  /**
+   * The element whose `data-item-height` is the list's configured row height. Read live, as is
+   * the list's strategy: both change with the list's height inputs, during a drag too.
+   */
+  itemHeightElement: HTMLElement | null;
   isConstrainedToContainer: boolean;
-  strategy: VirtualScrollStrategy | null;
 }
 
 /** Where a droppable's rows are, relative to the element they scroll in. */
@@ -101,7 +104,7 @@ export class DragIndexCalculatorService {
     this.#droppableCache.clear();
   }
 
-  #resolveDroppable(droppableElement: HTMLElement, draggedItemHeight: number): DroppableCache {
+  #resolveDroppable(droppableElement: HTMLElement): DroppableCache {
     const cached = this.#droppableCache.get(droppableElement);
     if (cached) return cached;
 
@@ -134,15 +137,9 @@ export class DragIndexCalculatorService {
     }
 
     const droppableId = this.#positionCalculator.getDroppableId(droppableElement);
-    const strategy = (droppableId ? this.#strategies.get(droppableId) : null) ?? null;
-
-    const configuredHeight =
-      virtualScrollElement?.getAttribute('data-item-height') ??
-      virtualContentElement?.getAttribute('data-item-height');
-    const parsedHeight = configuredHeight ? parseFloat(configuredHeight) : Number.NaN;
-    const itemHeight = Number.isFinite(parsedHeight)
-      ? parsedHeight
-      : this.#getDraggedItemHeightFallback(draggedItemHeight, 50);
+    const itemHeightElement = [virtualScrollElement, virtualContentElement].find((element) =>
+      element?.hasAttribute('data-item-height'),
+    );
 
     const isConstrainedToContainer = droppableElement.hasAttribute('data-constrain-to-container');
 
@@ -153,9 +150,8 @@ export class DragIndexCalculatorService {
       virtualScrollElement,
       virtualContentElement,
       scrollableParent,
-      itemHeight,
+      itemHeightElement: itemHeightElement ?? null,
       isConstrainedToContainer,
-      strategy,
     };
 
     this.#droppableCache.set(droppableElement, entry);
@@ -174,11 +170,8 @@ export class DragIndexCalculatorService {
    * Live scroll geometry of a droppable's rows (see {@link DroppableScrollGeometry}). The same
    * measurement places the placeholder and finds the dragged item's source index.
    */
-  getScrollGeometry(
-    droppableElement: HTMLElement,
-    draggedItemHeight: number,
-  ): DroppableScrollGeometry {
-    return this.#getScrollGeometry(this.#resolveDroppable(droppableElement, draggedItemHeight));
+  getScrollGeometry(droppableElement: HTMLElement): DroppableScrollGeometry {
+    return this.#getScrollGeometry(this.#resolveDroppable(droppableElement));
   }
 
   /**
@@ -192,8 +185,8 @@ export class DragIndexCalculatorService {
    * #revealRenderedSlot.
    */
   revealSlot(droppableElement: HTMLElement, index: number, height: number): void {
-    const cache = this.#resolveDroppable(droppableElement, height);
-    const strategy = cache.droppableId ? this.#strategies.get(cache.droppableId) : undefined;
+    const cache = this.#resolveDroppable(droppableElement);
+    const strategy = this.#strategyOf(cache);
     if (!strategy) {
       this.#revealRenderedSlot(droppableElement, index, height);
       return;
@@ -281,17 +274,15 @@ export class DragIndexCalculatorService {
     } = args;
 
     // Resolve cached metadata (DOM queries run once per droppable per drag session)
-    const cache = this.#resolveDroppable(droppableElement, draggedItemHeight);
+    const cache = this.#resolveDroppable(droppableElement);
 
-    // Live reads: getBoundingClientRect() and scrollTop change during scroll
+    // Live reads: getBoundingClientRect() and scrollTop change during scroll, the strategy and
+    // the configured height with the list's height inputs
     const { rect, scrollTop: currentScrollTop } = this.#getScrollGeometry(cache);
+    const strategy = this.#strategyOf(cache);
+    const itemHeight = this.#configuredItemHeight(cache, draggedItemHeight);
 
-    const {
-      strategy,
-      itemHeight,
-      droppableId: currentDroppableId,
-      isConstrainedToContainer,
-    } = cache;
+    const { droppableId: currentDroppableId, isConstrainedToContainer } = cache;
 
     // Calculate preview position mathematically
     // The preview is positioned at: cursorPosition - grabOffset (see drag-preview.component.ts)
@@ -365,6 +356,21 @@ export class DragIndexCalculatorService {
     placeholderIndex = Math.max(0, Math.min(placeholderIndex, totalItems));
 
     return { index: placeholderIndex, placeholderId: END_OF_LIST };
+  }
+
+  /** The strategy the list has registered now, if any */
+  #strategyOf(cache: DroppableCache): VirtualScrollStrategy | null {
+    return (cache.droppableId ? this.#strategies.get(cache.droppableId) : null) ?? null;
+  }
+
+  /** The list's configured row height, or the dragged item's height (50px without one) */
+  #configuredItemHeight(cache: DroppableCache, draggedItemHeight: number): number {
+    const parsedHeight = parseFloat(
+      cache.itemHeightElement?.getAttribute('data-item-height') ?? '',
+    );
+    return Number.isFinite(parsedHeight)
+      ? parsedHeight
+      : this.#getDraggedItemHeightFallback(draggedItemHeight, 50);
   }
 
   #getScrollGeometry(cache: DroppableCache): DroppableScrollGeometry {

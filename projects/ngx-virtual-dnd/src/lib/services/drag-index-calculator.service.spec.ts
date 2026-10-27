@@ -4,6 +4,7 @@ import type { CursorPosition, GrabOffset } from '../models/drag-drop.models';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { DragIndexCalculatorService } from './drag-index-calculator.service';
 import { PositionCalculatorService } from './position-calculator.service';
+import { FixedHeightStrategy } from '../strategies/fixed-height.strategy';
 
 class MockStrategy implements VirtualScrollStrategy {
   readonly #version = signal(0);
@@ -1278,7 +1279,7 @@ describe('DragIndexCalculatorService', () => {
       const viewport = createViewport(80);
       viewport.scrollTop = 200;
 
-      expect(service.getScrollGeometry(viewport, 50).scrollTop).toBe(120);
+      expect(service.getScrollGeometry(viewport).scrollTop).toBe(120);
     });
 
     it('measures the viewport itself even when a row holds another virtual list', () => {
@@ -1288,7 +1289,7 @@ describe('DragIndexCalculatorService', () => {
       nested.scrollTop = 30;
       viewport.appendChild(nested);
 
-      expect(service.getScrollGeometry(viewport, 50).scrollTop).toBe(200);
+      expect(service.getScrollGeometry(viewport).scrollTop).toBe(200);
     });
   });
 
@@ -1299,7 +1300,7 @@ describe('DragIndexCalculatorService', () => {
     virtualScroll.setAttribute('data-scroll-inset-top', '40');
     virtualScroll.scrollTop = 120;
 
-    expect(service.getScrollGeometry(droppable, 50).scrollTop).toBe(80);
+    expect(service.getScrollGeometry(droppable).scrollTop).toBe(80);
   });
 
   describe('a plain list whose rows hold virtual lists', () => {
@@ -1326,7 +1327,7 @@ describe('DragIndexCalculatorService', () => {
     }
 
     it('measures the list itself, not the virtual list in a row', () => {
-      expect(service.getScrollGeometry(createBoard(), 50)).toEqual(
+      expect(service.getScrollGeometry(createBoard())).toEqual(
         expect.objectContaining({ scrollTop: 0, isVirtual: false }),
       );
     });
@@ -1350,7 +1351,7 @@ describe('DragIndexCalculatorService', () => {
       scroller.scrollTop = 30;
       card.appendChild(scroller);
 
-      expect(service.getScrollGeometry(board, 50)).toEqual(
+      expect(service.getScrollGeometry(board)).toEqual(
         expect.objectContaining({ scrollTop: 0, isVirtual: false }),
       );
       expect(
@@ -1393,7 +1394,7 @@ describe('DragIndexCalculatorService', () => {
       layout.appendChild(scroller);
       droppable.appendChild(layout);
 
-      expect(service.getScrollGeometry(droppable, 50)).toEqual(
+      expect(service.getScrollGeometry(droppable)).toEqual(
         expect.objectContaining({ scrollTop: 120, isVirtual: true }),
       );
       expect(
@@ -1419,7 +1420,7 @@ describe('DragIndexCalculatorService', () => {
     document.body.appendChild(scrollable);
 
     try {
-      expect(service.getScrollGeometry(content, 50).scrollTop).toBe(200);
+      expect(service.getScrollGeometry(content).scrollTop).toBe(200);
     } finally {
       scrollable.remove();
     }
@@ -1441,7 +1442,7 @@ describe('DragIndexCalculatorService', () => {
 
     try {
       // Measured as page-level content scrolled by the vdndScrollable, not as a plain list
-      expect(service.getScrollGeometry(droppable, 50)).toEqual(
+      expect(service.getScrollGeometry(droppable)).toEqual(
         expect.objectContaining({ scrollTop: 200, isVirtual: true }),
       );
     } finally {
@@ -1461,5 +1462,48 @@ describe('DragIndexCalculatorService', () => {
     });
 
     expect(totalCount).toBe(100);
+  });
+
+  describe('a list whose row height changes during a drag', () => {
+    /** A cross-list drag over the list with the preview's top at y=210 */
+    const indexAt210 = (droppable: HTMLElement): number =>
+      service.calculatePlaceholderIndex({
+        droppableElement: droppable,
+        position: { x: 10, y: 210 },
+        previousPosition: null,
+        grabOffset: { x: 0, y: 0 },
+        draggedItemHeight: 50,
+        sourceDroppableId: 'other',
+        sourceIndex: 0,
+      }).index;
+
+    const fixedStrategy = (itemHeight: number): FixedHeightStrategy => {
+      const strategy = new FixedHeightStrategy(itemHeight);
+      strategy.setItemCount(30);
+      return strategy;
+    };
+
+    it('uses the strategy that replaced the one the drag started with', () => {
+      const droppable = createVirtualDroppable('list-h', { itemHeight: 50, totalItems: 30 });
+      service.registerStrategy('list-h', fixedStrategy(50));
+      expect(indexAt210(droppable)).toBe(4);
+
+      droppable.querySelector('vdnd-virtual-scroll')!.setAttribute('data-item-height', '100');
+      service.registerStrategy('list-h', fixedStrategy(100));
+
+      expect(indexAt210(droppable)).toBe(2);
+    });
+
+    it('stops using a strategy once it is unregistered', () => {
+      const droppable = createVirtualDroppable('list-h', { itemHeight: 50, totalItems: 30 });
+      service.registerStrategy('list-h', fixedStrategy(50));
+      expect(indexAt210(droppable)).toBe(4);
+
+      service.unregisterStrategy('list-h');
+      droppable.querySelector('vdnd-virtual-scroll')!.setAttribute('data-item-height', '100');
+
+      // The configured height alone places the slots now
+      expect(indexAt210(droppable)).toBe(2);
+    });
   });
 });
