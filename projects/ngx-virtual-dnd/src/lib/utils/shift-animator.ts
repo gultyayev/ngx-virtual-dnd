@@ -33,6 +33,23 @@ interface PendingShift {
 /** Layout changes smaller than this are ignored (sub-pixel rounding noise). */
 const MIN_SHIFT_PX = 0.5;
 
+/** The running slide of every element, whichever list animates it (see `shiftOffsetY`). */
+const runningShifts = new WeakMap<Element, RunningShift>();
+
+/**
+ * How far a running slide draws `element` below its layout position, in px (0 when it has
+ * none), so a measurement can find the slot the element actually sits in.
+ * @internal
+ */
+export function shiftOffsetY(element: Element): number {
+  const shift = runningShifts.get(element);
+  const progress = shift?.animation.effect?.getComputedTiming().progress;
+  if (!shift || progress === null || progress === undefined) {
+    return 0;
+  }
+  return shift.y * (1 - progress);
+}
+
 /**
  * FLIP animator for items displaced by the drag placeholder.
  *
@@ -123,14 +140,15 @@ export class ShiftAnimator {
   cancel(element: HTMLElement): void {
     const running = this.#running.get(element);
     if (!running) return;
-    this.#running.delete(element);
+    this.#forget(element);
     running.animation.cancel();
   }
 
   /** Stop every running shift animation. */
   cancelAll(): void {
-    for (const running of this.#running.values()) {
+    for (const [element, running] of this.#running) {
       running.animation.cancel();
+      runningShifts.delete(element);
     }
     this.#running.clear();
   }
@@ -250,11 +268,18 @@ export class ShiftAnimator {
       easing: this.#config.shiftEasing ?? DEFAULT_SHIFT_EASING,
       composite: additive ? 'add' : 'replace',
     });
-    this.#running.set(element, { animation, x, y, additive });
+    const shift = { animation, x, y, additive };
+    this.#running.set(element, shift);
+    runningShifts.set(element, shift);
     animation.onfinish = () => {
       if (this.#running.get(element)?.animation === animation) {
-        this.#running.delete(element);
+        this.#forget(element);
       }
     };
+  }
+
+  #forget(element: HTMLElement): void {
+    this.#running.delete(element);
+    runningShifts.delete(element);
   }
 }

@@ -1,6 +1,6 @@
 import { ApplicationRef, Injector } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ShiftAnimationEntry, ShiftAnimator } from './shift-animator';
+import { ShiftAnimationEntry, ShiftAnimator, shiftOffsetY } from './shift-animator';
 import type { VdndAnimationConfig } from '../tokens/animation-config.token';
 
 interface FakeAnimation {
@@ -381,5 +381,41 @@ describe('ShiftAnimator', () => {
 
     expect(animations.get(b)?.length).toBe(1);
     expect(fromY(lastAnimation(b))).toBe(-100);
+  });
+
+  describe('shiftOffsetY', () => {
+    it('reports how far a running slide draws the row from its slot', () => {
+      const b = createElement(50);
+      entries = [['b', b]];
+      const animator = createAnimator();
+      render(animator, true, 1);
+      render(animator, true, 2, () => tops.set(b, 100));
+
+      expect(shiftOffsetY(b)).toBe(-50);
+      lastAnimation(b)!.progress = 0.5;
+      expect(shiftOffsetY(b)).toBe(-25);
+    });
+
+    it('is 0 without a slide, and once the slide finished or was cancelled', () => {
+      const b = createElement(50);
+      const c = createElement(100);
+      entries = [
+        ['b', b],
+        ['c', c],
+      ];
+      const animator = createAnimator();
+      expect(shiftOffsetY(b)).toBe(0);
+
+      render(animator, true, 1);
+      render(animator, true, 2, () => {
+        tops.set(b, 100);
+        tops.set(c, 150);
+      });
+      lastAnimation(b)!.onfinish?.();
+      animator.cancel(c);
+
+      expect(shiftOffsetY(b)).toBe(0);
+      expect(shiftOffsetY(c)).toBe(0);
+    });
   });
 });
