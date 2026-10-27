@@ -672,7 +672,7 @@ describe('VirtualScrollContainerComponent', () => {
       const itemElement = dynamicFixture.nativeElement.querySelector('.item') as HTMLElement | null;
 
       expect(itemElement?.getAttribute('data-draggable-id')).toBe(unsafeId);
-      expect(itemObserver.observe).toHaveBeenCalledWith(itemElement);
+      expect(itemObserver.observe).toHaveBeenCalledWith(itemElement, { box: 'border-box' });
 
       dynamicFixture.destroy();
     });

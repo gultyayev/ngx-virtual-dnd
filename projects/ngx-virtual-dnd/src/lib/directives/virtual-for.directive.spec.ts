@@ -726,6 +726,8 @@ describe('VirtualForDirective (dynamic height)', () => {
 class RecordingResizeObserver {
   static instances: RecordingResizeObserver[] = [];
   readonly observed = new Set<Element>();
+  /** The box each element was last observed with (undefined: the default, content box) */
+  readonly boxes = new Map<Element, ResizeObserverBoxOptions | undefined>();
   disconnected = false;
 
   readonly #callback: ResizeObserverCallback;
@@ -744,8 +746,9 @@ class RecordingResizeObserver {
     );
   }
 
-  observe(element: Element): void {
+  observe(element: Element, options?: ResizeObserverOptions): void {
     this.observed.add(element);
+    this.boxes.set(element, options?.box);
   }
 
   unobserve(element: Element): void {
@@ -851,6 +854,17 @@ describe('VirtualForDirective (dynamicItemHeight toggled at runtime)', () => {
     const viewport = fixture.debugElement.query(By.directive(VirtualViewportComponent))
       .componentInstance as VirtualViewportComponent;
     expect(viewport.strategy.getItemHeight(1)).toBe(120);
+  });
+
+  it("should observe each item's border box, which its measured height is", () => {
+    setDynamic(true);
+
+    const [observer] = RecordingResizeObserver.measuringRows();
+    expect(renderedItems().map((item) => observer.boxes.get(item))).toEqual([
+      'border-box',
+      'border-box',
+      'border-box',
+    ]);
   });
 
   it('should stop measuring when dynamic heights are turned off', () => {
