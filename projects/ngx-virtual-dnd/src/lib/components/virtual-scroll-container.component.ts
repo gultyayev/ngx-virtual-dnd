@@ -98,6 +98,9 @@ export interface VirtualScrollItemContext<T> {
  * </vdnd-virtual-scroll>
  * ```
  */
+/** A row starting less than this above the viewport's bottom edge shows nothing (sub-pixel) */
+const BOTTOM_EDGE_TOLERANCE_PX = 0.5;
+
 @Component({
   selector: 'vdnd-virtual-scroll',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -381,19 +384,31 @@ export class VirtualScrollContainerComponent<T>
     return this.rowsTop() + strategy.getTotalHeight(count) + this.rowsBottomSpace();
   });
 
+  /** Scroll offset into the rows (0 while the space above them is in view) */
+  readonly #rowsScrollTop = computed(() => Math.max(0, this.#scrollTop() - this.rowsTop()));
+
   /** First visible item index */
   readonly #firstVisibleIndex = computed(() => {
     const strategy = this.#strategy();
     strategy.version();
-    return strategy.getFirstVisibleIndex(Math.max(0, this.#scrollTop() - this.rowsTop()));
+    return strategy.getFirstVisibleIndex(this.#rowsScrollTop());
   });
 
-  /** Number of items visible in the viewport */
+  /** Number of items visible in the viewport after the first visible one */
   readonly #visibleCount = computed(() => {
     const height = this.effectiveHeight();
     const strategy = this.#strategy();
     strategy.version();
-    return strategy.getVisibleCount(this.#firstVisibleIndex(), height);
+    const first = this.#firstVisibleIndex();
+    // The strategy counts from the first visible row's top, plus a row for the part of it
+    // scrolled away, which is enough unless that row is taller than the next ones (a tall row
+    // that has mostly scrolled away): then count on to the row at the viewport's bottom edge.
+    // Not to a row that starts there, which shows nothing: a fixed-height list renders the rows
+    // it always has.
+    const last = strategy.getFirstVisibleIndex(
+      this.#rowsScrollTop() + Math.max(0, height - BOTTOM_EDGE_TOLERANCE_PX),
+    );
+    return Math.max(strategy.getVisibleCount(first, height), last - first);
   });
 
   /** Range of items to render (with overscan) */

@@ -302,6 +302,13 @@ describe('VirtualScrollContainerComponent', () => {
       // First visible = 40 → 37 (overscan) through 40 + 6 + 3 = 49
       expect(renderedIndices()).toEqual(range(37, 49));
     });
+
+    it('should render no more rows while scrolled part way into a row', async () => {
+      // Rows 40-46 show (row 40's last 25px to row 46's first 25px): 40 + 6 + 3 = 49 still
+      // covers them with the overscan, as at a row boundary
+      await scrollContainerTo(2025);
+      expect(renderedIndices()).toEqual(range(37, 49));
+    });
   });
 
   describe('overscan', () => {
@@ -830,6 +837,19 @@ describe('VirtualScrollContainerComponent', () => {
       const strategy = TestBed.inject(DragIndexCalculatorService).getStrategyForDroppable('list');
       expect(strategy?.getItemHeight(index)).toBe(80);
       expect(virtualScrollComponent.getScrollHeight()).toBe(5000 + 30);
+    });
+
+    it('should render the rows below a tall row that has mostly scrolled away', async () => {
+      component.containerHeight.set(400);
+      setDynamic(true);
+      const [observer] = MockResizeObserver.measuringRows();
+      observer.resize(renderedItems()[0], 1000);
+      fixture.detectChanges();
+
+      // The viewport shows offsets 950-1350: the last 50px of row 0, then rows 1-7
+      await scrollContainerTo(950);
+
+      expect(renderedIndices()).toEqual(expect.arrayContaining(range(0, 7)));
     });
 
     it('should measure every rendered row again when dynamic heights are turned back on', () => {
