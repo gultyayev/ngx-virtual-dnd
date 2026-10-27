@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.6.3](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.2...v3.6.3) (2026-10-27)
+
+### Bug Fixes
+
+- **lib:** drop nothing into a list hidden after a keyboard drag moved into it ([#169](https://github.com/gultyayev/ngx-virtual-dnd/issues/169)) ([fbaadb7](https://github.com/gultyayev/ngx-virtual-dnd/commit/fbaadb7b72669c55aabffb6ac2754600d25b1bc7))
+- **lib:** hit-test a list that moved without resizing where it is now ([#165](https://github.com/gultyayev/ngx-virtual-dnd/issues/165)) ([cd90572](https://github.com/gultyayev/ngx-virtual-dnd/commit/cd90572a8d88c65d88c9638d8eb2017659a9151d))
+- **lib:** leave vdnd-placeholder out of a plain list's items ([#167](https://github.com/gultyayev/ngx-virtual-dnd/issues/167)) ([234fa9f](https://github.com/gultyayev/ngx-virtual-dnd/commit/234fa9f0bd8fe741fcf087ea0bb918e30b60db1b))
+- **lib:** measure a sliding row's source index from its slot ([#162](https://github.com/gultyayev/ngx-virtual-dnd/issues/162)) ([ef2588e](https://github.com/gultyayev/ngx-virtual-dnd/commit/ef2588ef7762eecdabbc8621e5560f10a26ab632))
+- **lib:** measure dynamic rows by their border box ([#166](https://github.com/gultyayev/ngx-virtual-dnd/issues/166)) ([6d3cb6c](https://github.com/gultyayev/ngx-virtual-dnd/commit/6d3cb6c6351b376aed2f8edb3a70b9aea50fccff))
+- **lib:** read a list's strategy and row height live during a drag ([#164](https://github.com/gultyayev/ngx-virtual-dnd/issues/164)) ([b391b86](https://github.com/gultyayev/ngx-virtual-dnd/commit/b391b86a05785513a6a62ccd92c174e2f4f86772))
+- **lib:** render the rows below a tall row that has mostly scrolled away ([#163](https://github.com/gultyayev/ngx-virtual-dnd/issues/163)) ([5f633c5](https://github.com/gultyayev/ngx-virtual-dnd/commit/5f633c5f07d9d139a4eda4768004bc90b05dce57))
+- **lib:** stop a pointer drag's work when the app ends the drag ([#168](https://github.com/gultyayev/ngx-virtual-dnd/issues/168)) ([aca4196](https://github.com/gultyayev/ngx-virtual-dnd/commit/aca41960178ad324a37107c804640bed7ce29dd5))
+
 ## [3.6.2](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.1...v3.6.2) (2026-10-21)
 
 ### Bug Fixes
