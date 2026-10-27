@@ -389,12 +389,21 @@ test('three balanced blocks detect count regressions without claiming inferentia
   assert.match(result.reasons.join(' '), /median/);
   assert.doesNotMatch(result.reasons.join(' '), /confidence interval|simultaneous/i);
 });
+
+test('count budgets stay at 2% even when the timing tolerance is widened', () => {
+  const experiment = makeExperiment(3, 'counts');
+  for (const block of experiment.blocks)
+    for (const run of block.runs) {
+      run.scenarios[0].raw[0].layoutCount = run.variant === 'head' ? 110 : 100;
+    }
+  assert.equal(compareExperiment(experiment, { thresholdPercent: 100 }).verdict, 'regression');
+});
 test('counts decision uses the median paired block budget excess, not unpaired side medians', () => {
   const experiment = makeExperiment(3, 'counts');
   for (const [i, block] of experiment.blocks.entries())
     for (const run of block.runs)
       run.scenarios[0].raw[0].layoutCount =
-        run.variant === 'base' ? [100, 100, 1000][i] : [125, 50, 1050][i];
+        run.variant === 'base' ? [100, 100, 1000][i] : [125, 50, 1010][i];
   const result = compareExperiment(experiment);
   assert.equal(result.rows[0].baseline, 100);
   assert.equal(result.rows[0].current, 125);

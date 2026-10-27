@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import {
   cpSync,
   mkdirSync,
@@ -71,32 +71,78 @@ export function stageFixture(
   return { project, outputDirectory: resolve(stagingDirectory, 'dist/dnd/browser') };
 }
 
-export function main(args = process.argv.slice(2)): void {
+export async function main(args = process.argv.slice(2)): Promise<void> {
   const root = realpathSync(process.cwd());
   const manifest = resolve(root, 'dist/perf-build.json');
   rmSync(manifest, { force: true });
-  const { values } = parseArgs({ args, options: { fixture: { type: 'string' } } });
-  const fixtureRoot = realpathSync(resolve(values.fixture ?? root));
-  const inputIdentity = () => ({
-    fixtureHash: hashPaths(fixtureRoot, FIXTURE_PATHS),
-    libraryHash: hashPaths(root, LIBRARY_PATHS),
-    libraryBuildConfigHash: hashPaths(root, ['angular.json', 'tsconfig.json']),
-    dependencyHash: dependencyHash(root),
-    installedDependencyHash: installedDependencyHash(root),
-  });
-  const before = inputIdentity();
-  const buildLibrary = spawnSync('npm', ['run', 'build:lib'], { cwd: root, stdio: 'inherit' });
-  if (buildLibrary.error) throw buildLibrary.error;
-  if (buildLibrary.status !== 0)
-    throw new Error(`Library build failed (${buildLibrary.status ?? buildLibrary.signal}).`);
-  if (JSON.stringify(before) !== JSON.stringify(inputIdentity()))
-    throw new Error(
-      'Benchmark inputs changed during the production build. Rebuild from stable source.',
-    );
-  const stagingDirectory = mkdtempSync(resolve(tmpdir(), 'perf-fixture-'));
+  const failure = resolve(root, 'dist/perf-build-failure.json');
+  const failureReport = resolve(root, 'perf/results/build-failure.md');
+  rmSync(failure, { force: true });
+  rmSync(failureReport, { force: true });
+  let stage = 'preflight';
+  let stagingDirectory: string | undefined;
+  let child: ChildProcess | undefined;
+  let interrupted: NodeJS.Signals | undefined;
+  const interrupt = (signal: NodeJS.Signals) => {
+    interrupted = signal;
+    child?.kill(signal);
+  };
+  const sigint = () => interrupt('SIGINT');
+  const sigterm = () => interrupt('SIGTERM');
+  process.once('SIGINT', sigint);
+  process.once('SIGTERM', sigterm);
+  const run = async (command: string, commandArgs: string[], cwd: string) => {
+    let output = '';
+    try {
+      await new Promise<void>((resolveBuild, reject) => {
+        child = spawn(command, commandArgs, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+        for (const [stream, destination] of [
+          [child.stdout, process.stdout],
+          [child.stderr, process.stderr],
+        ] as const) {
+          stream!.on('data', (data: Buffer) => {
+            output += data.toString();
+            destination.write(data);
+          });
+        }
+        child.once('error', reject);
+        child.once('close', (code, signal) =>
+          code === 0 && !interrupted
+            ? resolveBuild()
+            : reject(
+                new Error(
+                  `${stage === 'consumer' ? 'Common fixture' : 'Library'} build failed (${signal ?? code}).\n${output.slice(-12_000)}`,
+                ),
+              ),
+        );
+      });
+    } finally {
+      mkdirSync(resolve(root, 'perf/results'), { recursive: true });
+      writeFileSync(resolve(root, `perf/results/build-${stage}.log`), output);
+      child = undefined;
+    }
+  };
   try {
+    const { values } = parseArgs({ args, options: { fixture: { type: 'string' } } });
+    const fixtureRoot = realpathSync(resolve(values.fixture ?? root));
+    const inputIdentity = () => ({
+      fixtureHash: hashPaths(fixtureRoot, FIXTURE_PATHS),
+      libraryHash: hashPaths(root, LIBRARY_PATHS),
+      libraryBuildConfigHash: hashPaths(root, ['angular.json', 'tsconfig.json']),
+      dependencyHash: dependencyHash(root),
+      installedDependencyHash: installedDependencyHash(root),
+    });
+    const before = inputIdentity();
+    stage = 'library';
+    await run('npm', ['run', 'build:lib'], root);
+    if (JSON.stringify(before) !== JSON.stringify(inputIdentity()))
+      throw new Error(
+        'Benchmark inputs changed during the production build. Rebuild from stable source.',
+      );
+    stagingDirectory = mkdtempSync(resolve(tmpdir(), 'perf-fixture-'));
+    stage = 'consumer';
     const fixture = stageFixture(root, fixtureRoot, stagingDirectory);
-    const buildApplication = spawnSync(
+    await run(
       process.execPath,
       [
         resolve(root, 'node_modules/@angular/cli/bin/ng.js'),
@@ -107,13 +153,8 @@ export function main(args = process.argv.slice(2)): void {
         '--output-path',
         'dist/dnd',
       ],
-      { cwd: stagingDirectory, stdio: 'inherit' },
+      stagingDirectory,
     );
-    if (buildApplication.error) throw buildApplication.error;
-    if (buildApplication.status !== 0)
-      throw new Error(
-        `Common fixture build failed (${buildApplication.status ?? buildApplication.signal}).`,
-      );
     if (JSON.stringify(before) !== JSON.stringify(inputIdentity()))
       throw new Error(
         'Benchmark inputs changed during the production build. Rebuild from stable source.',
@@ -134,9 +175,34 @@ export function main(args = process.argv.slice(2)): void {
         2,
       ) + '\n',
     );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const diagnosis =
+      stage === 'consumer'
+        ? 'The library could not compile the selected consumer. A breaking API change may be source-incompatible with the base demo; no comparable evidence was collected.'
+        : `Benchmark ${stage} failed; no comparable evidence was collected.`;
+    mkdirSync(resolve(root, 'dist'), { recursive: true });
+    mkdirSync(resolve(root, 'perf/results'), { recursive: true });
+    writeFileSync(
+      failure,
+      JSON.stringify({ stage, message, diagnosis, interrupted }, null, 2) + '\n',
+    );
+    writeFileSync(
+      failureReport,
+      `**Benchmark build failed (${stage})**\n\n${diagnosis}\n\n\`\`\`text\n${message.replaceAll('```', "'''")}\n\`\`\`\n`,
+    );
+    throw error;
   } finally {
-    rmSync(stagingDirectory, { recursive: true, force: true });
+    process.removeListener('SIGINT', sigint);
+    process.removeListener('SIGTERM', sigterm);
+    if (stagingDirectory) rmSync(stagingDirectory, { recursive: true, force: true });
+    if (interrupted) process.exitCode = interrupted === 'SIGINT' ? 130 : 143;
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode ||= 1;
+  });
+}

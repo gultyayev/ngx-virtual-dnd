@@ -230,6 +230,7 @@ async function execute(variant: Variant, sourceFile: string): Promise<void> {
     }
   }
   try {
+    let runnerOutput = '';
     await new Promise<void>((fulfill, reject) => {
       const child = spawn(
         process.execPath,
@@ -241,7 +242,7 @@ async function execute(variant: Variant, sourceFile: string): Promise<void> {
         ],
         {
           cwd: roots.head,
-          stdio: 'inherit',
+          stdio: ['ignore', 'pipe', 'pipe'],
           env: {
             ...process.env,
             PERF_MANAGED_SERVER: '1',
@@ -256,16 +257,26 @@ async function execute(variant: Variant, sourceFile: string): Promise<void> {
         },
       );
       children.push(child);
+      for (const [stream, destination] of [
+        [child.stdout, process.stdout],
+        [child.stderr, process.stderr],
+      ] as const) {
+        stream!.on('data', (data: Buffer) => {
+          runnerOutput += data.toString();
+          destination.write(data);
+        });
+      }
       child.once('error', reject);
-      child.once('exit', (code, signal) =>
-        code === 0 && !stopping
-          ? fulfill()
-          : reject(
-              new Error(
-                `Benchmark ${variant} failed (${signal ?? code}); raw output: ${sourceFile}`,
-              ),
+      child.once('close', (code, signal) => {
+        writeFileSync(`${sourceFile}.log`, runnerOutput);
+        if (code === 0 && !stopping) fulfill();
+        else
+          reject(
+            new Error(
+              `Benchmark ${variant} failed (${signal ?? code}).\n${runnerOutput.slice(-8_000)}\nRaw evidence: ${sourceFile}`,
             ),
-      );
+          );
+      });
     });
   } finally {
     await Promise.all(

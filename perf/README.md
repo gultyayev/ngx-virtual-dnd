@@ -1,42 +1,86 @@
-# Performance benchmarks
+# Performance checks
 
-The benchmark compares library revisions using a common production-built consumer,
-browser, and measurement harness. Balanced adjacent base/head blocks reduce
-execution-order drift. Raw measurements and completed-work checks make the results
-auditable. An experiment reports **pass**, **regression**, **inconclusive**, or
-**invalid**; a standalone suite is diagnostic.
+The default PR check tests the library's virtualization contract in a production
+browser. It measures both renderers at **1,000, 10,000 and 100,000 items**, with
+fixed and dynamic heights. It also smoke-runs every benchmark workload against
+the candidate's own demo, so changes to demo hooks cannot silently break the next
+library PR. Neither consumer instrumentation nor benchmark code is published in
+the npm library.
 
-PRs run a short **counts** profile by default: three balanced blocks, no warmups,
-and layout/style count budgets. Task timing is diagnostic, so a computational
-slowdown that preserves these counts can pass. Apply the **`perf:timing`** PR
-label to request twenty blocks with warmups and timing bounds. Timing regressions
-and inconclusive bounds remain advisory; count budget regressions and invalid or
-incomplete evidence fail CI in both profiles. The timing profile derives its
-required count decision from the same validated samples. A required timing gate needs repeated
-unchanged-code A/A experiments and positive controls on the PR runner class.
-A single passing calibration does not establish a false-alarm rate.
+Apply **`perf:timing`** to a PR for a longer paired base/head investigation.
+Timing is advisory until independent hosted-runner experiments establish useful
+false-alarm and detection rates. Rendering-count budgets and evidence integrity
+are enforced in that investigation. A passing default check does **not** mean
+"no performance regression": pure computation can get slower without changing
+any deterministic work count, and the absolute stall limits are deliberately
+coarse. An inconclusive timing result is not a pass.
 
-## Commands
-
-Install dependencies and Chromium, then build before measuring:
+## Default check
 
 ```bash
 npm ci
 npx playwright install chromium
-npm run perf:build
-npm run perf
-npm run perf:report -- --input perf/results/latest.json
-npm run perf:test
+npm run perf:build             # library and the candidate's production demo
+npm run perf:build:contracts   # separate instrumented consumer
+npm run perf:check             # 7 contract tests and 6 demo smoke scenarios
+npm run perf:test              # harness unit tests; no dependencies needed
+node --experimental-strip-types perf/check-report.ts
 ```
 
-`perf:build` builds the library and production consumer and records their source,
-fixture, declared dependency, actual installed dependency, and output hashes.
-The benchmark serves static output; Angular compilation and development-server
-rebuilds are outside the experiment. Rebuild after changing library source,
-the measured consumer, or dependencies. Experiments reject stale builds.
+The contract consumer lives in `perf/consumer/`, is built separately into
+`dist/perf-contracts/browser`, and is never added to the demo's navigation or
+library entry points. Tests run serially in Chromium at normal CPU speed, with
+no retries. Data allocation precedes the initial-render measurement. Angular's
+first completed render ends it; asynchronous dynamic-height settling is checked
+before subsequent interactions.
 
-To compare against a Git revision, prepare a clean, disposable base checkout
-with the head's harness and dependency manifests:
+For a 400px viewport, 40–60px rows and three rows of overscan on either side:
+
+| Check                                   | Budget / behavior                                                       |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| Rendered DOM rows                       | At most 18, including boundary/sticky allowances                        |
+| Retained Angular row views              | At most 38, including detached/recycled views                           |
+| Transient live row views                | At most 76 during reconciliation                                        |
+| Destroyed list                          | Zero live row views                                                     |
+| Fixed-height initial item-ID reads      | Fewer than 500, independent of total list length                        |
+| 24 identical logical scroll checkpoints | At most 576 row-template checks and 3,600 item-ID reads                 |
+| Consumer host checks during scrolling   | Zero for the component; at most 24 for the directive                    |
+| Scaling from 1k to 100k                 | At most 12 extra row checks / 150 extra ID reads for the identical path |
+| Placeholder movement                    | No consumer/row-template checks; at most 500 ID reads                   |
+| Initial rendering                       | At most 500ms, excluding caller data allocation                         |
+| Ordinary scrolling                      | No observed animation-frame gap over 250ms                              |
+
+The timing limits catch severe stalls; they do not certify 60 FPS or a particular
+device class. Absolute timings, frame cadence and relative timings are different
+questions. The row probe counts actual template evaluations even when bindings
+produce no DOM mutation. Lifetime counters include detached views, so a leak
+cannot hide behind a constant DOM size. Repeated distant scrolling checks pool
+bounds, and unmount checks destruction.
+
+Re-inserting recycled views also refreshes visible templates. The directive
+refreshes its declaration view; the component isolates that work from its host.
+The budgets allow this existing behavior while requiring it to stay bounded by
+the viewport, independently of total list size.
+
+Browser positive controls deliberately re-check the consumer, scan the whole
+list on every scroll, render excessive overscan, stall initial rendering, and inject a 500ms scrolling stall.
+The checks verify that those real workloads exceed the corresponding budgets.
+This validates collection and detection for those classes, not a statistical
+false-alarm rate for all future changes.
+
+Budgets are reviewed policy, not values regenerated from the latest result.
+For an intentional increase, document the changed user-visible work, record
+before/after evidence, and change the specific budget and its regression test
+in the PR. Do not widen the timing percentage to excuse count increases.
+Branch protection is a repository setting: a failing job only blocks merging
+if that check is required there. This workflow has path filters.
+
+## Paired comparison
+
+The slower investigation compares two libraries against the **same base demo**,
+with identical installed dependencies, production settings, browser and harness.
+Preparing the baseline changes only a disposable checkout. Source consumers stay
+intact; the candidate builds the baseline consumer in temporary staging.
 
 ```bash
 git worktree add --detach ../perf-base origin/master
@@ -48,290 +92,152 @@ npm run perf:build -- --fixture ../perf-base
 npm run perf:ab -- --base ../perf-base --profile counts
 npm run perf:compare
 npm run perf:report
+# Full timing investigation:
+npm run perf:ab -- --base ../perf-base --profile timing --blocks 20
 ```
 
-Replace `origin/master` with the desired base revision. `perf:prepare` replaces
-the disposable checkout's harness, dependency manifests, and server scripts while
-preserving its consumer, compiler configuration, library source, and Git revision.
-It refuses a dirty base checkout or the head checkout itself. Both builds use
-**the base consumer**: the candidate build stages it in a temporary directory
-against the candidate's compiled library. Head-only demo bindings to new APIs
-cannot break the baseline, and staging preserves both source trees.
+`counts` remains a local three-block diagnostic, without warmups. It checks
+layout/style passes, not computational cost. It is no longer the default CI job.
+`timing` uses twenty predeclared blocks with one warmup per scenario/suite.
+Each suite measures every scenario once; ABBA / BAAB blocks alternate execution
+order, yielding 40 observations per variant/scenario. The statistical unit is a
+block, not a frame or an individual row.
 
-The head supplies the harness and browser for **both** variants. Both checkouts
-need current `perf:build` output. Their measured consumer and dependencies must
-match; only the library varies. An incompatible library/consumer combination
-cannot produce comparable evidence. Dependency changes require a separate
-experiment: this comparison installs the head lockfile on both sides. Builds
-validate the installed hidden lockfile and package versions against that lockfile,
-then freeze their fingerprint for the experiment.
+The former default counts job took about 9½ minutes on CI, including about five
+minutes of measurement. The new default builds one library and runs the contract
+matrix and one demo smoke suite; it does not launch 12 comparison suites or
+install the same dependency tree twice. A local run on master `a450ecb` took
+58.5 seconds for all 13 browser tests, or 76.0 seconds including the three builds
+(dependencies/browser already installed). That is not a hosted-runner estimate
+or a like-for-like comparison with the old workload inventory.
+The optional 80-suite timing protocol
+can still take roughly an hour. It is explicitly requested, never scheduled or
+manually dispatched. CI installs timing dependencies once and reuses identical
+files in the baseline; builds must not mutate `node_modules`.
 
-To measure already prepared checkouts:
+Both sides use the head dependency lockfile: this isolates library changes, and
+**does not measure dependency-upgrade regressions**. The candidate contract and
+smoke check does run on dependency-only PRs. A source-incompatible library API
+cannot compile the base demo; the report preserves the consumer build stage and
+compiler diagnostic rather than claiming a performance result.
+
+## Workloads
+
+| Scenario                             | Work                                                 |
+| ------------------------------------ | ---------------------------------------------------- |
+| `scroll-2000-items`                  | Fixed logical row checkpoints in the main demo       |
+| `drag-within-list-1000`              | Fixed pointer updates and verified reorder           |
+| `drag-within-virtual-for-list`       | Fixed updates and verified viewport reorder          |
+| `dynamic-height-scroll`              | Fixed row checkpoints through dynamic rows           |
+| `dynamic-height-long-list-scroll`    | Previously unmeasured rows in a 100k list            |
+| `drag-between-lists-autoscroll-1000` | Paced autoscroll with a verified cross-list transfer |
+
+All demo pages disable drag-state debug output. That output can cause consumer
+re-renders on every pointer update, so the harness rejects it. Do not attach
+high-frequency output listeners in measured consumer templates.
+
+Scroll comparisons verify the same requested row IDs and their settled alignment;
+geometry and extra overscan rows remain diagnostic. Corrective scroll writes are
+recorded. They may vary when geometry changes, so an unexpected layout/style
+increase needs inspection of the raw work before attribution to the library.
+Drags verify the actual source, destination index and item order after measurement.
+The paced autoscroll scenario reports actual progress but never gates totals:
+its completed work varies with elapsed time and load.
+
+Every sample starts from a fresh document. Setup, page load, functional checks
+and Playwright compilation run at normal speed; measured interactions use 4×
+CPU throttling. Warmups prime the browser process, not a retained application
+page. A standalone `npm run perf` defaults to five measured iterations plus one
+warmup, requires a production build, and is diagnostic only.
+
+## Budgets and timing uncertainty
+
+Count budgets use **max(2% of base, absolute floor)**: one layout or three style
+recalculations. Timing uses **max(10% of base, 5ms)** by default. `--threshold`
+changes only the timing percentage, never count tolerances. Each block averages
+its two base and two candidate costs, then computes `head − base − budget`.
+The counts decision uses the median of these paired excesses, without a
+confidence-level claim.
+
+Timing uses exact median order-statistic bounds with Bonferroni adjustment across
+15 checks (five fixed-work scenarios × task time / layout / style), for nominal
+simultaneous 95% coverage under independent blocks with a common target median:
+
+| Blocks | Ordered excess bounds | Agreement needed |
+| ------ | --------------------- | ---------------- |
+| 10     | 1st–10th              | All 10 blocks    |
+| 14     | 2nd–13th              | 13 of 14         |
+| 20     | 4th–17th              | 17 of 20         |
+
+A lower bound above zero means regression; an upper bound at/below zero means
+pass; overlap or unbounded intervals mean inconclusive. Balanced ordering reduces
+approximately linear drift, but does not eliminate nonlinear warmup, GC,
+interference or correlated observations. More samples cannot repair unequal work.
+
+**Hosted-runner operating characteristics remain uncalibrated.** Historical
+unchanged-code evidence included a task-time difference of −10.1%; another
+unchanged comparison changed from +34.7% to +4.4% on rerun. Those observations show
+instability, not measured power or false-alarm rates for this procedure. No modeled
+pass-rate claim is made. Collect independent complete experiments and seeded
+regressions before promoting timing to a required check.
 
 ```bash
-npm run perf:ab -- --base /path/to/base --head /path/to/head --profile counts
-# Full timing comparison with a declared twenty-block budget:
-npm run perf:ab -- --base /path/to/base --head /path/to/head --profile timing
-npm run perf:compare -- --experiment perf/results/experiment.json --threshold 10
-npm run perf:report -- --input perf/results/experiment.json
-```
-
-`perf:ab` defaults to the current checkout for both paths and the timing profile
-with 20 blocks. `--profile counts` defaults to 3 blocks and zero warmups.
-`--blocks` overrides the predeclared budget. `--base-port` and `--head-port`
-replace ports 4300 and 4301; `--output` selects the experiment JSON path.
-One timing block is useful for a smoke check, but returns inconclusive.
-
-```bash
-# Unchanged-code A/A: both paths must contain identical library source/revisions.
 npm run perf:a/a -- --base . --head . --blocks 20
-
-# Known busy work during each head measurement:
-npm run perf:a/a -- --base . --head . --blocks 20 \
-  --control script --control-work-ms 50
-
-# Environmental sensitivity to CPU contention:
+npm run perf:a/a -- --base . --head . --blocks 20 --control script --control-work-ms 50
 npm run perf:a/a -- --base . --head . --blocks 20 --control cpu
 ```
 
-Controls require calibration mode and the timing profile, are recorded in the
-artifact, and are never ordinary PR comparisons. `--control-work-ms` ranges
-from 0 to 1000; injected absolute work is not a guaranteed percentage slowdown.
-The CPU control tests contention sensitivity rather than a library regression.
-The script control runs in a browser timer task so script counters, long-task
-observers, and frame intervals can observe it. Busy work executed directly
-through DevTools can visibly stall while normal instrumentation omits it.
+Script controls execute an ordinary browser timer task so instrumentation observes
+them. CPU controls measure environmental sensitivity. Neither is an ordinary PR
+comparison. Also test representative library regressions, such as extra row
+checks or repeated whole-list work, rather than relying only on a busy loop.
+Retain all outcomes. Zero false alarms in twenty experiments still allows about
+a 14% one-sided 95% upper bound. Roughly 300 clean independent experiments are
+needed to support a 1% upper bound. Do not rerun until green or add blocks after
+seeing results without a predeclared sequential procedure.
 
-`perf:compare` accepts `--experiment`, `--threshold`, `--output` (Markdown), and
-`--json` (machine-readable verdict). Its default input is
-`perf/results/experiment.json` and threshold is 10%. Exit codes are:
+## Evidence and failures
 
-| Code | Verdict      | Counts profile                                          | Timing profile                                          |
-| ---- | ------------ | ------------------------------------------------------- | ------------------------------------------------------- |
-| 0    | pass         | All paired median count excesses are within budget.     | All primary bounds are within their practical budgets.  |
-| 1    | regression   | At least one median count excess exceeds budget.        | At least one bound is wholly above its budget.          |
-| 2    | inconclusive | Not used for a complete valid count comparison.         | Too few blocks or uncertainty overlaps a budget.        |
-| 3    | invalid      | Missing, corrupt, incomplete, or incomparable evidence. | Missing, corrupt, incomplete, or incomparable evidence. |
+Schema 4 preserves raw measured/warmup samples, frame intervals, long tasks,
+visibility, counter exposure, workload outcomes and environment identity.
+Frame intervals are rAF callback cadence, not presented/dropped frames. Zero
+intervals from timer quantization are valid. Task time includes script, rendering
+and instrumentation work; layout/style counts measure passes, not cost per pass.
+Frames, long tasks, TBT and script time remain attribution diagnostics in the
+paired experiment.
 
-`--decision-profile counts` derives the count budget decision from validated
-timing evidence, as CI does to keep count budgets required. It changes the
-decision metrics without changing the recorded protocol, warmups, or raw samples.
-It cannot bypass integrity checks or turn incomplete evidence into a pass.
+Comparisons reject missing/duplicate/failed scenarios, retries, changed inputs,
+stale builds, incompatible browser/schema metadata and unequal logical work.
+Production output, actual installed dependencies, consumer and library sources
+are fingerprinted. Rebuild after changing inputs. Interrupted runs retain raw
+evidence and never become a passing partial experiment. Build failures retain
+the stage and compiler output; suite failures retain Playwright output. CI marks
+the current run pending before setup so cancellation cannot leave a stale PASS.
 
-`perf:report` defaults to `experiment.json` when present. A failed preflight with
-only `comparison.json` is reported as invalid instead of falling back to an older
-suite; a summary without raw evidence cannot establish a valid verdict. With
-neither experiment nor summary, it uses `latest.json`. It accepts `--input`,
-`--output`, `--threshold`, and `--details`. It exits 3 for invalid evidence and 0
-for a rendered report; use `perf:compare` for the verdict's exit code.
+`perf:compare` exits 0 (pass), 1 (regression), 2 (inconclusive), or 3 (invalid).
+`--decision-profile counts` derives the count decision from the same validated
+timing evidence. The timing job displays **both decisions**, including failing
+count rows, in the job summary and PR report. Raw JSON and detailed reports are
+artifacts retained for 90 days.
 
-The default report shows the verdict and one row per scenario, with task time,
-layout/style changes, and uncertain or regressing metrics. A counts pass refers
-explicitly to count checks; its task column is marked diagnostic. Unchanged
-library source is labelled a harness check, so a harness-only PR does not imply
-a library speedup. The original runner error appears first for incomplete runs.
-CI uses this compact report in the PR comment and job summary. `--details`
-provides metric tables, workloads, confidence intervals, hashes, environment
-settings, and runner health. CI saves it as `report-details.md` with raw JSON.
+`perf:report -- --details` renders full diagnostics. Historical unpaired snapshots
+remain diagnostic/inconclusive; they cannot establish a valid paired result.
+There is no cross-schema or browser-mismatch bypass.
 
-```bash
-npm run perf:report -- --input perf/results/experiment.json
-npm run perf:report -- --input perf/results/experiment.json --details \
-  --output perf/results/report-details.md
-```
+## Adding or changing a scenario
 
-`perf:baseline` remains a local snapshot convenience. Historical snapshots can
-be inspected with `perf:compare -- --baseline <file> --current <file>`, but valid
-unpaired evidence always returns inconclusive. Old schemas and missing metadata
-are invalid; compatibility checks cannot be bypassed.
+1. Add the workload and update `EXPECTED_SCENARIOS`, its validation, fixtures and
+   report labels. Specify fixed logical work or explicitly paced work.
+2. Keep assertions and observed drop verification outside the measured interval.
+3. Run the candidate-demo smoke check and workload-driver browser tests.
+4. For paired comparisons, required demo hooks must already exist on the base
+   branch. Land additive hooks first; the independent candidate smoke check
+   protects them from subsequent breakage.
+5. If the default test inventory changes, update `check-report.ts`'s expected
+   inventory so skipped or missing checks cannot produce a green report.
+6. Document budget/measurement changes and bump schema when metric meaning changes.
 
-## Measured work
-
-Demo pages open with `?dragStateDebug=false`. The page object rejects visible
-drag-state debug output: rendering cursor diagnostics can add a consumer-wide
-render every drag frame. Keep high-frequency debug output and template listeners
-out of measured pages.
-
-| Scenario                             | Page                           | Workload                                             |
-| ------------------------------------ | ------------------------------ | ---------------------------------------------------- |
-| `scroll-2000-items`                  | `/`                            | Fixed row checkpoints through a 2000-item list       |
-| `drag-within-list-1000`              | `/`                            | Fixed drag updates and verified reorder              |
-| `drag-within-virtual-for-list`       | `/virtual-viewport`            | Fixed drag updates and verified reorder              |
-| `dynamic-height-scroll`              | `/dynamic-height`              | Fixed row checkpoints through dynamic rows           |
-| `dynamic-height-long-list-scroll`    | `/dynamic-height?count=100000` | Fixed checkpoints through previously unmeasured rows |
-| `drag-between-lists-autoscroll-1000` | `/`                            | Paced autoscroll and verified cross-list transfer    |
-
-Fixed-work scenarios wait for delivered updates and verify operations, requested
-row checkpoints, or the resulting reorder. Scroll paths advance through logical
-row IDs independent of row height or total scroll range. Each requested row must
-render and settle at its target position. Pixel distances and rendered ranges
-remain diagnostic across variants; per-run scroll evidence must still be
-internally consistent. Drag outcomes include drop attributes and the item
-observed in the destination, collected after verification outside the measured
-window. Within-list drags stay clear of the autoscroll edge.
-
-A slower runner must complete the same work instead of visiting fewer rows during
-a fixed elapsed duration. Fixed-work evidence is compared in every block.
-Additional visited rows remain diagnostic: differing overscan strategies can
-complete the same checkpoints. Paced autoscroll retains the responsiveness
-workload and reports actual distance/operations; its totals do not gate because
-elapsed-time work varies under load.
-
-The timing profile performs a page-reset warmup before measured iterations;
-the default CI counts profile uses zero warmups. Each measurement starts on a
-fresh page, so warmups prime the browser process rather than reusing a warmed
-application document. Workload, snapshots, and observers run under 4× CPU
-throttling. Navigation, app startup, Playwright utility-script compilation,
-and functional verification run at normal speed to prevent bootstrap stalls.
-
-A standalone suite defaults to five measured iterations. Each experiment suite
-has one measured iteration; four suites form a block. Three blocks collect six
-measurements per variant per scenario; twenty collect forty. The default profile
-runs 12 suites without warmups; timing runs 80 with one warmup each. This reduces
-default measurement work substantially, but wall time depends on the runner.
-Both profiles retain all six scenarios and the same page-reset protocol.
-Retries are disabled.
-
-## Measurement and integrity
-
-Metrics schema **4** preserves every measured sample, frame interval, long task,
-page-clock bound, browser version, visibility state, counter exposure, and
-actual workload outcome. Aggregates derive from raw evidence; stored summaries
-cannot override the comparison. Warmup measurements remain separate from inference.
-
-Long-task observers are created/disconnected per measurement and bounded by the
-page's monotonic clock. CDP snapshots bracket renderer counters. Counter exposure
-includes transport/setup overhead and is recorded separately from the interaction
-window. Startup and warmup are excluded from measured interaction.
-
-Frame intervals measure `requestAnimationFrame` callback cadence, rather than
-presented frames. A post-work callback makes a final stall observable. The leading
-partial interval before the first callback is excluded. Finite zero intervals
-are valid at reduced timer precision; negative or nonfinite intervals invalidate
-results.
-
-The comparator requires the expected scenario set, one raw measurement per
-experiment suite, unique source files, valid execution order, finite counters,
-consistent raw-derived diagnostics, supported schema/browser settings, and
-matching logical workload definitions. Empty, duplicate, missing, hidden,
-unfinished, or incompatible evidence fails closed. Experiment files are saved
-after every suite so interrupted runs retain evidence while reporting invalid.
-
-The runner freezes harness inputs, the common external consumer fixture, actual
-installed dependencies, production builds, and Git revisions before each suite
-and after the last. Editing or rebuilding either checkout during an experiment
-invalidates it while preserving collected samples.
-
-## Decisions and metrics
-
-The **counts** profile checks layout and style-recalculation counts for five
-fixed-work scenarios across three balanced blocks. The median paired budget
-excess determines its verdict. With three blocks, a regression requires positive
-budget excess in at least two blocks. This reduces the effect of an isolated
-outlier, but correlated count variation can affect it. This is a practical architectural
-check, without a confidence-level or calibrated false-alarm claim. Task cost and
-responsiveness remain diagnostic.
-
-The **timing** profile checks task duration, layout count, and style-recalculation
-count for those five scenarios. Each block's practical budget is the larger of
-the percentage threshold and absolute floor:
-
-| Metric                    | Absolute floor   | Purpose                                      |
-| ------------------------- | ---------------- | -------------------------------------------- |
-| Task duration             | 5 ms             | Total renderer cost for equal completed work |
-| Layout count              | 1 layout         | Architectural work indicator                 |
-| Style recalculation count | 3 recalculations | Architectural work indicator                 |
-
-Floors define tolerated changes, not noise estimates. With a 100 ms base and
-10% threshold, the task budget is 10 ms. Passing does not rule out smaller changes.
-Both profiles average the two base costs and two head costs separately per block;
-the paired observation is `head − base − budget`. Zero baselines use absolute
-differences and report an undefined percentage honestly.
-
-Timing uses an exact distribution-free median order-statistic interval, with
-Bonferroni adjustment across 15 primary checks for simultaneous 95% bounds.
-A bound wholly above zero supports regression; wholly at/below zero supports
-passing; an overlapping or unbounded interval is inconclusive. Coverage assumes
-independent blocks with a common target median; balanced order does not prove
-that assumption. Frames, repeated rows, and iterations within a block are not
-independent statistical units.
-
-| Timing blocks | Ordered excess bounds | Agreement needed on one side of the budget |
-| ------------- | --------------------- | ------------------------------------------ |
-| 10            | 1st–10th              | All 10 blocks                              |
-| 14            | 2nd–13th              | 13 of 14 blocks                            |
-| 20            | 4th–17th              | 17 of 20 blocks                            |
-
-Fewer than ten blocks cannot form finite simultaneous bounds. Ten blocks are
-not inconclusive by construction: consistent evidence passes or fails, but
-outlier tolerance and detection power are limited. Inconclusive does not establish
-acceptable performance. MAD, mean, and maximum are descriptive diagnostics and
-do not replace paired uncertainty. Modeled pass rates are not measured
-false-alarm/detection rates for the complete procedure.
-
-| Diagnostic                              | Interpretation                                                        |
-| --------------------------------------- | --------------------------------------------------------------------- |
-| Duration and frame count                | Exposure for interpreting workload and stalls                         |
-| Script duration                         | Attribution within task duration                                      |
-| Average frame interval                  | Refresh cadence; weak evidence of isolated stalls                     |
-| Maximum frame gap                       | Worst observed stall, without an independent hard gate                |
-| Jank interval count                     | Intervals over 25 ms; not missed/dropped frames                       |
-| Frame time over budget                  | Sum of `max(0, interval − 16.67 ms)`, preserving stall severity       |
-| Long-task count and Total Blocking Time | Severe-stall diagnostics; zero rows collapse without removing samples |
-
-The redundant five-sample aggregate p95 and fragile frame p99 are removed.
-Individual intervals remain available. Responsiveness and paced throughput
-need calibrated budgets before becoming hard gates.
-
-## Runner drift and calibration
-
-Provenance records CPU model/count, memory, OS/kernel, image version, browser,
-Node/Playwright, hashes, order, and timestamps. Suites record load, free memory,
-CPU counters, and available Linux pressure counters before and after. These
-describe conditions; they cannot identify a particular slowdown's cause alone.
-
-GitHub-hosted VMs have a published resource class, but physical CPU performance
-and image revisions can differ. Pinning the Ubuntu OS family permits image
-updates. Queue load delays assignment without proving a running measurement is
-contended. Browser, server, OS, and host activity may compete. Chrome's 4× CPU
-throttling is relative to its host, not one absolute speed across hosts.
-
-Alternating **ABBA** and **BAAB** blocks balances base/head positions and reduces
-approximately linear drift. It does not remove sudden interference, nonlinear
-warmup, garbage collection, or correlated changes. Health data is retained;
-unfavorable samples are not erased automatically. Larger runners cannot repair
-unequal work or invalid measurement windows.
-
-CI runs **only on pull requests** affecting the library, harness, static server,
-or benchmark workflow. Other changes, including dependency-only PRs, skip this
-library comparison. Adding/removing `perf:timing` selects the relevant profile;
-unrelated label events do not start measurements. There is no scheduled or
-manually dispatched workflow. Local A/A and positive-control commands above
-provide calibration. Cancelled runs retain evidence without replacing the
-previous PR comment. Workflow artifacts are retained for 90 days.
-
-Retain all verdicts and artifacts across independent full experiments. Measure
-false alarms for the complete timing procedure and positive-control detection
-at relevant costs. Zero false alarms in twenty independent experiments still
-permits about a 14% one-sided 95% upper bound; roughly 300 clean experiments
-are needed to support a 1% bound. These counts concern experiments, not blocks.
-
-Promote timing to a required gate only after useful false-alarm and detection
-rates are demonstrated. The runner uses a fixed block count, without automatic
-confirmation. Future confirmation needs a predeclared stopping rule and alpha
-allocation across repeated looks. Increasing ten blocks to twenty after seeing
-a result and reusing the ordinary 95% interval does not preserve its stated
-coverage. This harness does not rerun automatically until green.
-
-## Files
-
-| Path                                              | Purpose                                     |
-| ------------------------------------------------- | ------------------------------------------- |
-| `prepare.ts`, `build.ts`, `run.ts`                | Common fixture, provenance, experiments     |
-| `scenarios/*.perf.ts`                             | Verified fixed-work and paced interactions  |
-| `fixtures/perf.page.ts`                           | Page setup and workload helpers             |
-| `fixtures/metrics-collector.ts`, `metric-math.ts` | Raw collection and derivation               |
-| `fixtures/compare-metrics.ts`, `run-types.ts`     | Integrity, decisions, experiment contract   |
-| `fixtures/statistics.ts`                          | Descriptive aggregation                     |
-| `compare.ts`, `report.ts`                         | Machine verdict and readable evidence       |
-| `results/`, `baselines/`                          | Gitignored raw evidence and local snapshots |
+The dedicated contract consumer is separate from these demo hooks and always tests
+the candidate library directly. CI triggers include library, consumer, harness,
+root compiler/build configuration and dependency changes. Unrelated labels have
+separate cancellation groups and check names; only `perf:timing` requests timing.

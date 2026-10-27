@@ -453,3 +453,28 @@ test('build rejects an external fixture changed during compilation and removes o
     );
   });
 });
+
+test('consumer compile failures preserve their stage and original compiler diagnostic', () => {
+  temporary((directory) => {
+    checkout(directory, 'head');
+    const environment = fakeBuild(directory, directory);
+    put(
+      directory,
+      'node_modules/@angular/cli/bin/ng.js',
+      'console.error("NG8002: Cannot bind to removedInput on vdnd-sortable-list"); process.exit(1);',
+    );
+    const result = cli('perf/build.ts', [], directory, environment);
+    assert.notEqual(result.status, 0);
+    const failure = JSON.parse(
+      readFileSync(join(directory, 'dist/perf-build-failure.json'), 'utf8'),
+    );
+    assert.equal(failure.stage, 'consumer');
+    assert.match(failure.message, /NG8002.*removedInput/);
+    assert.match(failure.diagnosis, /source-incompatible/);
+    assert.match(
+      readFileSync(join(directory, 'perf/results/build-failure.md'), 'utf8'),
+      /NG8002.*removedInput/,
+    );
+    assert.equal(existsSync(join(directory, 'dist/perf-build.json')), false);
+  });
+});

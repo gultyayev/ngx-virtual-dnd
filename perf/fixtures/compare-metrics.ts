@@ -16,6 +16,9 @@ import {
 export const GATED_METRICS = ['taskDuration', 'layoutCount', 'recalcStyleCount'] as const;
 export const COUNT_GATED_METRICS = ['layoutCount', 'recalcStyleCount'] as const;
 export const MIN_ABS_DELTA = { taskDuration: 5, layoutCount: 1, recalcStyleCount: 3 } as const;
+// Rendering counts have their own budget; the timing tolerance must not allow
+// dozens of extra layouts in long-list scenarios. Floors tolerate discrete noise.
+export const COUNT_THRESHOLD_PERCENT = 2;
 export const EXIT_CODES = { pass: 0, regression: 1, inconclusive: 2, invalid: 3 } as const;
 export interface ComparisonOptions {
   thresholdPercent?: number;
@@ -593,7 +596,14 @@ export function compareExperiment(input: unknown, options: ComparisonOptions = {
         return {
           base,
           head,
-          excess: head - base - Math.max(MIN_ABS_DELTA[metric], (base * thresholdPercent) / 100),
+          excess:
+            head -
+            base -
+            Math.max(
+              MIN_ABS_DELTA[metric],
+              (base * (metric === 'taskDuration' ? thresholdPercent : COUNT_THRESHOLD_PERCENT)) /
+                100,
+            ),
         };
       });
       const baseline = median(pairs.map((pair) => pair.base));
@@ -682,7 +692,7 @@ export function renderComparisonMarkdown(result: Comparison): string {
   const lines = [
     '## Performance comparison',
     '',
-    `**Verdict: ${result.verdict.toUpperCase()}** · ${result.profile ?? 'timing'} profile · ${result.blocks} balanced blocks · ${result.thresholdPercent}% practical budget`,
+    `**Verdict: ${result.verdict.toUpperCase()}** · ${result.profile ?? 'timing'} profile · ${result.blocks} balanced blocks · ${counts ? COUNT_THRESHOLD_PERCENT : result.thresholdPercent}% practical budget${counts ? '' : ` (counts: ${COUNT_THRESHOLD_PERCENT}%)`}`,
     '',
     ...result.reasons.map((reason) => `- ${reason}`),
   ];

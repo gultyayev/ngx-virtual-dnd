@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   compareExperiment,
+  COUNT_THRESHOLD_PERCENT,
   renderComparisonMarkdown,
   validateScenarios,
 } from './fixtures/compare-metrics.ts';
@@ -149,7 +150,7 @@ function compactExperimentReport(experiment: Experiment, comparison: Comparison)
     '',
     `**Verdict: ${comparison.verdict.toUpperCase()}** — ${reason}`,
     '',
-    `${comparison.blocks} balanced blocks · ${samples} measured samples per side/scenario · ${reference.warmupIterations} warmup per suite · ${reference.cpuThrottle}× CPU throttle · ${comparison.thresholdPercent}% ${counts ? 'work-count ' : ''}budget with minimum allowances.`,
+    `${comparison.blocks} balanced blocks · ${samples} measured samples per side/scenario · ${reference.warmupIterations} warmup per suite · ${reference.cpuThrottle}× CPU throttle · ${counts ? COUNT_THRESHOLD_PERCENT : comparison.thresholdPercent}% ${counts ? 'work-count ' : 'timing '}budget with minimum allowances.${counts ? '' : ` Counts use ${COUNT_THRESHOLD_PERCENT}%.`}`,
     '',
     `| Scenario | Task time${counts ? ' (diagnostic)' : ''}, ms (base → head) | Change | Layout Δ | Style Δ | Result |`,
     '| --- | ---: | ---: | ---: | ---: | --- |',
