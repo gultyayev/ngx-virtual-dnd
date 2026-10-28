@@ -48,7 +48,8 @@ const MAX_POOLED_VIEWS = 10;
  * - Identity: a row keeps its view while its track key stays rendered.
  * - Duplicate keys: only the first item with a key renders, with a dev-mode warning.
  * - Order: each row moves to its index in the container.
- * - Checks: only new, pooled and changed rows are checked, with `detectChanges()`.
+ * - Checks: only new, pooled and changed rows are checked, with `detectChanges()`. A pooled view
+ *   is checked before it goes back in the container (see `#renderPooledView`).
  * - Recycling (always on): a row that leaves is pooled for a row that comes in. Never one that
  *   holds the dragged element (destroying it cancels the drag) or one a leave animation keeps in
  *   the DOM.
@@ -105,6 +106,8 @@ export class VirtualForRowRenderer<T> {
     const changedViews: EmbeddedViewRef<VirtualForContext<T>>[] = [];
     const renderedRows: { view: EmbeddedViewRef<VirtualForContext<T>>; entry: RenderEntry<T> }[] =
       [];
+    // What the check of a pooled view throws, rethrown once every row is in place
+    let pooledViewError: { error: unknown } | null = null;
 
     for (const entry of itemsToRender) {
       if (entry.type === 'placeholder') {
@@ -134,6 +137,9 @@ export class VirtualForRowRenderer<T> {
             viewContainer.move(view, targetIndex);
           }
         } else {
+          // A pooled view, rendered before it goes back in the container (see #renderPooledView)
+          const error = this.#renderPooledView(view);
+          pooledViewError ??= error;
           viewContainer.insert(view, targetIndex);
         }
       }
@@ -163,6 +169,10 @@ export class VirtualForRowRenderer<T> {
 
     this.#trimViewPool();
 
+    // Thrown only now, so the rows and the container stay in step for the next render
+    if (pooledViewError) {
+      throw pooledViewError.error;
+    }
     return placeholderDomPosition;
   }
 
@@ -275,8 +285,8 @@ export class VirtualForRowRenderer<T> {
    * Get an existing view or create/recycle one from the pool. A new view is created in the
    * container at `index`: during hydration, that gives it the nodes of the next server-rendered
    * row instead of new ones.
-   * Adds the view to `changedViews` when it needs rendering: new, taken from the pool, or with a
-   * changed context.
+   * Adds the view to `changedViews` when it needs rendering: new, or with a changed context. A
+   * view taken from the pool is not in the container: `render` renders it before inserting it.
    */
   #getOrCreateView(
     key: unknown,
@@ -285,14 +295,18 @@ export class VirtualForRowRenderer<T> {
     index: number,
   ): EmbeddedViewRef<VirtualForContext<T>> {
     const activeView = this.#activeViews.get(key);
-    let view = activeView ?? this.#viewPool.pop();
-
-    if (view) {
-      // A pooled view was detached, so change detection skipped it: render it even when it
-      // comes back with the same context, as what its template shows may have changed since
-      if (this.#updateContext(view.context, context) || !activeView) {
-        changedViews.push(view);
+    if (activeView) {
+      if (this.#updateContext(activeView.context, context)) {
+        changedViews.push(activeView);
       }
+      return activeView;
+    }
+
+    let view = this.#viewPool.pop();
+    if (view) {
+      // Rendered by `render` even when it comes back with the same context: change detection
+      // skipped it while detached, and what its template shows may have changed since
+      this.#updateContext(view.context, context);
     } else {
       view = this.#host.viewContainer.createEmbeddedView(this.#host.template, context, index);
       changedViews.push(view);
@@ -336,6 +350,26 @@ export class VirtualForRowRenderer<T> {
         }
       }
     });
+  }
+
+  /**
+   * Render a pooled view before it goes back in the container, untracked as the others. Returns
+   * what its check threw, if anything.
+   *
+   * Angular tracks the signals a row checked on its own reads with a consumer that refreshes the
+   * component view the row is in (the consumer's: its template and every row) as soon as one of
+   * them is notified, without checking whether its value changed. A pooled view's check notifies
+   * some itself: its directives get the new item, and their host bindings read values computed
+   * from it (as `vdndDraggable`'s `isDragging()`). Out of the container the view is in no other
+   * view, so that refreshes nothing.
+   */
+  #renderPooledView(view: EmbeddedViewRef<VirtualForContext<T>>): { error: unknown } | null {
+    try {
+      untracked(() => view.detectChanges());
+      return null;
+    } catch (error) {
+      return { error };
+    }
   }
 
   /**

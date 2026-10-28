@@ -2,12 +2,16 @@ import {
   ApplicationRef,
   ChangeDetectionStrategy,
   Component,
+  computed,
+  Directive,
+  input,
   PLATFORM_ID,
   signal,
 } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { VirtualForDirective } from './virtual-for.directive';
+import { DraggableDirective } from './draggable.directive';
 import { ScrollableDirective } from './scrollable.directive';
 import { VirtualViewportComponent } from '../components/virtual-viewport.component';
 import { VirtualContentComponent } from '../components/virtual-content.component';
@@ -1189,6 +1193,19 @@ describe('VirtualForDirective (content offset)', () => {
   });
 });
 
+/**
+ * Shows a computed of its item's key in a host binding, as `vdndDraggable` shows whether its item
+ * is dragged: a view that renders another item recomputes it, to the same value
+ */
+@Directive({
+  selector: '[vdndTestRowItem]',
+  host: { '[class.test-row-hidden]': 'hidden()' },
+})
+class RowItemDirective {
+  readonly vdndTestRowItem = input.required<string>();
+  readonly hidden = computed(() => this.vdndTestRowItem() === 'hidden');
+}
+
 @Component({
   template: `
     <div class="host-render" [attr.data-count]="countHostRender()"></div>
@@ -1204,6 +1221,7 @@ describe('VirtualForDirective (content offset)', () => {
       >
         <div
           class="item"
+          [vdndTestRowItem]="item.key"
           [attr.data-id]="item.key"
           [attr.data-index]="i"
           [attr.data-selected]="selected() === item.key"
@@ -1213,7 +1231,7 @@ describe('VirtualForDirective (content offset)', () => {
       </ng-container>
     </div>
   `,
-  imports: [VirtualForDirective],
+  imports: [VirtualForDirective, RowItemDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [{ provide: VDND_SCROLL_CONTAINER, useExisting: RenderCountingHostComponent }],
 })
@@ -1225,6 +1243,8 @@ class RenderCountingHostComponent implements VdndScrollContainer {
 
   hostRenders = 0;
   readonly rowRenders: string[] = [];
+  /** The row of this item fails to render */
+  failingKey: string | null = null;
 
   // 200px of 50px rows: 4 in view, plus 3 overscan on each side
   scrollTop = signal(0);
@@ -1237,6 +1257,9 @@ class RenderCountingHostComponent implements VdndScrollContainer {
   }
 
   countRowRender(key: string): string {
+    if (key === this.failingKey) {
+      throw new Error(`Row ${key} failed`);
+    }
     this.rowRenders.push(key);
     return key;
   }
@@ -1327,8 +1350,56 @@ describe('VirtualForDirective (change detection scope)', () => {
     expect(renderedIds()).toEqual(Array.from({ length: 11 }, (_, i) => `k${i + 1}`));
     expect(host.hostRenders).toBe(0);
     // k1 becomes the first row and k7 stops being the last; k8-k11 are new or recycled
-    expect([...new Set(host.rowRenders)].sort()).toEqual(
-      ['k1', 'k7', 'k8', 'k9', 'k10', 'k11'].sort(),
+    expect([...host.rowRenders].sort()).toEqual(['k1', 'k7', 'k8', 'k9', 'k10', 'k11'].sort());
+  });
+
+  it('re-renders only the new rows and the rows whose context changed when it reuses pooled views', () => {
+    // First row in view 10: rows 7-17
+    host.scrollTop.set(500);
+    appRef.tick();
+    resetCounts();
+
+    // First row in view 13: rows 10-20. Rows 7-9 leave, and their views render rows 18-20
+    host.scrollTop.set(650);
+    appRef.tick();
+
+    expect(renderedIds()).toEqual(Array.from({ length: 11 }, (_, i) => `k${i + 10}`));
+    expect(host.hostRenders).toBe(0);
+    // k10 becomes the first row and k17 stops being the last; k18-k20 are recycled
+    expect([...host.rowRenders].sort()).toEqual(['k10', 'k17', 'k18', 'k19', 'k20'].sort());
+    // The directives in a recycled view get the item it renders now
+    const rowItems = fixture.debugElement
+      .queryAll(By.directive(RowItemDirective))
+      .map((row) => row.injector.get(RowItemDirective).vdndTestRowItem());
+    expect(rowItems).toEqual(renderedIds());
+  });
+
+  it('keeps every row in order when the check of a recycled view throws', () => {
+    const keys = (from: number, to: number): string[] =>
+      Array.from({ length: to - from + 1 }, (_, i) => `k${from + i}`);
+    // First row in view 10: rows 7-17
+    host.scrollTop.set(500);
+    appRef.tick();
+
+    // Rows 7-9 leave, and their views render rows 18-20: the row of k19 fails
+    host.failingKey = 'k19';
+    host.scrollTop.set(650);
+    expect(() => appRef.tick()).toThrow('Row k19 failed');
+    expect(renderedIds()).toEqual(keys(10, 20));
+
+    // The next steps reuse those views again, each for one row
+    host.failingKey = null;
+    host.scrollTop.set(800);
+    appRef.tick();
+    host.scrollTop.set(950);
+    appRef.tick();
+
+    const rows = fixture.debugElement
+      .queryAll(By.css('.item'))
+      .map((el) => el.nativeElement as HTMLElement);
+    expect(rows.map((row) => row.getAttribute('data-id'))).toEqual(keys(16, 26));
+    expect(rows.map((row) => row.getAttribute('data-index'))).toEqual(
+      keys(16, 26).map((key) => key.slice(1)),
     );
   });
 
@@ -1401,6 +1472,102 @@ describe('VirtualForDirective (change detection scope)', () => {
     appRef.tick();
 
     expect(selectedAttr('k22')).toBe('true');
+  });
+});
+
+/** Draggable rows, counting each check of a row and of this host's template */
+@Component({
+  template: `
+    <div class="host-render" [attr.data-count]="countHostRender()"></div>
+    <div class="scroller">
+      <ng-container
+        *vdndVirtualFor="let item of items; itemHeight: 50; trackBy: trackByFn; droppableId: 'list'"
+      >
+        <div
+          class="item"
+          [vdndDraggable]="item.key"
+          vdndDraggableGroup="g"
+          [vdndDraggableData]="item"
+        >
+          {{ countRowRender(item.key) }}
+        </div>
+      </ng-container>
+    </div>
+  `,
+  imports: [VirtualForDirective, DraggableDirective],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [{ provide: VDND_SCROLL_CONTAINER, useExisting: DraggableRowsHostComponent }],
+})
+class DraggableRowsHostComponent implements VdndScrollContainer {
+  readonly items = Array.from({ length: 1000 }, (_, i) => ({ key: `k${i}` }));
+  readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+
+  hostRenders = 0;
+  readonly rowRenders: string[] = [];
+
+  // 200px of 50px rows: 4 in view, plus 3 overscan on each side
+  scrollTop = signal(0);
+  containerHeight = signal(200);
+  nativeElement = document.createElement('div');
+  scrollTo = jest.fn();
+
+  countHostRender(): number {
+    return ++this.hostRenders;
+  }
+
+  countRowRender(key: string): string {
+    this.rowRenders.push(key);
+    return key;
+  }
+}
+
+describe('VirtualForDirective (recycled draggable rows)', () => {
+  let fixture: ComponentFixture<DraggableRowsHostComponent>;
+  let host: DraggableRowsHostComponent;
+  let appRef: ApplicationRef;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  const keys = (from: number, to: number): string[] =>
+    Array.from({ length: to - from + 1 }, (_, i) => `k${from + i}`);
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    TestBed.configureTestingModule({ imports: [DraggableRowsHostComponent] });
+    fixture = TestBed.createComponent(DraggableRowsHostComponent);
+    host = fixture.componentInstance;
+    appRef = TestBed.inject(ApplicationRef);
+    fixture.detectChanges();
+    appRef.tick();
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  it('re-renders only the new rows and the rows whose context changed, step after step', () => {
+    // First row in view 10: rows 7-17
+    host.scrollTop.set(500);
+    appRef.tick();
+
+    // Three rows a step: three rows leave, and their views render the three that come in
+    for (let first = 13; first <= 22; first += 3) {
+      host.hostRenders = 0;
+      host.rowRenders.length = 0;
+
+      host.scrollTop.set(first * 50);
+      appRef.tick();
+
+      const rows = fixture.debugElement
+        .queryAll(By.css('.item'))
+        .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-draggable-id'));
+      expect(rows).toEqual(keys(first - 3, first + 7));
+      // The new first row, the row that stops being the last, and the three new rows
+      expect([...host.rowRenders].sort()).toEqual(
+        [`k${first - 3}`, `k${first + 4}`, ...keys(first + 5, first + 7)].sort(),
+      );
+      expect(host.hostRenders).toBe(0);
+    }
   });
 });
 
@@ -1842,6 +2009,33 @@ describe('VirtualForDirective (row root in a control flow block)', () => {
     expect(rendered.length).toBeGreaterThan(1);
     expect(rendered.map((row) => row.style.position)).toEqual(rendered.map(() => 'absolute'));
     expect(rendered.map((row) => row.style.top)).toEqual(rendered.map((_, i) => `${i * 50}px`));
+    expect(rendered.filter((row) => !observed().has(row))).toEqual([]);
+  });
+
+  it('renders, positions and measures the root a recycled row renders in its other branch', async () => {
+    // Rows 8 and on are wide: the views of narrow rows that scroll out render them
+    fixture.componentInstance.items.set(
+      Array.from({ length: 30 }, (_, i) => ({ key: `k${i}`, wide: i >= 8 })),
+    );
+    render();
+    const scroller = fixture.nativeElement.querySelector('.scroller') as HTMLElement;
+
+    // First row in view 6: rows 3-13. The views of rows 0-2 render three of rows 8-13
+    scroller.scrollTop = 300;
+    scroller.dispatchEvent(new Event('scroll'));
+    await nextAnimationFrame();
+    render();
+
+    const rendered = rows();
+    expect(rendered.map((row) => row.getAttribute('data-id'))).toEqual(
+      Array.from({ length: 11 }, (_, i) => `k${i + 3}`),
+    );
+    expect(rendered.map((row) => row.classList.contains('wide'))).toEqual(
+      rendered.map((_, i) => i + 3 >= 8),
+    );
+    expect(rendered.map((row) => row.style.top)).toEqual(
+      rendered.map((_, i) => `${(i + 3) * 50}px`),
+    );
     expect(rendered.filter((row) => !observed().has(row))).toEqual([]);
   });
 

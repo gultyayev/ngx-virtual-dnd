@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  computed,
   Directive,
   inject,
   input,
@@ -1522,6 +1523,19 @@ class RowViewDirective implements OnDestroy {
   }
 }
 
+/**
+ * Shows a computed of its item's ID in a host binding, as `vdndDraggable` shows whether its item
+ * is dragged: a view that renders another item recomputes it, to the same value
+ */
+@Directive({
+  selector: '[vdndTestRowItem]',
+  host: { '[class.test-row-hidden]': 'hidden()' },
+})
+class RowItemDirective {
+  readonly vdndTestRowItem = input.required<string>();
+  readonly hidden = computed(() => this.vdndTestRowItem() === 'hidden');
+}
+
 @Component({
   template: `
     <div class="host-render" [attr.data-count]="countHostRender()"></div>
@@ -1529,6 +1543,7 @@ class RowViewDirective implements OnDestroy {
       <div
         class="item"
         vdndTestRowView
+        [vdndTestRowItem]="item.id"
         [attr.data-draggable-id]="item.id"
         [attr.data-index]="index"
         [attr.data-sticky]="isSticky"
@@ -1538,10 +1553,15 @@ class RowViewDirective implements OnDestroy {
         {{ countRowRender(item.id) }}
       </div>
     </ng-template>
-    <!-- Its root is a control flow block: the view lists the block's anchor before its row -->
+    <!-- Its root is a control flow block: the view lists the block's anchor before its row. The
+         branch follows the index, so a view that renders another item can switch branches -->
     <ng-template #controlFlowTpl let-item let-index="index">
-      @if (item) {
+      @if (index % 2 === 0) {
         <div class="item" [attr.data-draggable-id]="item.id" [attr.data-index]="index">
+          {{ countRowRender(item.id) }}
+        </div>
+      } @else {
+        <div class="item odd" [attr.data-draggable-id]="item.id" [attr.data-index]="index">
           {{ countRowRender(item.id) }}
         </div>
       }
@@ -1560,7 +1580,7 @@ class RowViewDirective implements OnDestroy {
       droppableId="list"
     />
   `,
-  imports: [VirtualScrollContainerComponent, RowViewDirective],
+  imports: [VirtualScrollContainerComponent, RowViewDirective, RowItemDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 class RenderCountingHostComponent {
@@ -1581,12 +1601,17 @@ class RenderCountingHostComponent {
 
   hostRenders = 0;
   readonly rowRenders: string[] = [];
+  /** The row of this item fails to render */
+  failingId: string | null = null;
 
   countHostRender(): number {
     return ++this.hostRenders;
   }
 
   countRowRender(id: string): string {
+    if (id === this.failingId) {
+      throw new Error(`Row ${id} failed`);
+    }
     this.rowRenders.push(id);
     return id;
   }
@@ -2231,6 +2256,61 @@ describe('VirtualScrollContainerComponent (change detection scope)', () => {
         expect(row?.getAttribute('data-index')).toBe(`${i}`);
         expect(row?.getAttribute('data-name')).toBe(`Item ${i}`);
         expect(row?.getAttribute('data-sticky')).toBe('false');
+      }
+    });
+
+    it('renders only the rows that scroll in when the views of rows that scroll out render them', async () => {
+      // First row in view 10: rows 7-17
+      await scrollTo(500);
+      resetCounts();
+
+      // First row in view 13: rows 10-20. Rows 7-9 leave, and their views render rows 18-20
+      await scrollTo(650);
+
+      expect(renderedOrder()).toEqual(items(10, 20));
+      expect([...host.rowRenders].sort()).toEqual(items(18, 20).sort());
+      expect(host.hostRenders).toBe(0);
+      // The directives in a recycled view get the item it renders now
+      const rowItems = fixture.debugElement
+        .queryAll(By.directive(RowItemDirective))
+        .map((row) => row.injector.get(RowItemDirective).vdndTestRowItem());
+      expect(rowItems).toEqual(items(10, 20));
+      expect(rowViews).toEqual({ created: 3, destroyed: 0 });
+    });
+
+    it('keeps every row in order when the check of a recycled view throws', async () => {
+      // First row in view 10: rows 7-17
+      await scrollTo(500);
+
+      // Rows 7-9 leave, and their views render rows 18-20: the row of item-19 fails
+      host.failingId = 'item-19';
+      await expect(scrollTo(650)).rejects.toThrow('Row item-19 failed');
+      expect(renderedOrder()).toEqual(items(10, 20));
+
+      // The next steps reuse those views again, each for one row
+      host.failingId = null;
+      await scrollTo(800);
+      await scrollTo(950);
+
+      expect(renderedOrder()).toEqual(items(16, 26));
+      expect(new Set(items(16, 26).map(rowElement)).size).toBe(11);
+      for (let i = 16; i <= 26; i++) {
+        expect(rowElement(`item-${i}`)?.getAttribute('data-index')).toBe(`${i}`);
+      }
+    });
+
+    it('renders the other branch of a recycled view whose root is a control flow block', async () => {
+      host.template.set('controlFlow');
+      render();
+
+      // First row in view 5: rows 2-12. The views of rows 1 and 0 render rows 8 and 9, each in
+      // its other branch
+      await scrollTo(250);
+
+      expect(renderedOrder()).toEqual(items(2, 12));
+      for (let i = 2; i <= 12; i++) {
+        expect(rowElement(`item-${i}`)?.classList.contains('odd')).toBe(i % 2 === 1);
+        expect(rowElement(`item-${i}`)?.getAttribute('data-index')).toBe(`${i}`);
       }
     });
 

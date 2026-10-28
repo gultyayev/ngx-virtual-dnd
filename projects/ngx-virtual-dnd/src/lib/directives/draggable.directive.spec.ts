@@ -523,6 +523,13 @@ describe('DraggableDirective', () => {
       expect(draggableNative.getAttribute('data-draggable-id')).toBe('test-item');
     });
 
+    it('should show a new ID in data-draggable-id', () => {
+      component.draggableId.set('other-item');
+      fixture.detectChanges();
+
+      expect(draggableNative.getAttribute('data-draggable-id')).toBe('other-item');
+    });
+
     it('should have vdnd-draggable class', () => {
       expect(draggableNative.classList.contains('vdnd-draggable')).toBe(true);
     });
@@ -553,6 +560,17 @@ describe('DraggableDirective', () => {
       fixture.detectChanges();
 
       expect(draggableNative.getAttribute('tabindex')).toBe('-1');
+    });
+
+    it('should show it is enabled again when disabled turns off', () => {
+      component.disabled.set(true);
+      fixture.detectChanges();
+
+      component.disabled.set(false);
+      fixture.detectChanges();
+
+      expect(draggableNative.classList.contains('vdnd-draggable-disabled')).toBe(false);
+      expect(draggableNative.getAttribute('tabindex')).toBe('0');
     });
 
     it('should not start drag when disabled', () => {

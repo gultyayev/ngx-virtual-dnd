@@ -77,3 +77,32 @@ Bind `[animate.enter]` to a signal and clear it the same way, so moved rows don'
 Before Angular 21.2.1 this is not enough, because Angular removes a row that moves even when its leave animation is empty. Update Angular, or keep `animate.leave` off rows that can move.
 
 This only covers drags. Turn the animations off the same way around a sort of your own, and keep `animate.leave` off rows in `stickyItemIds`: they move while the list scrolls. A bound `[animate.leave]` also keeps a row from being recycled, even while its value is empty (see [Row recycling](/guide/features/performance#row-recycling)).
+
+## Signals in the host bindings of recycled rows
+
+This is a limitation of Angular. A list that [recycles rows](/guide/features/performance#row-recycling) hands the view of a row that scrolls out to a row that scrolls in, and the components and directives in that view get the new item through their inputs. Angular tracks the signals a row's host bindings read with the component view the row is in: the list's own view, or with `*vdndVirtualFor` your component's. When one of them changes, Angular checks that whole view again. A component or directive in the row whose host bindings read one of its signal inputs, or a value computed from it that differs between items, makes each scroll step that reuses a view check every rendered row, not only the rows that came in. With `*vdndVirtualFor` your component's template runs again too. The same goes for an input bound to `first` or `last` of `*vdndVirtualFor`, which change for rows that stay rendered.
+
+`vdndDraggable` avoids this. In your own row components, read the item in the template: a component's template has its own tracking, so a change there checks only that component.
+
+```ts
+// Each reused view checks every row: the host binding reads the task
+@Component({
+  selector: 'app-task-row',
+  host: { '[class.done]': 'task().done' },
+  template: `{{ task().title }}`,
+})
+export class TaskRow {
+  readonly task = input.required<Task>();
+}
+
+// Each reused view checks only its own row
+@Component({
+  selector: 'app-task-row',
+  template: `<div [class.done]="task().done">{{ task().title }}</div>`,
+})
+export class TaskRow {
+  readonly task = input.required<Task>();
+}
+```
+
+A host binding that shows nothing but an input's value can instead read it with `untracked()`, as `vdndDraggable` does: an input changes only while Angular checks the row, and that check evaluates the row's host bindings too. Without recycling there is nothing to avoid: a row that scrolls in gets a new view, whose signals nothing tracks yet.

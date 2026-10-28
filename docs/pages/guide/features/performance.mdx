@@ -21,6 +21,8 @@ Focus does not carry over: a view leaves the DOM before it renders another item.
 
 A row with a leave animation (`animate.leave`) on its root element is not recycled, by `*vdndVirtualFor` either, even when its bound value is empty: Angular keeps the row in the DOM until the leave animation has run. On Angular 22 this also applies to `animate.leave` on any element inside the row. See [Animations on rows that move](/guide/more/limitations#animations-on-rows-that-move).
 
+A scroll step that reuses views checks only the rows that came in (and with `*vdndVirtualFor` the rows whose `first` or `last` changed), unless something in a row reads one of its signal inputs in a host binding: then Angular checks every row. See [Signals in the host bindings of recycled rows](/guide/more/limitations#signals-in-the-host-bindings-of-recycled-rows).
+
 Turn it on for rows that are costly to create (several components, many elements) and render only from their item.
 
 ## Overscan
