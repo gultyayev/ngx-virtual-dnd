@@ -1,5 +1,8 @@
 # Performance Benchmarks
 
+For the automated PR check, see [Virtualization contracts](contracts/README.md).
+The tools below are the existing manual micro-benchmarks; CI does not run them.
+
 Playwright-driven micro-benchmarks for manual before/after comparisons. Benchmarks
 do not run in CI or gate pull requests. Compare runs captured on the **same
 machine** with the same harness and Playwright version. This document records the

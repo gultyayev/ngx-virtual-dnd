@@ -33,7 +33,9 @@
     "release": "node scripts/release.js",
     "release:dry-run": "node scripts/release.js --dry-run",
     "release:alpha": "node scripts/release.js --pre-release",
-    "release:alpha:dry-run": "node scripts/release.js --pre-release --dry-run"
+    "release:alpha:dry-run": "node scripts/release.js --pre-release --dry-run",
+    "perf:build:contracts": "node --experimental-strip-types perf/build-contracts.ts",
+    "perf:check": "playwright test --config perf/playwright.check.config.ts"
   },
   "prettier": {
     "printWidth": 100,

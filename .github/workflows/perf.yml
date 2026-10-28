@@ -1,0 +1,86 @@
+name: Performance Checks
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, reopened, synchronize]
+    paths:
+      - 'projects/ngx-virtual-dnd/**'
+      - 'perf/**'
+      - 'angular.json'
+      - 'tsconfig*.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/serve-dist.js'
+      - '.github/workflows/perf.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: perf-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  harness-unit-tests:
+    name: Performance harness tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # Clear a stale PASS before setup; cancellation leaves a current run link.
+      - name: Mark current checks pending
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            await require('./perf/ci-comment.cjs')({ github, context, phase: 'Performance checks running' });
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+      - run: npm run perf:test
+
+  virtualization:
+    name: Virtualization contracts
+    needs: harness-unit-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install pinned dependencies and Chromium
+        run: |
+          npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Build the library and instrumented consumer
+        run: |
+          npm run perf:build:contracts
+      - name: Check virtualization contracts
+        run: npm run perf:check
+      - name: Report contracts and initial rendering
+        if: always()
+        run: node --experimental-strip-types perf/check-report.ts >> "$GITHUB_STEP_SUMMARY"
+      - name: Update PR report
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            await require('./perf/ci-comment.cjs')({ github, context, phase: 'Virtualization checks did not finish', reportPath: 'perf/results/check.md' });
+      - name: Upload check evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: virtualization-results
+          path: |
+            perf/results/
+            test-results/
+          retention-days: 90

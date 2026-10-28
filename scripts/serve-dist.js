@@ -20,7 +20,9 @@ import { fileURLToPath } from 'node:url';
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.PORT ?? 4200);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const buildDir = join(root, 'dist/dnd/browser');
+const buildDir = process.env.PERF_BUILD_DIR
+  ? resolve(process.env.PERF_BUILD_DIR)
+  : join(root, 'dist/dnd/browser');
 
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
