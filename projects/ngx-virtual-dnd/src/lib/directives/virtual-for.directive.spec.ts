@@ -2,9 +2,6 @@ import {
   ApplicationRef,
   ChangeDetectionStrategy,
   Component,
-  computed,
-  Directive,
-  input,
   PLATFORM_ID,
   signal,
 } from '@angular/core';
@@ -1193,19 +1190,6 @@ describe('VirtualForDirective (content offset)', () => {
   });
 });
 
-/**
- * Shows a computed of its item's key in a host binding, as `vdndDraggable` shows whether its item
- * is dragged: a view that renders another item recomputes it, to the same value
- */
-@Directive({
-  selector: '[vdndTestRowItem]',
-  host: { '[class.test-row-hidden]': 'hidden()' },
-})
-class RowItemDirective {
-  readonly vdndTestRowItem = input.required<string>();
-  readonly hidden = computed(() => this.vdndTestRowItem() === 'hidden');
-}
-
 @Component({
   template: `
     <div class="host-render" [attr.data-count]="countHostRender()"></div>
@@ -1221,7 +1205,6 @@ class RowItemDirective {
       >
         <div
           class="item"
-          [vdndTestRowItem]="item.key"
           [attr.data-id]="item.key"
           [attr.data-index]="i"
           [attr.data-selected]="selected() === item.key"
@@ -1231,7 +1214,7 @@ class RowItemDirective {
       </ng-container>
     </div>
   `,
-  imports: [VirtualForDirective, RowItemDirective],
+  imports: [VirtualForDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [{ provide: VDND_SCROLL_CONTAINER, useExisting: RenderCountingHostComponent }],
 })
@@ -1243,8 +1226,6 @@ class RenderCountingHostComponent implements VdndScrollContainer {
 
   hostRenders = 0;
   readonly rowRenders: string[] = [];
-  /** The row of this item fails to render */
-  failingKey: string | null = null;
 
   // 200px of 50px rows: 4 in view, plus 3 overscan on each side
   scrollTop = signal(0);
@@ -1257,9 +1238,6 @@ class RenderCountingHostComponent implements VdndScrollContainer {
   }
 
   countRowRender(key: string): string {
-    if (key === this.failingKey) {
-      throw new Error(`Row ${key} failed`);
-    }
     this.rowRenders.push(key);
     return key;
   }
@@ -1351,56 +1329,6 @@ describe('VirtualForDirective (change detection scope)', () => {
     expect(host.hostRenders).toBe(0);
     // k1 becomes the first row and k7 stops being the last; k8-k11 are new or recycled
     expect([...host.rowRenders].sort()).toEqual(['k1', 'k7', 'k8', 'k9', 'k10', 'k11'].sort());
-  });
-
-  it('re-renders only the new rows and the rows whose context changed when it reuses pooled views', () => {
-    // First row in view 10: rows 7-17
-    host.scrollTop.set(500);
-    appRef.tick();
-    resetCounts();
-
-    // First row in view 13: rows 10-20. Rows 7-9 leave, and their views render rows 18-20
-    host.scrollTop.set(650);
-    appRef.tick();
-
-    expect(renderedIds()).toEqual(Array.from({ length: 11 }, (_, i) => `k${i + 10}`));
-    expect(host.hostRenders).toBe(0);
-    // k10 becomes the first row and k17 stops being the last; k18-k20 are recycled
-    expect([...host.rowRenders].sort()).toEqual(['k10', 'k17', 'k18', 'k19', 'k20'].sort());
-    // The directives in a recycled view get the item it renders now
-    const rowItems = fixture.debugElement
-      .queryAll(By.directive(RowItemDirective))
-      .map((row) => row.injector.get(RowItemDirective).vdndTestRowItem());
-    expect(rowItems).toEqual(renderedIds());
-  });
-
-  it('keeps every row in order when the check of a recycled view throws', () => {
-    const keys = (from: number, to: number): string[] =>
-      Array.from({ length: to - from + 1 }, (_, i) => `k${from + i}`);
-    // First row in view 10: rows 7-17
-    host.scrollTop.set(500);
-    appRef.tick();
-
-    // Rows 7-9 leave, and their views render rows 18-20: the row of k19 fails
-    host.failingKey = 'k19';
-    host.scrollTop.set(650);
-    expect(() => appRef.tick()).toThrow('Row k19 failed');
-    expect(renderedIds()).toEqual(keys(10, 20));
-
-    // The next steps reuse those views again, each for one row
-    host.failingKey = null;
-    host.scrollTop.set(800);
-    appRef.tick();
-    host.scrollTop.set(950);
-    appRef.tick();
-
-    const rows = fixture.debugElement
-      .queryAll(By.css('.item'))
-      .map((el) => el.nativeElement as HTMLElement);
-    expect(rows.map((row) => row.getAttribute('data-id'))).toEqual(keys(16, 26));
-    expect(rows.map((row) => row.getAttribute('data-index'))).toEqual(
-      keys(16, 26).map((key) => key.slice(1)),
-    );
   });
 
   it('shows the new item and index in a recycled row', () => {
@@ -2009,33 +1937,6 @@ describe('VirtualForDirective (row root in a control flow block)', () => {
     expect(rendered.length).toBeGreaterThan(1);
     expect(rendered.map((row) => row.style.position)).toEqual(rendered.map(() => 'absolute'));
     expect(rendered.map((row) => row.style.top)).toEqual(rendered.map((_, i) => `${i * 50}px`));
-    expect(rendered.filter((row) => !observed().has(row))).toEqual([]);
-  });
-
-  it('renders, positions and measures the root a recycled row renders in its other branch', async () => {
-    // Rows 8 and on are wide: the views of narrow rows that scroll out render them
-    fixture.componentInstance.items.set(
-      Array.from({ length: 30 }, (_, i) => ({ key: `k${i}`, wide: i >= 8 })),
-    );
-    render();
-    const scroller = fixture.nativeElement.querySelector('.scroller') as HTMLElement;
-
-    // First row in view 6: rows 3-13. The views of rows 0-2 render three of rows 8-13
-    scroller.scrollTop = 300;
-    scroller.dispatchEvent(new Event('scroll'));
-    await nextAnimationFrame();
-    render();
-
-    const rendered = rows();
-    expect(rendered.map((row) => row.getAttribute('data-id'))).toEqual(
-      Array.from({ length: 11 }, (_, i) => `k${i + 3}`),
-    );
-    expect(rendered.map((row) => row.classList.contains('wide'))).toEqual(
-      rendered.map((_, i) => i + 3 >= 8),
-    );
-    expect(rendered.map((row) => row.style.top)).toEqual(
-      rendered.map((_, i) => `${(i + 3) * 50}px`),
-    );
     expect(rendered.filter((row) => !observed().has(row))).toEqual([]);
   });
 

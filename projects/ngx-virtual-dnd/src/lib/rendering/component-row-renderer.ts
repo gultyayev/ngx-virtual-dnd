@@ -98,8 +98,7 @@ function longestIncreasingRun(values: number[]): boolean[] {
  *   key), with a dev-mode warning: drag and drop needs unique IDs.
  * - Order: only the rows out of order move, around a longest increasing run that stays in place.
  * - Checks: only new, pooled and changed rows are checked, with `detectChanges()`, and none
- *   while the owner's own view is about to be checked (that check renders every row). A pooled
- *   view is checked before it goes back in the outlet (see `render`).
+ *   while the owner's own view is about to be checked (that check renders every row).
  * - Recycling (opt-in): a row that leaves is destroyed, or pooled for a row that comes in. Never
  *   the dragged item's (destroying it cancels the drag) or one a leave animation keeps in the DOM.
  */
@@ -144,14 +143,6 @@ export class ComponentRowRenderer<T> {
    * `markForCheck()` would mark every ancestor view up to the root too. None is checked while
    * `viewCheckPending`: the owner's own view is checked later in this pass, and that renders every
    * row.
-   *
-   * A pooled view is checked before it goes back in the outlet. Angular tracks the signals a row
-   * checked on its own reads with a consumer that refreshes the component view the row is in
-   * (the owner's, which checks every row) as soon as one of them is notified, without checking
-   * whether its value changed. A pooled view's check notifies some itself: its directives get the
-   * new item, and their host bindings read values computed from it (as `vdndDraggable`'s
-   * `isDragging()`). Out of the outlet the view is in no other view, so that refreshes nothing.
-   * What its check throws is rethrown once every row is in place.
    */
   render(
     outlet: ViewContainerRef,
@@ -234,7 +225,6 @@ export class ComponentRowRenderer<T> {
     // row left: created bottom up, the last row would take the first one's nodes.
     const rows: RowView<T>[] = new Array(entries.length);
     const toCheck: EmbeddedViewRef<VirtualScrollItemContext<T>>[] = [];
-    let pooledViewError: { error: unknown } | null = null;
     let previousView: EmbeddedViewRef<VirtualScrollItemContext<T>> | null = null;
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
@@ -248,18 +238,10 @@ export class ComponentRowRenderer<T> {
         }
       } else {
         const index: number = previousView ? outlet.indexOf(previousView) + 1 : 0;
-        // A pooled view is checked whatever its context (nothing checked it while detached), and
-        // before it goes back in the outlet (see above)
+        // A pooled view is checked whatever its context: nothing checked it while detached
         let view = this.#rowPool.pop();
         if (view) {
           this.#updateContext(view.context, entry);
-          if (!viewCheckPending) {
-            try {
-              view.detectChanges();
-            } catch (error) {
-              pooledViewError ??= { error };
-            }
-          }
           outlet.insert(view, index);
         } else {
           const context: VirtualScrollItemContext<T> = {
@@ -268,9 +250,9 @@ export class ComponentRowRenderer<T> {
             isSticky: entry.isSticky,
           };
           view = outlet.createEmbeddedView(template, context, index);
-          toCheck.push(view);
         }
         row = { key: keys[i], view };
+        toCheck.push(view);
       }
       rows[i] = row;
       previousView = row.view;
@@ -282,17 +264,12 @@ export class ComponentRowRenderer<T> {
 
     // When the owner's own view is checked later in this pass, that check renders every row
     if (!viewCheckPending) {
-      // The new and changed rows, top to bottom (the pooled ones were checked above)
+      // Top to bottom
       for (const view of toCheck) {
         view.detectChanges();
       }
     }
     this.#rowEntries = entries;
-
-    // Thrown only now, so the rows and the outlet stay in step for the next render
-    if (pooledViewError) {
-      throw pooledViewError.error;
-    }
   }
 
   /** The first node in `parent` of the rows from `index` on (null when none has one). */
