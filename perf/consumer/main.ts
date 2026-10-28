@@ -216,6 +216,21 @@ class ContractApp {
         const onScroll = () => {
           if (control === 'scan') for (const row of settings.rows) consumer.instance.itemId(row);
           if (control === 'checks') consumer.instance.pulse.update((value) => value + 1);
+          if (control === 'layout-thrash') {
+            const element = viewport as HTMLElement;
+            // Real alternating geometry writes/reads force synchronous rendering.
+            for (let i = 0; i < 3; i++) {
+              element.style.width = `${480 + i}px`;
+              element.getBoundingClientRect();
+            }
+            element.style.width = '';
+          }
+          if (control === 'long-tasks') {
+            const until = performance.now() + 60;
+            while (performance.now() < until) {
+              /* real per-scroll CPU regression */
+            }
+          }
           if (control === 'scroll-stall' && ++scrollEvents === 2) {
             const until = performance.now() + 500;
             while (performance.now() < until) {

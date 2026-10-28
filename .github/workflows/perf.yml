@@ -3,11 +3,9 @@ name: Performance Checks
 on:
   pull_request:
     branches: [master]
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+    types: [opened, reopened, synchronize]
     paths:
       - 'projects/ngx-virtual-dnd/**'
-      - 'src/**'
-      - 'public/**'
       - 'perf/**'
       - 'angular.json'
       - 'tsconfig*.json'
@@ -20,19 +18,13 @@ permissions:
   contents: read
   pull-requests: write
 
-# Cancel when an event arrives, not when a preceding job finishes. Unrelated
-# label events cannot cancel useful work or replace its check name.
 concurrency:
-  group: >-
-    perf-${{ github.event.pull_request.number }}-${{
-      (github.event.action == 'labeled' || github.event.action == 'unlabeled')
-      && github.event.label.name != 'perf:timing' && github.run_id || 'run' }}
+  group: perf-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   harness-unit-tests:
-    name: ${{ (github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'perf:timing' && 'Unrelated label (ignored)' || 'Performance harness tests' }}
-    if: github.event.action != 'labeled' && github.event.action != 'unlabeled' || github.event.label.name == 'perf:timing'
+    name: Performance harness tests
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -51,7 +43,7 @@ jobs:
       - run: npm run perf:test
 
   virtualization:
-    name: ${{ (github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'perf:timing' && 'Unrelated label browser checks (ignored)' || 'Virtualization contracts and demo smoke' }}
+    name: Virtualization contracts
     needs: harness-unit-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -68,11 +60,10 @@ jobs:
           npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
           npm ci
           npx playwright install --with-deps chromium
-      - name: Build the candidate demo and instrumented consumer
+      - name: Build the library and instrumented consumer
         run: |
-          npm run perf:build
           npm run perf:build:contracts
-      - name: Check virtualization and every candidate-demo workload
+      - name: Check virtualization contracts
         run: npm run perf:check
       - name: Report contracts and initial rendering
         if: always()
@@ -92,96 +83,4 @@ jobs:
           path: |
             perf/results/
             test-results/
-            dist/perf-build-failure.json
           retention-days: 90
-
-  timing:
-    name: ${{ (github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'perf:timing' && 'Unrelated label timing (ignored)' || 'Paired timing investigation (opt-in)' }}
-    needs: [harness-unit-tests, virtualization]
-    if: contains(github.event.pull_request.labels.*.name, 'perf:timing')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          path: head
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: base
-          persist-credentials: false
-      - name: Mark timing investigation pending
-        continue-on-error: true
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        with:
-          script: |
-            await require('./head/perf/ci-comment.cjs')({ github, context, phase: 'Virtualization contracts passed; paired timing investigation running' });
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: head/package-lock.json
-      - name: Prepare the common harness and install dependencies once
-        run: |
-          npm --prefix head run perf:prepare -- --base ../base
-          npm install -g "$(node -p "require('./head/package.json').packageManager.split('+')[0]")"
-          npm ci --prefix head
-          cp -al head/node_modules base/node_modules
-          cd head
-          npx playwright install --with-deps chromium
-      - name: Build the common baseline consumer against each library
-        run: |
-          npm --prefix base run perf:build
-          npm --prefix head run perf:build -- --fixture ../base
-      - name: Measure predeclared balanced blocks
-        id: measure
-        working-directory: head
-        run: |
-          set +e
-          npm run --silent perf:ab -- --base ../base --head . --profile timing --blocks 20
-          status=$?
-          npm run --silent perf:compare -- --experiment perf/results/experiment.json --decision-profile counts --json perf/results/count-comparison.json --output perf/results/count-comparison.md > /dev/null
-          count_status=$?
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          echo "count_status=$count_status" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Report timing, counts and original failures
-        if: always()
-        working-directory: head
-        run: node --experimental-strip-types perf/timing-report.ts >> "$GITHUB_STEP_SUMMARY"
-      - name: Update PR investigation report
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        with:
-          script: |
-            await require('./head/perf/ci-comment.cjs')({ github, context, phase: 'Timing investigation did not finish', reportPath: 'head/perf/results/report.md' });
-      - name: Upload raw timing and count evidence
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: timing-results
-          path: |
-            head/perf/results/
-            base/perf/results/build-*
-            head/dist/perf-build-failure.json
-            base/dist/perf-build-failure.json
-          retention-days: 90
-      - name: Enforce count budgets and measurement integrity
-        if: ${{ always() && !cancelled() }}
-        env:
-          PERF_STATUS: ${{ steps.measure.outputs.status }}
-          PERF_COUNT_STATUS: ${{ steps.measure.outputs.count_status }}
-        run: |
-          case "$PERF_COUNT_STATUS" in
-            0) echo "Count budgets passed." ;;
-            1) echo "::error::Layout/style count budget exceeded."; exit 1 ;;
-            *) echo "::error::Invalid or incomplete count evidence; see the report."; exit 1 ;;
-          esac
-          case "$PERF_STATUS" in
-            0) echo "Timing bounds passed." ;;
-            1) echo "::warning::Timing regression detected; advisory until calibration." ;;
-            2) echo "::warning::Timing inconclusive; this does not establish acceptable performance." ;;
-            *) echo "::error::Invalid or incomplete timing evidence."; exit 1 ;;
-          esac

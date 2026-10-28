@@ -1,21 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  JANK_INTERVAL_THRESHOLD_MS,
+  DROPPED_FRAME_THRESHOLD_MS,
   METRICS_SCHEMA_VERSION,
   SCENARIO_METRICS,
   aggregateScenarioMetrics,
   computeTotalBlockingTime,
-  computeFrameOverBudgetMs,
-  countJankIntervals,
-  filterLongTasksInWindow,
+  countDroppedFrames,
+  filterLongTasksSince,
+  percentile,
   readPerfCounters,
   type LongTask,
   type ScenarioMetrics,
 } from './metric-math.ts';
 
 test('metrics schema version is a positive integer (bumped when semantics change)', () => {
-  assert.equal(METRICS_SCHEMA_VERSION, 4);
+  // Schema 3 (#97): CPU-time metrics, and no drag-state debug output on the measured pages.
+  assert.ok(Number.isInteger(METRICS_SCHEMA_VERSION) && METRICS_SCHEMA_VERSION >= 3);
 });
 
 test('readPerfCounters converts CDP durations from seconds to milliseconds', () => {
@@ -47,21 +48,6 @@ test('readPerfCounters fails when CDP stops reporting a counter', () => {
   );
 });
 
-test('readPerfCounters rejects invalid renderer counters instead of producing a valid-looking sample', () => {
-  for (const value of [NaN, Infinity, -1]) {
-    assert.throws(
-      () =>
-        readPerfCounters([
-          { name: 'LayoutCount', value },
-          { name: 'RecalcStyleCount', value: 30 },
-          { name: 'ScriptDuration', value: 0.25 },
-          { name: 'TaskDuration', value: 1.5 },
-        ]),
-      /LayoutCount/,
-    );
-  }
-});
-
 test('aggregateScenarioMetrics aggregates every reported metric, main-thread time included', () => {
   const sample = (scriptDuration: number): ScenarioMetrics => ({
     durationMs: 1000,
@@ -74,30 +60,20 @@ test('aggregateScenarioMetrics aggregates every reported metric, main-thread tim
     frameCount: 60,
     avgFrameTime: 16.7,
     maxFrameGap: 20,
-    jankIntervalCount: 0,
-    frameOverBudgetMs: 0,
-    frameTimes: [16.7],
-    longTasks: [],
-    windowStartMs: 100,
-    windowEndMs: 1100,
-    visibilityState: 'visible',
-    browserVersion: 'test-browser',
-    counterWindowMs: 1001,
-    workload: { operations: 1 },
+    droppedFrames: 0,
+    p99FrameTime: 20,
   });
   const report = aggregateScenarioMetrics([sample(100), sample(120), sample(110)]);
 
   assert.deepEqual(Object.keys(report), [...SCENARIO_METRICS]);
   assert.ok(SCENARIO_METRICS.includes('scriptDuration'));
   assert.ok(SCENARIO_METRICS.includes('taskDuration'));
-  assert.ok(SCENARIO_METRICS.includes('durationMs'));
-  assert.ok(SCENARIO_METRICS.includes('frameCount'));
   assert.equal(report.scriptDuration.median, 110);
   assert.equal(report.taskDuration.median, 220);
   assert.equal(report.layoutCount.samples, 3);
 });
 
-test('filterLongTasksInWindow drops tasks outside either boundary of the scenario window', () => {
+test('filterLongTasksSince drops tasks that started before the scenario window', () => {
   // Issue #42, problems 1 & 2: buffered history / stale-observer entries from
   // before the measured window must not be attributed to the scenario.
   const tasks: LongTask[] = [
@@ -105,9 +81,8 @@ test('filterLongTasksInWindow drops tasks outside either boundary of the scenari
     { startTime: 40, duration: 60 }, // warmup
     { startTime: 120, duration: 51 }, // in-window
     { startTime: 200, duration: 70 }, // in-window
-    { startTime: 250, duration: 80 }, // after window
   ];
-  const inWindow = filterLongTasksInWindow(tasks, 100, 250);
+  const inWindow = filterLongTasksSince(tasks, 100);
   assert.equal(inWindow.length, 2);
   assert.deepEqual(
     inWindow.map((t) => t.startTime),
@@ -115,10 +90,9 @@ test('filterLongTasksInWindow drops tasks outside either boundary of the scenari
   );
 });
 
-test('filterLongTasksInWindow includes the start boundary and excludes the end boundary', () => {
+test('filterLongTasksSince keeps tasks that start exactly at the boundary', () => {
   const tasks: LongTask[] = [{ startTime: 100, duration: 55 }];
-  assert.equal(filterLongTasksInWindow(tasks, 100, 200).length, 1);
-  assert.equal(filterLongTasksInWindow(tasks, 0, 100).length, 0);
+  assert.equal(filterLongTasksSince(tasks, 100).length, 1);
 });
 
 test('computeTotalBlockingTime sums only the blocking time beyond 50ms', () => {
@@ -130,21 +104,22 @@ test('computeTotalBlockingTime sums only the blocking time beyond 50ms', () => {
   assert.equal(computeTotalBlockingTime(tasks), 41);
 });
 
-test('countJankIntervals uses a 25ms threshold, ignoring ordinary 60Hz jitter', () => {
+test('countDroppedFrames uses a ~25ms hysteresis threshold, ignoring 60Hz jitter', () => {
   // Issue #42, problem 3: 16.8ms jitter must not count the same as a real stall.
   const frames = [16.6, 16.8, 17.2, 24.9, 25.1, 50];
-  assert.equal(JANK_INTERVAL_THRESHOLD_MS, 25);
-  assert.equal(countJankIntervals(frames), 2); // only 25.1 and 50
+  assert.equal(DROPPED_FRAME_THRESHOLD_MS, 25);
+  assert.equal(countDroppedFrames(frames), 2); // only 25.1 and 50
 });
 
-test('countJankIntervals accepts an explicit threshold', () => {
+test('countDroppedFrames accepts an explicit threshold', () => {
   const frames = [16.6, 16.8, 17.2, 50];
-  assert.equal(countJankIntervals(frames, 16.7), 3);
+  assert.equal(countDroppedFrames(frames, 16.7), 3);
 });
 
-test('frame-over-budget severity distinguishes one large stall from several small stalls', () => {
-  assert.ok(computeFrameOverBudgetMs([1000]) > computeFrameOverBudgetMs([33, 33, 33]));
-  assert.equal(computeFrameOverBudgetMs([16.6, 16.67]), 0);
-  assert.ok(Math.abs(computeFrameOverBudgetMs([20, 50]) - 36.66) < 0.001);
-  assert.equal(computeFrameOverBudgetMs([]), 0);
+test('percentile matches nearest-rank indexing and clamps edge cases', () => {
+  const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  assert.equal(percentile(values, 0.99), 10);
+  assert.equal(percentile(values, 0.5), 5);
+  assert.equal(percentile([], 0.99), 0);
+  assert.equal(percentile([42], 0.99), 42);
 });

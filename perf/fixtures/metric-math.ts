@@ -14,36 +14,30 @@ export interface LongTask {
 
 /**
  * Version of the metric *semantics* produced by the collector. Bump this whenever
- * a change alters what a number means (long-task attribution window, frame interval
+ * a change alters what a number means (long-task attribution window, dropped-frame
  * threshold, aggregation, the page a scenario measures, …). `compare.ts` fails closed
  * when a baseline was produced by a different schema, because old and new numbers are
  * then not comparable — the pre-#42 harness (leaking observer, `buffered: true`,
  * >16.7ms dropped frames) is schema 1; schema 2 measured the main demo with its debug
- * panel, which re-rendered the whole demo every drag frame (#97). Schema 4
- * preserves raw measurements and workload evidence, bounds observers by
- * the page's monotonic clock, and measures stalled-frame severity separately from count.
+ * panel, which re-rendered the whole demo every drag frame (#97); this collector is
+ * schema 3 (pages without drag-state debug output, plus main-thread time).
  */
-export const METRICS_SCHEMA_VERSION = 4;
+export const METRICS_SCHEMA_VERSION = 3;
 
 /**
  * Frame intervals below this are treated as ordinary 60Hz scheduling jitter.
  * ~1.5x the 16.67ms vsync interval, so a 16.8ms frame is no longer classified
  * the same as a real ~50ms stall (issue #42, problem 3).
  */
-export const JANK_INTERVAL_THRESHOLD_MS = 25;
-export const FRAME_BUDGET_MS = 16.67;
+export const DROPPED_FRAME_THRESHOLD_MS = 25;
 
 /**
  * Keep only long tasks that started at/after the scenario window began.
  * Guards against buffered/stale-observer entries from page load or warmup
  * leaking into the measured window (issue #42, problems 1 & 2).
  */
-export function filterLongTasksInWindow(
-  longTasks: LongTask[],
-  startMs: number,
-  endMs: number,
-): LongTask[] {
-  return longTasks.filter((task) => task.startTime >= startMs && task.startTime < endMs);
+export function filterLongTasksSince(longTasks: LongTask[], sinceMs: number): LongTask[] {
+  return longTasks.filter((task) => task.startTime >= sinceMs);
 }
 
 /** Total Blocking Time: sum of each long task's duration beyond the 50ms budget. */
@@ -51,36 +45,26 @@ export function computeTotalBlockingTime(longTasks: LongTask[]): number {
   return longTasks.reduce((sum, task) => sum + Math.max(0, task.duration - 50), 0);
 }
 
-/** Count intervals exceeding the jank threshold; this is not a missed-frame count. */
-export function countJankIntervals(
+/** Count frame intervals that exceed the dropped-frame hysteresis threshold. */
+export function countDroppedFrames(
   frameTimes: number[],
-  threshold: number = JANK_INTERVAL_THRESHOLD_MS,
+  threshold: number = DROPPED_FRAME_THRESHOLD_MS,
 ): number {
   return frameTimes.filter((t) => t > threshold).length;
 }
 
-/** Sum stalled time beyond the 60Hz budget, preserving the severity of long gaps. */
-export function computeFrameOverBudgetMs(frameTimes: number[]): number {
-  return frameTimes.reduce((sum, gap) => sum + Math.max(0, gap - FRAME_BUDGET_MS), 0);
+/** Nearest-rank percentile (0-1) matching the aggregation used elsewhere. */
+export function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.ceil(sorted.length * p) - 1;
+  return sorted[Math.min(Math.max(index, 0), sorted.length - 1)];
 }
 
 /** One entry of CDP `Performance.getMetrics`. */
 export interface CdpMetric {
   name: string;
   value: number;
-}
-
-/** CDP counters must be present exactly once, finite and nonnegative. */
-export function readCdpMetric(metrics: CdpMetric[], name: string): number {
-  const matches = metrics.filter((metric) => metric.name === name);
-  if (matches.length !== 1) {
-    throw new Error(`CDP Performance.getMetrics must report ${name} exactly once`);
-  }
-  const value = matches[0].value;
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error(`CDP Performance.getMetrics reported invalid ${name}: ${value}`);
-  }
-  return value;
 }
 
 /** Cumulative renderer counters; a scenario's value is the delta across it. */
@@ -99,7 +83,13 @@ export interface PerfCounters {
  * the gate without measuring anything.
  */
 export function readPerfCounters(metrics: CdpMetric[]): PerfCounters {
-  const get = (name: string) => readCdpMetric(metrics, name);
+  const get = (name: string) => {
+    const metric = metrics.find((m) => m.name === name);
+    if (!metric) {
+      throw new Error(`CDP Performance.getMetrics did not report ${name}`);
+    }
+    return metric.value;
+  };
   return {
     layoutCount: get('LayoutCount'),
     recalcStyleCount: get('RecalcStyleCount'),
@@ -107,8 +97,6 @@ export function readPerfCounters(metrics: CdpMetric[]): PerfCounters {
     taskDuration: get('TaskDuration') * 1000,
   };
 }
-
-export type WorkloadEvidence = Record<string, number | string | boolean | string[]>;
 
 /** What one measured iteration of a scenario produced. */
 export interface ScenarioMetrics extends PerfCounters {
@@ -118,33 +106,22 @@ export interface ScenarioMetrics extends PerfCounters {
   frameCount: number;
   avgFrameTime: number;
   maxFrameGap: number;
-  jankIntervalCount: number;
-  frameOverBudgetMs: number;
-  frameTimes: number[];
-  longTasks: LongTask[];
-  windowStartMs: number;
-  windowEndMs: number;
-  visibilityState: string;
-  browserVersion: string;
-  /** Counter snapshots bracket the observer window and include transport/setup overhead. */
-  counterWindowMs: number;
-  workload: WorkloadEvidence;
+  droppedFrames: number;
+  p99FrameTime: number;
 }
 
 /** The metrics every scenario report carries, in report order. */
 export const SCENARIO_METRICS = [
-  'durationMs',
-  'frameCount',
-  'taskDuration',
-  'scriptDuration',
+  'totalBlockingTime',
+  'longTaskCount',
   'layoutCount',
   'recalcStyleCount',
-  'longTaskCount',
-  'totalBlockingTime',
+  'scriptDuration',
+  'taskDuration',
   'avgFrameTime',
   'maxFrameGap',
-  'jankIntervalCount',
-  'frameOverBudgetMs',
+  'droppedFrames',
+  'p99FrameTime',
 ] as const satisfies readonly (keyof ScenarioMetrics)[];
 
 export type ScenarioMetricName = (typeof SCENARIO_METRICS)[number];

@@ -1,6 +1,14 @@
 /** Test consumer instrumentation; none of this is part of the published library. */
 export type Renderer = 'component' | 'directive';
-export type Control = 'none' | 'scan' | 'checks' | 'rows' | 'stall' | 'scroll-stall';
+export type Control =
+  | 'none'
+  | 'scan'
+  | 'checks'
+  | 'rows'
+  | 'stall'
+  | 'scroll-stall'
+  | 'layout-thrash'
+  | 'long-tasks';
 
 export interface WorkCounters {
   hostChecks: number;

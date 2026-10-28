@@ -24,12 +24,6 @@
     "e2e:ui": "playwright test --ui",
     "e2e:headed": "playwright test --headed",
     "perf": "playwright test --config perf/playwright.perf.config.ts",
-    "perf:build": "node --experimental-strip-types perf/build.ts",
-    "perf:build:contracts": "node --experimental-strip-types perf/build-contracts.ts",
-    "perf:check": "playwright test --config perf/playwright.check.config.ts",
-    "perf:prepare": "node --experimental-strip-types perf/prepare.ts",
-    "perf:ab": "node --experimental-strip-types perf/run.ts",
-    "perf:a/a": "node --experimental-strip-types perf/run.ts --calibration",
     "perf:report": "node --experimental-strip-types perf/report.ts",
     "perf:compare": "node --experimental-strip-types perf/compare.ts",
     "perf:test": "node --experimental-strip-types --test \"perf/fixtures/*.test.ts\"",
@@ -39,7 +33,9 @@
     "release": "node scripts/release.js",
     "release:dry-run": "node scripts/release.js --dry-run",
     "release:alpha": "node scripts/release.js --pre-release",
-    "release:alpha:dry-run": "node scripts/release.js --pre-release --dry-run"
+    "release:alpha:dry-run": "node scripts/release.js --pre-release --dry-run",
+    "perf:build:contracts": "node --experimental-strip-types perf/build-contracts.ts",
+    "perf:check": "playwright test --config perf/playwright.check.config.ts"
   },
   "prettier": {
     "printWidth": 100,

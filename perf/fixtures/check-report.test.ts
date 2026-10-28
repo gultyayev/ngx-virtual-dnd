@@ -4,72 +4,90 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
+import { CONTRACT_CASES } from '../contracts/cases.ts';
 
 const script = resolve(import.meta.dirname, '../check-report.ts');
-
-test('check report rejects missing, skipped, failed and incomplete inventories', () => {
+const report = () => ({
+  stats: { expected: CONTRACT_CASES.length, unexpected: 0, skipped: 0, flaky: 0 },
+  errors: [],
+  suites: [
+    {
+      specs: CONTRACT_CASES.map(({ title }) => ({
+        title,
+        tests: [{ status: 'expected', results: [{ status: 'passed', retry: 0 }] }],
+      })),
+    },
+  ],
+});
+function fixture(run: (root: string, invoke: () => ReturnType<typeof spawnSync>) => void) {
   const root = mkdtempSync(resolve(tmpdir(), 'perf-check-report-'));
   const env = { ...process.env };
   delete env['NODE_TEST_CONTEXT'];
-  const run = () => spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8', env });
+  mkdirSync(resolve(root, 'perf/results'), { recursive: true });
   try {
-    assert.equal(run().status, 1);
-    for (const stats of [
-      { expected: 13, unexpected: 0, skipped: 1, flaky: 0 },
-      { expected: 12, unexpected: 1, skipped: 0, flaky: 0 },
-      { expected: 12, unexpected: 0, skipped: 0, flaky: 0 },
-      { expected: 13, unexpected: 0, skipped: 0, flaky: 1 },
-    ]) {
-      writeFileSync(
-        resolve(root, 'perf/results/check.json'),
-        JSON.stringify({ stats, errors: [] }),
-      );
-      assert.equal(run().status, 1);
+    run(root, () => spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8', env }));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test('report requires every registered contract exactly once, not a hard-coded count', () => {
+  fixture((root, invoke) => {
+    const write = (value: unknown) =>
+      writeFileSync(resolve(root, 'perf/results/check.json'), JSON.stringify(value));
+    write(report());
+    assert.equal(invoke().status, 0);
+    for (const mutation of [
+      'missing',
+      'duplicate',
+      'unknown',
+      'skipped',
+      'retry',
+      'empty',
+    ] as const) {
+      const value = report();
+      const specs = value.suites[0].specs;
+      if (mutation === 'missing') specs.pop();
+      if (mutation === 'duplicate') specs[1] = specs[0];
+      if (mutation === 'unknown') specs[0].title = 'unregistered check';
+      if (mutation === 'skipped') specs[0].tests[0].results[0].status = 'skipped';
+      if (mutation === 'retry') specs[0].tests[0].results[0].retry = 1;
+      if (mutation === 'empty') specs[0].tests = [];
+      write(value);
+      assert.equal(invoke().status, 1, mutation);
       assert.match(
         readFileSync(resolve(root, 'perf/results/check.md'), 'utf8'),
         /failed or are incomplete/,
       );
     }
-    writeFileSync(
-      resolve(root, 'perf/results/check.json'),
-      JSON.stringify({
-        stats: { expected: 13, unexpected: 0, skipped: 0, flaky: 0 },
-        errors: [],
-      }),
-    );
-    assert.equal(run().status, 0);
+  });
+});
+
+test('missing, malformed and failed reports cannot keep a passing verdict', () => {
+  fixture((root, invoke) => {
+    assert.equal(invoke().status, 1);
     writeFileSync(resolve(root, 'perf/results/check.json'), '{invalid');
-    assert.equal(run().status, 1);
+    assert.equal(invoke().status, 1);
     assert.match(
       readFileSync(resolve(root, 'perf/results/check.md'), 'utf8'),
       /Invalid check evidence/,
     );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+    const value = report();
+    value.stats.unexpected++;
+    writeFileSync(resolve(root, 'perf/results/check.json'), JSON.stringify(value));
+    assert.equal(invoke().status, 1);
+  });
 });
 
 test('setup failure report shows the compiler error instead of a previous pass', () => {
-  const root = mkdtempSync(resolve(tmpdir(), 'perf-check-build-failure-'));
-  try {
-    mkdirSync(resolve(root, 'perf/results'), { recursive: true });
-    writeFileSync(
-      resolve(root, 'perf/results/check.json'),
-      JSON.stringify({
-        stats: { expected: 13, unexpected: 0, skipped: 0, flaky: 0 },
-        errors: [],
-      }),
-    );
+  fixture((root, invoke) => {
+    writeFileSync(resolve(root, 'perf/results/check.json'), JSON.stringify(report()));
     writeFileSync(
       resolve(root, 'perf/results/build-failure.md'),
       'Consumer build failed: NG8002 removedInput',
     );
-    const env = { ...process.env };
-    delete env['NODE_TEST_CONTEXT'];
-    const result = spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8', env });
+    const result = invoke();
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /NG8002 removedInput/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+    assert.match(String(result.stdout), /NG8002 removedInput/);
+  });
 });
