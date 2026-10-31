@@ -8,6 +8,7 @@ import {
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { VirtualForDirective } from './virtual-for.directive';
+import { DraggableDirective } from './draggable.directive';
 import { ScrollableDirective } from './scrollable.directive';
 import { VirtualViewportComponent } from '../components/virtual-viewport.component';
 import { VirtualContentComponent } from '../components/virtual-content.component';
@@ -1327,9 +1328,7 @@ describe('VirtualForDirective (change detection scope)', () => {
     expect(renderedIds()).toEqual(Array.from({ length: 11 }, (_, i) => `k${i + 1}`));
     expect(host.hostRenders).toBe(0);
     // k1 becomes the first row and k7 stops being the last; k8-k11 are new or recycled
-    expect([...new Set(host.rowRenders)].sort()).toEqual(
-      ['k1', 'k7', 'k8', 'k9', 'k10', 'k11'].sort(),
-    );
+    expect([...host.rowRenders].sort()).toEqual(['k1', 'k7', 'k8', 'k9', 'k10', 'k11'].sort());
   });
 
   it('shows the new item and index in a recycled row', () => {
@@ -1401,6 +1400,102 @@ describe('VirtualForDirective (change detection scope)', () => {
     appRef.tick();
 
     expect(selectedAttr('k22')).toBe('true');
+  });
+});
+
+/** Draggable rows, counting each check of a row and of this host's template */
+@Component({
+  template: `
+    <div class="host-render" [attr.data-count]="countHostRender()"></div>
+    <div class="scroller">
+      <ng-container
+        *vdndVirtualFor="let item of items; itemHeight: 50; trackBy: trackByFn; droppableId: 'list'"
+      >
+        <div
+          class="item"
+          [vdndDraggable]="item.key"
+          vdndDraggableGroup="g"
+          [vdndDraggableData]="item"
+        >
+          {{ countRowRender(item.key) }}
+        </div>
+      </ng-container>
+    </div>
+  `,
+  imports: [VirtualForDirective, DraggableDirective],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [{ provide: VDND_SCROLL_CONTAINER, useExisting: DraggableRowsHostComponent }],
+})
+class DraggableRowsHostComponent implements VdndScrollContainer {
+  readonly items = Array.from({ length: 1000 }, (_, i) => ({ key: `k${i}` }));
+  readonly trackByFn = (_index: number, item: { key: string }): string => item.key;
+
+  hostRenders = 0;
+  readonly rowRenders: string[] = [];
+
+  // 200px of 50px rows: 4 in view, plus 3 overscan on each side
+  scrollTop = signal(0);
+  containerHeight = signal(200);
+  nativeElement = document.createElement('div');
+  scrollTo = jest.fn();
+
+  countHostRender(): number {
+    return ++this.hostRenders;
+  }
+
+  countRowRender(key: string): string {
+    this.rowRenders.push(key);
+    return key;
+  }
+}
+
+describe('VirtualForDirective (recycled draggable rows)', () => {
+  let fixture: ComponentFixture<DraggableRowsHostComponent>;
+  let host: DraggableRowsHostComponent;
+  let appRef: ApplicationRef;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  const keys = (from: number, to: number): string[] =>
+    Array.from({ length: to - from + 1 }, (_, i) => `k${from + i}`);
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    TestBed.configureTestingModule({ imports: [DraggableRowsHostComponent] });
+    fixture = TestBed.createComponent(DraggableRowsHostComponent);
+    host = fixture.componentInstance;
+    appRef = TestBed.inject(ApplicationRef);
+    fixture.detectChanges();
+    appRef.tick();
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  it('re-renders only the new rows and the rows whose context changed, step after step', () => {
+    // First row in view 10: rows 7-17
+    host.scrollTop.set(500);
+    appRef.tick();
+
+    // Three rows a step: three rows leave, and their views render the three that come in
+    for (let first = 13; first <= 22; first += 3) {
+      host.hostRenders = 0;
+      host.rowRenders.length = 0;
+
+      host.scrollTop.set(first * 50);
+      appRef.tick();
+
+      const rows = fixture.debugElement
+        .queryAll(By.css('.item'))
+        .map((el) => (el.nativeElement as HTMLElement).getAttribute('data-draggable-id'));
+      expect(rows).toEqual(keys(first - 3, first + 7));
+      // The new first row, the row that stops being the last, and the three new rows
+      expect([...host.rowRenders].sort()).toEqual(
+        [`k${first - 3}`, `k${first + 4}`, ...keys(first + 5, first + 7)].sort(),
+      );
+      expect(host.hostRenders).toBe(0);
+    }
   });
 });
 

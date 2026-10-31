@@ -11,7 +11,9 @@ import {
   OnDestroy,
   OnInit,
   output,
+  Signal,
   signal,
+  untracked,
 } from '@angular/core';
 import { DragStateService } from '../services/drag-state.service';
 import { PositionCalculatorService } from '../services/position-calculator.service';
@@ -92,14 +94,14 @@ const HANDLED_KEYS = new Set([
 @Directive({
   selector: '[vdndDraggable]',
   host: {
-    '[attr.data-draggable-id]': 'vdndDraggable()',
+    '[attr.data-draggable-id]': 'hostId()',
     '[class.vdnd-draggable]': 'true',
-    '[class.vdnd-draggable-dragging]': 'isDragging()',
-    '[class.vdnd-draggable-disabled]': 'disabled()',
-    '[class.vdnd-drag-pending]': 'isPending()',
-    '[style.display]': 'isDragging() ? "none" : null',
-    '[attr.aria-grabbed]': 'isDragging() ? "true" : "false"',
-    '[tabindex]': 'disabled() ? -1 : 0',
+    '[class.vdnd-draggable-dragging]': 'hostDragging()',
+    '[class.vdnd-draggable-disabled]': 'hostDisabled()',
+    '[class.vdnd-drag-pending]': 'hostPending()',
+    '[style.display]': 'hostDragging() ? "none" : null',
+    '[attr.aria-grabbed]': 'hostDragging() ? "true" : "false"',
+    '[tabindex]': 'hostDisabled() ? -1 : 0',
     '(mousedown)': 'onPointerDown($event, false)',
   },
 })
@@ -187,6 +189,47 @@ export class DraggableDirective implements OnChanges, OnInit, OnDestroy {
     const draggedItem = this.#dragState.draggedItem();
     return draggedItem?.draggableId === this.vdndDraggable();
   });
+
+  /**
+   * The ID the host bindings show. They read this draggable's inputs untracked and track only the
+   * drag state, so neither the ID nor a computed of it (as `isDragging`) is a signal they read.
+   * An input changes only while the view of this element is checked (or `setInput()` marks that
+   * view for check), and that check evaluates the host bindings too, so they stay current. When a
+   * signal a row's host bindings read is notified, Angular can check the component view the row
+   * is in again, every row in it, even when the signal's value ends up the same: a virtual list
+   * that reuses a row's view for another item hands it a new ID on each scroll step.
+   */
+  protected hostId(): string {
+    return untracked(this.vdndDraggable);
+  }
+
+  /** Whether the host bindings show this draggable disabled (see `hostId`) */
+  protected hostDisabled(): boolean {
+    return untracked(this.disabled);
+  }
+
+  /** Whether the item of `id` is dragged, for the host bindings (see `hostDragging`) */
+  #hostDragged: { id: string; isDragged: Signal<boolean> } | null = null;
+
+  /**
+   * `isDragging` for the host bindings, tracking only the drag (see `hostId`): a computed of the
+   * dragged item's ID for this draggable's current ID, made anew when the ID changes. A view
+   * that reads it is checked again when this draggable's own state flips, not whenever a drag
+   * starts or ends, as with a plain read of the dragged item's ID.
+   */
+  protected hostDragging(): boolean {
+    const id = untracked(this.vdndDraggable);
+    if (this.#hostDragged?.id !== id) {
+      this.#hostDragged = { id, isDragged: computed(() => this.#dragState.draggedItemId() === id) };
+    }
+    return this.#hostDragged.isDragged();
+  }
+
+  /** `isPending` for the host bindings, tracking only the press (see `hostId`) */
+  protected hostPending(): boolean {
+    const pendingId = this.#pendingId();
+    return pendingId !== null && pendingId === untracked(this.vdndDraggable);
+  }
 
   /** The services picking an item up (see `drag-source.ts`) uses */
   readonly #dragSourceDeps: DragSourceDeps = {

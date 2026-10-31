@@ -18,3 +18,4 @@ Load this doc when debugging unexpected behavior.
 | Unit test can't find drag preview element             | Preview teleported to overlay container                            | Use `document.querySelector()` instead of `fixture.debugElement.query()`                |
 | Short item displaces tall item too early              | Probe enters tall item's range at ~20% overlap                     | Already fixed — midpoint refinement in `DragIndexCalculatorService`                     |
 | Autoscroll stops short of the end, pointer at rest    | List grew after autoscroll found no room left                      | Already fixed — `AutoScrollService` retries it when its geometry changes                |
+| Each recycling scroll step checks every row           | A row's host binding reads a signal input of the row               | Angular limitation (decision #10): read it in the row's template, or untracked          |

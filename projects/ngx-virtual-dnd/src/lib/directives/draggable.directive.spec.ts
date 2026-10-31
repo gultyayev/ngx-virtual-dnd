@@ -1,9 +1,11 @@
 import {
+  ChangeDetectionStrategy,
   Component,
   DebugElement,
   Directive,
   ErrorHandler,
   inject,
+  input,
   NgZone,
   OnInit,
   signal,
@@ -523,6 +525,38 @@ describe('DraggableDirective', () => {
       expect(draggableNative.getAttribute('data-draggable-id')).toBe('test-item');
     });
 
+    it('should show a new ID in data-draggable-id', () => {
+      component.draggableId.set('other-item');
+      fixture.detectChanges();
+
+      expect(draggableNative.getAttribute('data-draggable-id')).toBe('other-item');
+    });
+
+    it('should show as dragged while its ID is the dragged item', () => {
+      dragStateService.startDrag({
+        draggableId: 'other-item',
+        droppableId: 'list',
+        element: document.createElement('div'),
+        height: 50,
+        width: 100,
+      });
+      fixture.detectChanges();
+      expect(draggableNative.classList.contains('vdnd-draggable-dragging')).toBe(false);
+
+      // As a recycled row that renders the dragged item, then another one again
+      component.draggableId.set('other-item');
+      fixture.detectChanges();
+      expect(draggableNative.classList.contains('vdnd-draggable-dragging')).toBe(true);
+      expect(draggableNative.style.display).toBe('none');
+      expect(draggableNative.getAttribute('aria-grabbed')).toBe('true');
+
+      component.draggableId.set('test-item');
+      fixture.detectChanges();
+      expect(draggableNative.classList.contains('vdnd-draggable-dragging')).toBe(false);
+      expect(draggableNative.style.display).toBe('');
+      expect(draggableNative.getAttribute('aria-grabbed')).toBe('false');
+    });
+
     it('should have vdnd-draggable class', () => {
       expect(draggableNative.classList.contains('vdnd-draggable')).toBe(true);
     });
@@ -553,6 +587,17 @@ describe('DraggableDirective', () => {
       fixture.detectChanges();
 
       expect(draggableNative.getAttribute('tabindex')).toBe('-1');
+    });
+
+    it('should show it is enabled again when disabled turns off', () => {
+      component.disabled.set(true);
+      fixture.detectChanges();
+
+      component.disabled.set(false);
+      fixture.detectChanges();
+
+      expect(draggableNative.classList.contains('vdnd-draggable-disabled')).toBe(false);
+      expect(draggableNative.getAttribute('tabindex')).toBe('0');
     });
 
     it('should not start drag when disabled', () => {
@@ -2927,5 +2972,65 @@ describe('DraggableDirective', () => {
 
       extended.destroy();
     });
+  });
+});
+
+/** A list of draggable items that counts the checks of its rows */
+@Component({
+  selector: 'vdnd-test-counting-list',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    @for (id of ids(); track id) {
+      <div [vdndDraggable]="id" vdndDraggableGroup="test-group">{{ countRow(id) }}</div>
+    }
+  `,
+  imports: [DraggableDirective],
+})
+class CountingListComponent {
+  readonly ids = input.required<string[]>();
+  rowChecks = 0;
+
+  countRow(id: string): string {
+    this.rowChecks++;
+    return id;
+  }
+}
+
+@Component({
+  template: `
+    <vdnd-test-counting-list [ids]="['a-1', 'a-2']" />
+    <vdnd-test-counting-list [ids]="['b-1', 'b-2']" />
+  `,
+  imports: [CountingListComponent],
+})
+class TwoListsHostComponent {}
+
+describe('DraggableDirective (lists of other items during a drag)', () => {
+  it('renders only the list of the dragged item when a drag starts and ends', () => {
+    const fixture = TestBed.createComponent(TwoListsHostComponent);
+    fixture.detectChanges();
+    const dragState = TestBed.inject(DragStateService);
+    const [listA, listB] = fixture.debugElement
+      .queryAll(By.directive(CountingListComponent))
+      .map((list) => list.componentInstance as CountingListComponent);
+    listA.rowChecks = 0;
+    listB.rowChecks = 0;
+
+    dragState.startDrag({
+      draggableId: 'a-1',
+      droppableId: 'list-a',
+      element: document.createElement('div'),
+      height: 50,
+      width: 100,
+    });
+    fixture.detectChanges();
+    dragState.endDrag();
+    fixture.detectChanges();
+
+    // The dragged row shows as dragged, then not: its list renders
+    expect(listA.rowChecks).toBeGreaterThan(0);
+    // No row of the other list changes
+    expect(listB.rowChecks).toBe(0);
+    fixture.destroy();
   });
 });

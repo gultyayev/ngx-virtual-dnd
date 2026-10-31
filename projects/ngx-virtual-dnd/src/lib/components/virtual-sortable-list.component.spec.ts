@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { VirtualSortableListComponent } from './virtual-sortable-list.component';
+import { DraggableDirective } from '../directives/draggable.directive';
 import { DragStateService } from '../services/drag-state.service';
 import {
   DraggedItem,
@@ -93,6 +94,45 @@ class ListeningHostComponent {
 class RecyclingHostComponent {
   items: Item[] = Array.from({ length: 30 }, (_, i) => ({ id: `item-${i}` }));
   getId = (item: Item): string => item.id;
+}
+
+// Recycled rows of draggable items, counting each check of a row and of this host's template
+@Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <span>{{ countRender() }}</span>
+    <vdnd-sortable-list
+      droppableId="list"
+      group="g"
+      [items]="items"
+      [itemHeight]="50"
+      [containerHeight]="200"
+      [itemIdFn]="getId"
+      [itemTemplate]="tpl"
+      [recycleRows]="true"
+    />
+    <ng-template #tpl let-item>
+      <div [vdndDraggable]="item.id" vdndDraggableGroup="g" [vdndDraggableData]="item">
+        {{ countRowRender(item.id) }}
+      </div>
+    </ng-template>
+  `,
+  imports: [VirtualSortableListComponent, DraggableDirective],
+})
+class DraggableRowsHostComponent {
+  items: Item[] = Array.from({ length: 1000 }, (_, i) => ({ id: `item-${i}` }));
+  getId = (item: Item): string => item.id;
+  renders = 0;
+  readonly rowRenders: string[] = [];
+
+  countRender(): number {
+    return ++this.renders;
+  }
+
+  countRowRender(id: string): string {
+    this.rowRenders.push(id);
+    return id;
+  }
 }
 
 // A list with content pinned over the top and bottom of its rows
@@ -212,6 +252,41 @@ describe('VirtualSortableListComponent', () => {
     expect(element.querySelector('[data-draggable-id="item-0"]')).toBeNull();
     expect(first?.isConnected).toBe(true);
     expect(first?.textContent?.trim()).toBe(first?.getAttribute('data-draggable-id'));
+    fixture.destroy();
+  });
+
+  it('checks only the rows that scroll in when it recycles draggable rows', async () => {
+    const fixture = TestBed.createComponent(DraggableRowsHostComponent);
+    fixture.detectChanges();
+    const host = fixture.componentInstance;
+    const element = fixture.nativeElement as HTMLElement;
+    const scroller = element.querySelector('vdnd-virtual-scroll') as HTMLElement;
+    const scrollTo = async (scrollTop: number): Promise<void> => {
+      scroller.scrollTop = scrollTop;
+      scroller.dispatchEvent(new Event('scroll'));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      fixture.detectChanges();
+    };
+    const ids = (from: number, to: number): string[] =>
+      Array.from({ length: to - from + 1 }, (_, i) => `item-${from + i}`);
+
+    // First row in view 10: rows 7-17
+    await scrollTo(500);
+
+    // Three rows a step: three rows leave, and their views render the three that come in
+    for (let first = 13; first <= 22; first += 3) {
+      host.renders = 0;
+      host.rowRenders.length = 0;
+
+      await scrollTo(first * 50);
+
+      const rows = Array.from(element.querySelectorAll('[data-draggable-id]'));
+      expect(rows.map((row) => row.getAttribute('data-draggable-id'))).toEqual(
+        ids(first - 3, first + 7),
+      );
+      expect([...host.rowRenders].sort()).toEqual(ids(first + 5, first + 7).sort());
+      expect(host.renders).toBe(0);
+    }
     fixture.destroy();
   });
 
