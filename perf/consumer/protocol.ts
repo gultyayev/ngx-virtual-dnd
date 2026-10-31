@@ -4,6 +4,7 @@ export type Control =
   | 'none'
   | 'scan'
   | 'checks'
+  | 'row-checks'
   | 'rows'
   | 'stall'
   | 'scroll-stall'

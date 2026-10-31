@@ -63,6 +63,42 @@ test('report requires every registered contract exactly once, not a hard-coded c
   });
 });
 
+test('scaling rows show the host and row checks of every list size', () => {
+  fixture((root, invoke) => {
+    const scaling = {
+      renderer: 'directive',
+      dynamic: false,
+      results: [
+        { hostChecks: 0, rowChecks: 119 },
+        { hostChecks: 0, rowChecks: 119 },
+        { hostChecks: 2, rowChecks: 120 },
+      ].map((work) => ({
+        mountMs: 5,
+        pooled: 4,
+        metrics: { layoutCount: 24, recalcStyleCount: 24 },
+        work: { ...work, keyReads: 479 },
+      })),
+    };
+    const value = report();
+    // Playwright's JSON reporter keeps attachments on the test result, base64-encoded
+    Object.assign(value.suites[0].specs[0].tests[0].results[0], {
+      attachments: [
+        {
+          name: 'virtualization-scaling',
+          contentType: 'application/json',
+          body: Buffer.from(JSON.stringify(scaling)).toString('base64'),
+        },
+      ],
+    });
+    writeFileSync(resolve(root, 'perf/results/check.json'), JSON.stringify(value));
+    assert.equal(invoke().status, 0);
+    assert.match(
+      readFileSync(resolve(root, 'perf/results/check.md'), 'utf8'),
+      /^\| directive \/ fixed \| 0 \/ 0 \/ 2 \| 119 \/ 119 \/ 120 \| 479 \/ 479 \/ 479 \|/m,
+    );
+  });
+});
+
 test('missing, malformed and failed reports cannot keep a passing verdict', () => {
   fixture((root, invoke) => {
     assert.equal(invoke().status, 1);
