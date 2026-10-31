@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.6.4](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.3...v3.6.4) (2026-10-31)
+
+### Performance
+
+- **lib:** check only the new and changed rows when reusing pooled row views ([#172](https://github.com/gultyayev/ngx-virtual-dnd/issues/172)) ([37150e3](https://github.com/gultyayev/ngx-virtual-dnd/commit/37150e391495d097e4e4334025dee4d9376826bd))
+
 ## [3.6.3](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.2...v3.6.3) (2026-10-27)
 
 ### Bug Fixes
