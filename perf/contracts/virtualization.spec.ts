@@ -8,6 +8,11 @@ const SIZES = [1_000, 10_000, 100_000];
 const MAX_ROWS = 18;
 const MAX_LIVE_VIEWS = MAX_ROWS + 20;
 const CHECKPOINTS = 24;
+// Each checkpoint brings ROW_STEP rows into the rendered range; after the first, in the views of
+// the rows that left. Only those rows may be checked, and with the directive the new first row
+// and the former last row, whose `first`/`last` flags change: never the rows that stay (#171).
+const ROW_STEP = 3;
+const CONTEXT_CHANGES: Record<Renderer, number> = { component: 0, directive: 2 };
 const MAX_MOUNT_MS = 500;
 const MAX_FRAME_GAP_MS = 250;
 // One incidental GC/host scheduling pause is tolerated; per-step 60ms work is not.
@@ -22,7 +27,7 @@ async function mount(page: Page, options: Parameters<ContractConsumer['mount']>[
 }
 async function scroll(page: Page) {
   await page.evaluate(() => window.__vdndContract.reset());
-  const metrics = await measure(page, () => scrollCheckpoints(page));
+  const metrics = await measure(page, () => scrollCheckpoints(page, CHECKPOINTS, ROW_STEP));
   return { work: await page.evaluate(() => window.__vdndContract.snapshot()), metrics };
 }
 function checkResponsiveness(metrics: BrowserWork): void {
@@ -44,14 +49,11 @@ function checkRendering(metrics: BrowserWork): void {
   ).toBeLessThanOrEqual(CHECKPOINTS);
 }
 function checkWork(work: WorkCounters, renderer: Renderer = 'component'): void {
-  // Pooled-view insertion currently refreshes visible templates and, for the
-  // directive, its declaration view. The separate no-reuse case permits neither.
-  expect(work.hostChecks, 'scroll must bound consumer host checks').toBeLessThanOrEqual(
-    renderer === 'directive' ? CHECKPOINTS : 0,
-  );
-  expect(work.rowChecks, 'row checks must stay bounded by the visible window').toBeLessThanOrEqual(
-    CHECKPOINTS * 24,
-  );
+  expect(work.hostChecks, 'scroll must not check the consumer host').toBe(0);
+  expect(
+    work.rowChecks,
+    'scroll may check only the rows that come in or change their context',
+  ).toBeLessThanOrEqual(CHECKPOINTS * (ROW_STEP + CONTEXT_CHANGES[renderer]));
   expect(work.keyReads, 'ordinary scrolling must not scan all item IDs').toBeLessThanOrEqual(
     CHECKPOINTS * 150,
   );
@@ -138,7 +140,7 @@ for (const scenario of CONTRACT_CASES) {
         .locator('[data-draggable-id]')
         .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-draggable-id')));
       await page.evaluate(() => window.__vdndContract.reset());
-      await scrollCheckpoints(page, 1, 3);
+      await scrollCheckpoints(page, 1, ROW_STEP);
       const work = await page.evaluate(() => window.__vdndContract.snapshot());
       const ids = await page
         .locator('[data-draggable-id]')
@@ -204,6 +206,18 @@ for (const scenario of CONTRACT_CASES) {
         else expect(work.keyReads).toBeGreaterThan(CHECKPOINTS * 150);
         expect(() => checkWork(work)).toThrow();
       }
+      // Every rendered row checked again on each reused view, the host clean (#171)
+      await mount(page, {
+        count: 10_000,
+        renderer: 'component',
+        dynamic: false,
+        control: 'row-checks',
+      });
+      const rechecked = await scroll(page);
+      expect(rechecked.work.hostChecks).toBe(0);
+      expect(() => checkWork(rechecked.work)).toThrow(
+        'scroll may check only the rows that come in or change their context',
+      );
       await mount(page, { count: 64, renderer: 'component', dynamic: false, control: 'rows' });
       expect(await page.locator('[data-draggable-id]').count()).toBeGreaterThan(MAX_ROWS);
       const slowMount = await mount(page, {

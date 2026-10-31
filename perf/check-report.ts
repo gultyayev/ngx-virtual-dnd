@@ -63,8 +63,8 @@ try {
       '',
       '1k / 10k / 100k items · both renderers · fixed and dynamic heights · no retries',
       '',
-      '| Renderer / heights | Row checks (1k / 10k / 100k) | ID reads | Layouts:styles | Pooled at destroy | Initial render, ms |',
-      '| --- | ---: | ---: | ---: | ---: | ---: |',
+      '| Renderer / heights | Host checks (1k / 10k / 100k) | Row checks | ID reads | Layouts:styles | Pooled at destroy | Initial render, ms |',
+      '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
     );
     const errors = new Set<string>();
     const drags: string[] = [];
@@ -85,10 +85,10 @@ try {
           mountMs: number;
           pooled: number;
           metrics: { layoutCount: number; recalcStyleCount: number };
-          work: { rowChecks: number; keyReads: number };
+          work: { hostChecks: number; rowChecks: number; keyReads: number };
         }[];
         lines.push(
-          `| ${data.renderer} / ${data.dynamic ? 'dynamic' : 'fixed'} | ${rows.map((r) => r.work.rowChecks).join(' / ')} | ${rows.map((r) => r.work.keyReads).join(' / ')} | ${rows.map((r) => `${r.metrics.layoutCount}:${r.metrics.recalcStyleCount}`).join(' / ')} | ${rows.map((r) => r.pooled).join(' / ')} | ${rows.map((r) => r.mountMs.toFixed(1)).join(' / ')} |`,
+          `| ${data.renderer} / ${data.dynamic ? 'dynamic' : 'fixed'} | ${rows.map((r) => r.work.hostChecks).join(' / ')} | ${rows.map((r) => r.work.rowChecks).join(' / ')} | ${rows.map((r) => r.work.keyReads).join(' / ')} | ${rows.map((r) => `${r.metrics.layoutCount}:${r.metrics.recalcStyleCount}`).join(' / ')} | ${rows.map((r) => r.pooled).join(' / ')} | ${rows.map((r) => r.mountMs.toFixed(1)).join(' / ')} |`,
         );
       }
       if (item['name'] === 'placeholder-work' && typeof item['body'] === 'string') {

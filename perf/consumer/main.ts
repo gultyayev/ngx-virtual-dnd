@@ -21,7 +21,7 @@ import {
   VirtualSortableListComponent,
   VirtualViewportComponent,
 } from 'ngx-virtual-dnd';
-import type { ContractConsumer, WorkCounters } from './protocol';
+import type { ContractConsumer, Control, WorkCounters } from './protocol';
 
 const work: WorkCounters = {
   hostChecks: 0,
@@ -40,7 +40,7 @@ interface Row {
   readonly id: string;
   index: number;
 }
-let settings = { rows: [] as Row[], dynamic: false, overscan: 3 };
+let settings = { rows: [] as Row[], dynamic: false, overscan: 3, control: 'none' as Control };
 
 @Directive({ selector: '[appWorkProbe]' })
 class WorkProbe implements OnDestroy {
@@ -53,6 +53,19 @@ class WorkProbe implements OnDestroy {
   ngOnDestroy(): void {
     work.destroyed++;
     work.live--;
+  }
+}
+
+/**
+ * The `row-checks` control: a row host binding that reads a signal input (the Known limitations
+ * page; `vdndDraggable`'s did before #172). A reused view hands it another row, and Angular checks
+ * every row of the list's view again, the consumer's template clean. Off, it reads nothing.
+ */
+@Directive({ selector: '[appRowRead]', host: { '[attr.data-row-read]': 'read()' } })
+class RowRead {
+  readonly appRowRead = input.required<Row>();
+  read(): number | null {
+    return settings.control === 'row-checks' ? this.appRowRead().index : null;
   }
 }
 
@@ -84,6 +97,7 @@ const styles = `:host { display:block; width:480px; margin:20px; }
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     WorkProbe,
+    RowRead,
     DraggableDirective,
     DragPreviewComponent,
     DroppableGroupDirective,
@@ -106,6 +120,7 @@ const styles = `:host { display:block; width:480px; margin:20px; }
       <ng-template #rowTemplate let-row>
         <div
           [appWorkProbe]="rowCheck(row)"
+          [appRowRead]="row"
           class="row"
           [vdndDraggable]="row.id"
           [vdndDraggableData]="row"
@@ -185,6 +200,7 @@ class ContractApp {
         await api.unmount();
         settings = {
           dynamic,
+          control,
           overscan: control === 'rows' ? count : 3,
           // Caller data allocation is outside initial-render timing.
           rows: Array.from({ length: count }, (_, index) => ({
