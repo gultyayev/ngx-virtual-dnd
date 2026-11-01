@@ -349,9 +349,9 @@ html:root {
   --rp-shadow-2: var(--shadow-2);
   --rp-shadow-3: var(--shadow-popover);
 
-  /* Not in the map. The article column measures --content-max (720px) at 1440px wide:
-     720px plus 56px padding on each side. */
-  --rp-content-max-width: calc(var(--content-max) + 112px);
+  /* Not in the map. At 1440px wide the sidebar (276px) and outline (252px) leave 912px, and the
+     article (--content-max, 720px) sits centered in it. */
+  --rp-content-max-width: calc(var(--content-max) + 192px);
   --rp-code-font-size: 13.5px;
   --rp-code-line-highlight-color: var(--code-line-hl);
 }
@@ -381,7 +381,7 @@ html:root.rp-dark {
 /* ══════════ TOP BAR ══════════ */
 /* BEM overrides are prefixed with `html` so they outrank Rspress's equal-specificity
    rules regardless of stylesheet order. */
-/* Mirrors the demo's top bar: 60px, translucent, blurred, 1px bottom border. */
+/* NavBar: a 64px glass bar (--nav-glass, blurred) with a --line bottom edge. */
 html .rp-nav {
   border-bottom: 1px solid var(--line);
 }
@@ -421,8 +421,8 @@ html .rp-nav::before {
   z-index: -1;
   pointer-events: none;
   background: var(--nav-glass);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
 }
 
 /* Home page at the top: Rspress makes the nav transparent over the hero. */
@@ -537,23 +537,44 @@ html .rp-hover-group {
   }
 }
 
+/* Lockup: the Night mark (theme/index.tsx renders it inline) and the wordmark, Geist 600. */
 html .rp-nav__title__link {
-  gap: 9px;
-  font-size: 15px;
-  font-weight: 700;
+  gap: 10px;
+  font: 600 15.5px/1 var(--font-sans);
   letter-spacing: -0.02em;
   color: var(--ink);
 }
 
-html .rp-nav__title__logo-image {
-  width: 32px;
-  height: 32px;
+.vdnd-mark {
+  display: block;
+  flex: none;
+  width: 24px;
+  height: 24px;
 }
 
-/* Nav tabs: compact 13px pills like the demo's, instead of full-height items.
+.vdnd-mark__ghost {
+  fill: var(--ink);
+  opacity: 0.25;
+}
+
+.vdnd-mark__row {
+  fill: var(--ink);
+}
+
+.vdnd-mark__held {
+  fill: var(--held);
+}
+
+.vdnd-mark__frame {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+}
+
+/* Nav links: 14px --ink-muted; the current section is --ink on a --surface-hover fill.
    Rspress drops the first item's left padding and the last item's right padding
    (`:first-child` / `:last-child`) and bumps the font size on `:hover`, all with more
-   specific selectors. `:is(…)` lifts these rules above them, so every pill keeps the same
+   specific selectors. `:is(…)` lifts these rules above them, so every link keeps the same
    padding and size in every state. */
 html .rp-nav-menu {
   gap: 2px;
@@ -564,52 +585,100 @@ html .rp-nav-menu__item {
 }
 
 html .rp-nav-menu__item:is(*, :first-child, :last-child, :hover) > .rp-nav-menu__item__container {
-  height: 34px;
-  padding: 0 13px;
-  border-radius: 9px;
-  font-size: 13px;
-  font-weight: 500;
+  height: auto;
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  font: 500 14px/1.2 var(--font-sans);
   color: var(--ink-muted);
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
 }
 
 html .rp-nav-menu__item:is(:hover, :focus-within) > .rp-nav-menu__item__container {
-  background: var(--surface-raised);
   color: var(--ink);
 }
 
 html
   .rp-nav-menu__item--active:is(*, :first-child, :last-child, :hover)
   > .rp-nav-menu__item__container {
-  background: var(--accent-tint);
-  color: var(--accent-text);
-  font-weight: 600;
+  background: var(--surface-hover);
+  color: var(--ink);
 }
 
+/* The rule between the links and the icon buttons. */
+html .rp-nav-menu__divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px 0 6px;
+  background: var(--line-strong);
+  opacity: 0.45;
+}
+
+/* Theme switch and GitHub: quiet icon buttons. */
+html .rp-nav__others :is(.rp-switch-appearance, .rp-social-links__item) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+html .rp-nav__others :is(.rp-switch-appearance, .rp-social-links__item):hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+html .rp-nav__others :is(.rp-switch-appearance__icon, .rp-social-links__icon) {
+  width: 18px;
+  height: 18px;
+  color: inherit;
+}
+
+/* The theme switch shows the theme it switches to: a moon in light, a sun in dark. */
+html:not(.rp-dark) .rp-switch-appearance__icon--sun,
+html.rp-dark .rp-switch-appearance__icon--moon {
+  display: none;
+}
+
+html:not(.rp-dark) .rp-switch-appearance__icon--moon,
+html.rp-dark .rp-switch-appearance__icon--sun {
+  display: block;
+}
+
+/* Version pill: mono --accent-text on --accent-tint with an --accent-hairline ring. */
 .vdnd-version-badge {
-  margin-left: 10px;
-  padding: 2px 8px;
-  border-radius: 999px;
+  margin-left: 14px;
+  padding: 5px 8px;
+  border: 1px solid var(--accent-hairline);
+  border-radius: var(--radius-pill);
   background: var(--accent-tint);
   color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
+  font: 500 11.5px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-quick) var(--ease-out);
 }
 
 .vdnd-version-badge:hover {
-  color: var(--accent-hover);
+  border-color: var(--accent-line);
 }
 
-/* Search: a 232px field with a ⌘K key cap, like the demo's controls. */
+/* Search: a field-style button on --surface-raised with a ⌘K key cap. */
 html .rp-search-button {
-  width: 232px;
+  width: 248px;
   height: 36px;
-  padding: 0 6px 0 12px;
+  padding: 0 6px 0 11px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--surface-raised);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  transition: border-color var(--dur-quick) var(--ease-out);
 }
 
 html .rp-search-button:hover {
@@ -617,79 +686,88 @@ html .rp-search-button:hover {
 }
 
 html .rp-search-button__content {
-  gap: 8px;
+  gap: 9px;
 }
 
 html .rp-search-button__icon {
   font-size: 16px;
-  color: var(--ink-muted);
+  color: var(--ink-faint);
 }
 
 html .rp-search-button__word {
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--ink-muted);
+  font: 400 13.5px/1 var(--font-sans);
+  color: var(--ink-faint);
 }
 
 html .rp-search-button__hotkey {
   display: inline-flex;
   gap: 2px;
-  padding: 1px 6px;
+  padding: 4px 6px;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: var(--surface);
   color: var(--ink-muted);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 18px;
+  font: 500 11px/1 var(--font-mono);
 }
 
 /* ══════════ SIDEBAR ══════════ */
+/* Sentence-case group headings; the current page on --accent-tint with an --accent-hairline ring. */
 html .rp-doc-layout__sidebar {
-  padding: 20px 16px 40px;
+  padding: 30px 18px 48px 26px;
   border-right: 1px solid var(--line);
-  background: var(--surface-raised);
+  background: var(--page);
 }
 
 html .rp-sidebar-section-header {
-  margin-top: 22px;
-  padding: 0 12px 6px;
+  margin-top: 24px;
+  padding: 0 10px 8px;
 }
 
 html .rp-sidebar-section-header:first-child {
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 html .rp-sidebar-section-header__left {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font: 600 13px/1.35 var(--font-sans);
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
-/* 32px rows, stacked without gaps. */
+/* Rspress sets the left padding inline (it indents nested items). */
 html .rp-sidebar-item {
-  margin-top: 0;
-  padding: 4px 12px;
-  border-radius: 9px;
-  font-size: 13.5px;
-  line-height: 24px;
+  margin-top: 1px;
+  padding-block: 7px;
+  padding-right: 10px;
+  border-radius: var(--radius-sm);
+  font: 400 14px/1.3 var(--font-sans);
+  letter-spacing: -0.005em;
+  color: var(--ink-muted);
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+/* The item's text span also carries .rp-doc (prose size and color). */
+html .rp-sidebar-item .rp-doc {
+  font: inherit;
+  color: inherit;
 }
 
 html .rp-sidebar-item:hover {
-  background-color: var(--surface-raised);
+  background-color: var(--surface-hover);
+  color: var(--ink);
 }
 
 html .rp-sidebar-item--active,
 html .rp-sidebar-item--active:hover {
   background-color: var(--accent-tint);
+  box-shadow: inset 0 0 0 1px var(--accent-hairline);
   color: var(--accent-text);
-  font-weight: 600;
+  font-weight: 560;
 }
 
 /* ══════════ OUTLINE ══════════ */
-/* A 1px rail beside the headings only; the active heading gets a 2px accent bar on it. */
+/* A 1px --line rail; the current item gets a 2px --accent marker on it. */
 html .rp-outline {
   border-left: 0;
 }
@@ -703,12 +781,10 @@ html .rp-outline {
 html .rp-outline__title {
   height: auto;
   margin-bottom: 12px;
-  padding-inline: 8px 24px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  line-height: 1.5;
-  text-transform: uppercase;
+  padding-inline: 4px 28px;
+  font: 600 13px/1.35 var(--font-sans);
+  letter-spacing: -0.01em;
+  text-transform: none;
   color: var(--ink);
 }
 
@@ -718,8 +794,8 @@ html .rp-outline__title > * {
 }
 
 html .rp-outline__toc {
-  margin-left: 8px;
-  margin-right: 24px;
+  margin-left: 4px;
+  margin-right: 28px;
   padding: 0;
   border-left: 1px solid var(--line);
   -webkit-mask-image: none;
@@ -728,34 +804,38 @@ html .rp-outline__toc {
 
 html .rp-toc-item {
   margin-top: 0;
-  padding: 5px 0 5px 15px;
+  padding: 6px 0 6px 14px;
 }
 
 /* Rspress indents nested headings with an inline padding-left. */
 html .rp-toc-item[data-depth='0'] {
-  padding-left: 15px !important;
+  padding-left: 14px !important;
 }
 
 html .rp-toc-item[data-depth='1'] {
-  padding-left: 27px !important;
+  padding-left: 26px !important;
 }
 
 html .rp-toc-item[data-depth='2'] {
-  padding-left: 39px !important;
+  padding-left: 38px !important;
 }
 
 html .rp-toc-item--active::before {
   left: -1px;
   width: 2px;
+  border-radius: 2px;
   background-color: var(--accent);
 }
 
-/* Outline: 13px fits the longest API names (VirtualScrollContainerComponent) on one line.
-   The text span also carries .rp-doc, hence the extra class. */
+/* The text span also carries .rp-doc, hence the extra class. */
 html .rp-toc-item .rp-toc-item__text {
-  font-size: 13px;
-  line-height: 1.45;
+  font: 400 13.5px/1.4 var(--font-sans);
   color: var(--ink-muted);
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+html .rp-toc-item:not([data-depth='0']) .rp-toc-item__text {
+  font-size: 13px;
 }
 
 html .rp-toc-item:hover .rp-toc-item__text {
@@ -769,51 +849,61 @@ html .rp-toc-item--active:hover .rp-toc-item__text {
 }
 
 html .rp-outline__divider {
-  margin: 20px 24px 12px 8px;
+  margin: 22px 28px 12px 4px;
   background: var(--line);
 }
 
 html .rp-outline__bottom {
-  gap: 0;
-  padding-inline: 8px 24px;
+  gap: 4px;
+  padding-inline: 4px 28px;
 }
 
 html .rp-outline__bottom :where(a, button) {
-  min-height: 30px;
-  font-size: 13px;
-  color: var(--ink-muted);
+  gap: 8px;
+  min-height: 28px;
+  font: 400 13px/1 var(--font-sans);
+  color: var(--ink-faint);
+}
+
+html .rp-outline__bottom :where(a, button):hover {
+  color: var(--ink);
 }
 
 html .rp-outline__bottom svg {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
 }
 
 /* ══════════ DOC CONTENT ══════════ */
 html .rp-doc {
-  font-size: 15px;
-  line-height: 1.7;
-  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--ink-body);
 }
 
-html .rp-doc-layout__doc-container > .rp-doc {
-  max-width: 800px;
+html .rp-doc-layout__doc-container > :is(.rp-doc, .rp-doc-footer) {
+  max-width: var(--content-max);
   margin-inline: auto;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(p, li) {
+  max-width: var(--prose-max);
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h1) {
   margin-bottom: 0;
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.025em;
+  font: 620 42px/1.08 var(--font-sans);
+  letter-spacing: -0.045em;
+  color: var(--ink);
+  text-wrap: balance;
 }
 
 /* The page's lead paragraph. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h1 + p) {
-  margin-top: 12px;
-  font-size: 17px;
+  margin-top: 14px;
+  font-size: 18.5px;
   line-height: 1.6;
+  letter-spacing: -0.01em;
   color: var(--ink-muted);
 }
 
@@ -822,10 +912,10 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2) {
   margin-top: 56px;
   padding-top: 0;
   border-top: 0;
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.3;
-  letter-spacing: -0.015em;
+  font: 600 25px/1.25 var(--font-sans);
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-wrap: balance;
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2)::before {
@@ -833,16 +923,35 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2)::before {
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h3) {
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  margin-top: 36px;
+  font: 600 17px/1.4 var(--font-sans);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(strong) {
+  color: var(--ink);
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(li)::marker {
   color: var(--ink-faint);
 }
 
-/* Numbered steps: the number sits in an accent-soft circle. */
+/* Prose links: --accent-text with an --accent-hairline underline. */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(p, li, td) > a.rp-link {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-hairline);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(p, li, td) > a.rp-link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Numbered steps: mono numbers in 28px rings, joined by a --line rule. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol) {
   padding-left: 0;
   list-style: none;
@@ -851,27 +960,49 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol) {
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li) {
   position: relative;
-  margin-top: 14px;
-  padding-left: 38px;
+  margin-top: 18px;
+  padding-left: 42px;
   counter-increment: vdnd-step;
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li)::before {
   content: counter(vdnd-step);
   position: absolute;
-  top: 2px;
+  top: 0;
   left: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  background: var(--accent-tint);
-  color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--ink);
+  font: 600 12px/1 var(--font-mono);
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li:not(:last-child))::after {
+  content: '';
+  position: absolute;
+  top: 32px;
+  bottom: -16px;
+  left: 14px;
+  width: 1px;
+  background: var(--line);
+}
+
+/* Rspress's <Steps> (headings as steps), in the same style. */
+html .rp-steps {
+  border-left-color: var(--line);
+}
+
+html .rp-steps > :is(h2, h3, h4, h5, h6)::before {
+  border: 1px solid var(--line-strong);
+  outline-color: var(--page);
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 12px/1 var(--font-mono);
 }
 
 /* Code ligatures turn `=>` into an arrow; show what the reader should type. */
@@ -879,25 +1010,23 @@ html .rp-doc code {
   font-variant-ligatures: none;
 }
 
+/* Inline code and key caps: mono on --surface-raised with a --line edge. The padding stays
+   inside the line box, so lines with code are not taller. */
+html .rp-doc :not(pre) > code,
 html .rp-doc kbd {
-  padding: 1px 6px;
-  border: 1px solid var(--line-strong);
-  border-bottom-width: 2px;
-  border-radius: 5px;
-  background: var(--surface);
+  padding: 0.18em 0.4em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 0.8em;
+  font-size: 0.86em;
+  font-weight: 500;
   line-height: 1.4;
-  white-space: nowrap;
 }
 
-/* Inline code: the padding stays inside the line box, so lines with code are not taller. */
-html .rp-doc :not(pre) > code {
-  padding: 1px 5px;
-  border-radius: 5px;
-  font-size: 0.85em;
-  line-height: 1.4;
+html .rp-doc kbd {
+  white-space: nowrap;
 }
 
 /* API selector line (docs/plugins/rehype-api-details.ts). */
@@ -905,15 +1034,13 @@ html .rp-doc .vdnd-api-selector {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 14px;
   font-size: 13px;
 }
 
 html .rp-doc .vdnd-api-selector strong {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font: 600 13px/1.35 var(--font-sans);
+  letter-spacing: -0.01em;
   color: var(--ink-muted);
 }
 
@@ -922,26 +1049,65 @@ html .rp-doc .vdnd-api-selector__colon {
 }
 
 html .rp-doc .vdnd-api-selector code {
-  padding: 2px 8px;
+  padding: 4px 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: var(--surface-raised);
   color: var(--ink);
   font-size: 12.5px;
 }
 
-/* "Added in x.y.z" badge in API tables (docs/plugins/rehype-api-details.ts). */
+/* Badges: mono on a 22px chip. "Added in x.y.z" (rehype-api-details.ts) is the accent tone. */
+.vdnd-since,
+html .rp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
+  color: var(--ink-muted);
+  font: 500 11.5px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 .vdnd-since {
-  display: inline-block;
   margin-left: 6px;
-  padding: 0 6px;
-  border-radius: 6px;
+}
+
+.vdnd-since,
+html .rp-badge--tip {
+  border-color: var(--accent-hairline);
   background: var(--accent-tint);
   color: var(--accent-text);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
-  white-space: nowrap;
+}
+
+html .rp-badge--info {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink-muted);
+}
+
+html .rp-badge--warning {
+  border-color: var(--warning-line);
+  background: var(--warning-tint);
+  color: var(--warning);
+}
+
+html .rp-badge--danger {
+  border-color: var(--danger-line);
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+
+html .rp-badge.rp-badge--outline {
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--ink-muted);
 }
 
 .vdnd-sr-only {
@@ -957,20 +1123,40 @@ html .rp-doc .vdnd-api-selector code {
 }
 
 /* ══════════ CALLOUTS (docs/theme/components/Callout.tsx) ══════════ */
+/* A tint plus a hairline edge, a toned title with an icon, no side stripe. */
 html .rp-callout {
-  max-width: 700px;
-  margin: 28px 0;
-  padding: 14px 18px 16px;
-  border-radius: 12px;
+  --vdnd-callout-ink: var(--ink);
+  margin: 24px 0;
+  padding: 16px 18px 17px;
+  border-radius: var(--radius-lg);
 }
 
-html .rp-callout__title {
+html .rp-callout--tip,
+html .rp-callout--important {
+  --vdnd-callout-ink: var(--accent-text);
+  border-color: var(--accent-hairline);
+  background-color: var(--accent-tint);
+}
+
+html .rp-callout--warning,
+html .rp-callout--caution {
+  --vdnd-callout-ink: var(--warning);
+  border-color: var(--warning-line);
+  background-color: var(--warning-tint);
+}
+
+html .rp-callout--danger {
+  --vdnd-callout-ink: var(--danger);
+}
+
+html .rp-callout .rp-callout__title {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
-  font-size: 14px;
-  font-weight: 600;
+  margin-bottom: 0;
+  font: 600 14.5px/1.35 var(--font-sans);
+  letter-spacing: -0.01em;
+  color: var(--vdnd-callout-ink);
 }
 
 html .rp-callout__title svg {
@@ -983,9 +1169,9 @@ html .rp-callout__title::before {
 }
 
 html .rp-callout__content {
-  font-size: 14px;
-  line-height: 1.65;
-  color: var(--ink);
+  margin-top: 6px;
+  font: 400 15px/1.7 var(--font-sans);
+  color: var(--ink-body);
 }
 
 html .rp-callout__content p {
@@ -997,62 +1183,83 @@ html .rp-callout__content p + p {
 }
 
 html .rp-callout__content a {
-  text-underline-offset: 2px;
-  font-weight: 500;
+  color: var(--accent-text);
 }
 
-html .rp-callout :not(pre) > code {
+html .rp-callout :not(pre) > code,
+html .rp-callout kbd {
+  border-color: var(--line);
+  background-color: var(--surface);
   color: var(--ink);
-  background-color: var(--rp-c-text-code-bg);
+}
+
+html.rp-dark .rp-callout :not(pre) > code,
+html.rp-dark .rp-callout kbd {
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 /* ══════════ TABLES ══════════ */
-/* Rspress draws tables with the code-block border and title colors, which are dark here. */
+/* The ApiTable: a --surface panel with a --line edge; headers on --page-sunk. Rspress draws
+   tables with the code-block border and title colors, which are dark here. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(table) {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--ink-body);
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(thead) {
-  background: var(--surface-raised);
-  color: var(--ink);
+  background: var(--page-sunk);
 }
 
-/* Column labels: 11px uppercase, like the sidebar's group labels. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(th) {
-  padding: 10px 16px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--line);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  background: transparent;
+  font: 600 12.5px/1.3 var(--font-sans);
   color: var(--ink-muted);
+  white-space: nowrap;
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(td) {
-  padding: 11px 16px;
+  padding: 12px 16px;
+  border-color: var(--line);
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.5;
   vertical-align: top;
 }
 
-/* Names in the first column read as identifiers in the accent color, without a chip. */
-html .rp-doc td:first-child > code:only-child {
-  padding: 0;
-  background: none;
-  color: var(--accent-text);
-  font-weight: 500;
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(tbody tr) {
+  transition: background-color var(--dur-quick) var(--ease-out);
 }
 
-/* **required** in a table cell becomes an outlined tag. */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(tbody tr:hover) {
+  background: var(--page-sunk);
+}
+
+html .rp-doc td code {
+  font-size: 12.5px;
+}
+
+/* Names in the first column read as identifiers, without a chip. */
+html .rp-doc td:first-child > code:only-child {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+}
+
+/* **required** in a table cell becomes an outlined badge. */
 html .rp-doc td > strong:only-child {
-  display: inline-block;
-  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 20px;
+  border-radius: var(--radius-xs);
+  color: var(--ink-muted);
+  font: 500 11.5px/1 var(--font-mono);
   white-space: nowrap;
 }
 
@@ -1087,6 +1294,8 @@ html .rp-doc td:first-child code {
     display: block;
     border: 0;
     border-radius: 0;
+    background: none;
+    box-shadow: none;
   }
 
   html .rp-doc table:has(td:nth-child(4)) thead {
@@ -1105,7 +1314,7 @@ html .rp-doc td:first-child code {
     margin-bottom: 10px;
     padding: 12px 14px;
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     background: var(--surface);
   }
 
@@ -1122,8 +1331,7 @@ html .rp-doc td:first-child code {
   html .rp-doc table:has(td:nth-child(4)) td:nth-child(3)::before {
     margin-right: 8px;
     color: var(--ink-muted);
-    font-size: 12px;
-    font-weight: 600;
+    font: 600 12.5px/1.3 var(--font-sans);
   }
 
   html .rp-doc table:has(td:nth-child(4)) td:nth-child(2)::before {
@@ -1147,25 +1355,41 @@ html .rp-doc td:first-child code {
 }
 
 /* ══════════ CODE BLOCKS (docs/theme/components/CodeBlock.tsx) ══════════ */
+/* Dark in both themes. Light: --shadow-1 plus a soft drop; dark: a --code-line edge. */
 html .rp-codeblock {
-  margin: 20px 0;
-  border-radius: 12px;
+  margin: 24px 0;
+  border: 0;
+  border-radius: var(--radius-lg);
   background: var(--code-bg);
+  box-shadow:
+    var(--shadow-1),
+    0 12px 28px -18px rgba(16, 24, 40, 0.35);
+  color-scheme: dark;
 }
 
-/* Title bar: file icon, muted directory, the file name, copy button. */
+html.rp-dark .rp-codeblock {
+  box-shadow:
+    0 0 0 1px var(--code-line),
+    var(--shadow-1);
+}
+
+/* Title bar: file icon, the path in mono --code-punct, copy button. */
 html .rp-codeblock__title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 42px;
-  padding: 0 6px 0 16px;
+  gap: 10px;
+  height: 46px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--code-line);
+  background: var(--code-bar);
   color: var(--code-punct);
-  font-size: 12px;
+  font: 500 12.5px/1 var(--font-mono);
 }
 
 .vdnd-codeblock__icon {
   flex-shrink: 0;
+  width: 15px;
+  height: 15px;
 }
 
 .vdnd-codeblock__path {
@@ -1177,7 +1401,7 @@ html .rp-codeblock__title {
 }
 
 .vdnd-codeblock__file {
-  color: var(--code-ink);
+  color: var(--code-punct);
 }
 
 html .rp-codeblock__title .rp-code-button-group {
@@ -1187,12 +1411,12 @@ html .rp-codeblock__title .rp-code-button-group {
 html .rp-codeblock__title .rp-code-button-group__button {
   width: 32px;
   height: 32px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   opacity: 1;
 }
 
 html .rp-codeblock__title .rp-code-button-group__button:hover {
-  background: var(--code-line);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 html .rp-codeblock__title .rp-code-button-group__icon {
@@ -1205,18 +1429,29 @@ html .rp-codeblock__title .rp-code-button-group__button:hover .rp-code-button-gr
   color: var(--code-ink);
 }
 
+html .rp-codeblock :focus-visible {
+  outline-color: var(--code-accent);
+}
+
+html .rp-codeblock__content :where(code) {
+  padding: 18px 0 20px;
+  line-height: 1.78;
+}
+
+html .rp-codeblock__content :where(code) .line {
+  padding: 0 22px;
+}
+
 /* Untitled blocks: the language in the corner, hidden while the hover buttons show. */
 .vdnd-codeblock__lang {
   position: absolute;
-  top: 10px;
-  right: 14px;
+  top: 12px;
+  right: 16px;
   z-index: 2;
   color: var(--code-punct);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1;
+  font: 500 11.5px/1 var(--font-mono);
   pointer-events: none;
-  transition: opacity 150ms ease;
+  transition: opacity var(--dur-quick) var(--ease-out);
 }
 
 html .rp-codeblock:hover .vdnd-codeblock__lang {
@@ -1224,13 +1459,13 @@ html .rp-codeblock:hover .vdnd-codeblock__lang {
 }
 
 html .rp-code-button-group {
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
 }
 
 html .rp-code-button-group__icon {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--code-punct);
 }
 
@@ -1243,75 +1478,136 @@ html .rp-codeblock__content:focus-within .rp-code-button-group__button {
   opacity: 1;
 }
 
-/* Highlighted lines ({3} in the fence meta): accent tint with a 2px accent edge. */
+/* Highlighted lines ({3} in the fence meta): --code-line-hl with a 2px --code-accent edge. */
 html .shiki.has-highlighted .line.highlighted:not(.error):not(.warning) {
   background-color: var(--code-line-hl);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: inset 2px 0 0 var(--code-accent);
 }
 
 /* ══════════ PREVIOUS / NEXT ══════════ */
+/* PageNav: two cards under a hairline; the arrow sits beside the label and moves toward where
+   it goes. Rspress puts its arrow in the title, so the label draws its own (a mask, so it
+   takes the text color). */
+html .rp-doc-footer__divider {
+  margin-block: 64px 28px;
+  background: var(--line);
+}
+
 html .rp-prev-next-page {
   gap: 16px;
   align-items: stretch;
 }
 
 html .rp-prev-next-page__item {
-  gap: 2px;
-  padding: 14px 18px;
+  gap: 6px;
+  padding: 16px 18px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
-  box-shadow: var(--shadow-1);
-  transition: border-color 150ms ease;
+  box-shadow: none;
+  transition: border-color var(--dur-quick) var(--ease-out);
+}
+
+html.rp-dark .rp-prev-next-page__item {
+  background: rgba(255, 255, 255, 0.02);
 }
 
 html .rp-prev-next-page__item:hover {
-  border-color: var(--accent-hairline);
-  background: var(--surface);
+  border-color: var(--accent-line);
   opacity: 1;
 }
 
 html .rp-prev-next-page__item__desc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 0;
-  font-size: 12px;
-  color: var(--ink-muted);
+  font: 400 12.5px/1.3 var(--font-sans);
+  color: var(--ink-faint);
+}
+
+html .rp-prev-next-page__prev .rp-prev-next-page__item__desc::before,
+html .rp-prev-next-page__next .rp-prev-next-page__item__desc::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  -webkit-mask: var(--vdnd-arrow) center / contain no-repeat;
+  mask: var(--vdnd-arrow) center / contain no-repeat;
+  transition: transform var(--dur-quick) var(--ease-out);
+}
+
+html .rp-prev-next-page__prev {
+  --vdnd-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 12H5M11 6l-6 6 6 6'/%3E%3C/svg%3E");
+}
+
+html .rp-prev-next-page__next {
+  --vdnd-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E");
+}
+
+html .rp-prev-next-page__prev:hover .rp-prev-next-page__item__desc::before {
+  transform: translateX(-2px);
+}
+
+html .rp-prev-next-page__next:hover .rp-prev-next-page__item__desc::after {
+  transform: translateX(2px);
 }
 
 html .rp-prev-next-page__item__title {
-  gap: 6px;
-  font-size: 15px;
-  font-weight: 600;
+  font: 600 15.5px/1.3 var(--font-sans);
+  letter-spacing: -0.015em;
   color: var(--ink);
 }
 
 html .rp-prev-next-page__icon {
-  color: var(--accent-text);
+  display: none;
 }
 
 html .rp-prev-next-page__next {
+  align-items: flex-end;
   text-align: right;
 }
 
 /* ══════════ BUTTONS (404 page) ══════════ */
 html .rp-button {
-  border-radius: 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: 560 14px/1 var(--font-sans);
+  letter-spacing: -0.01em;
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
 }
 
-/* White on the raw accent is 3.7:1, so buttons use the darker accent (5.2:1). */
+html .rp-button:active {
+  transform: translateY(1px);
+}
+
 html .rp-button--brand {
-  background: var(--accent-hover);
+  background: var(--accent);
+  box-shadow: var(--shadow-btn);
   color: var(--on-accent);
 }
 
 html .rp-button--brand:hover {
-  background: color-mix(in srgb, var(--accent-hover) 85%, #000);
+  background: var(--accent-hover);
   opacity: 1;
 }
 
 html .rp-button--alt {
-  border: 1px solid var(--line);
+  border-color: var(--line-strong);
   background: var(--surface);
+  box-shadow: var(--shadow-1);
   color: var(--ink);
+}
+
+html.rp-dark .rp-button--alt {
+  background: var(--surface-raised);
+}
+
+html .rp-button--alt:hover {
+  background: var(--surface-hover);
 }
 
 /* ══════════ HOME (docs/theme/components/HomeLayout.tsx) ══════════ */

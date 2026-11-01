@@ -78,6 +78,7 @@ export default defineConfig({
     searchPlaceholderText: { ...source['searchPlaceholderText'], en: 'Search docs' },
     prevPageText: { ...source['prevPageText'], en: 'Previous' },
     nextPageText: { ...source['nextPageText'], en: 'Next' },
+    outlineTitle: { ...source['outlineTitle'], en: 'On this page' },
   }),
   // The font stylesheet itself is imported by theme/index.css (works in dev too).
   head: [

@@ -4,21 +4,21 @@ Human-facing documentation, built with Rspress 2 (`@rspress/core`) and published
 
 ## Layout
 
-| Path                                                 | What                                                                                        |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `docs/rspress.config.ts`                             | Site config (base `/ngx-virtual-dnd/`, `llms`, globals, defines)                            |
-| `docs/pages/`                                        | Content root (`root`). `_nav.json` = top nav, `_meta.json` per folder = sidebar order       |
-| `docs/pages/guide/{start,essentials,features,more}/` | Guide sections                                                                              |
-| `docs/pages/api/`                                    | API reference (hand-written tables)                                                         |
-| `docs/pages/changelog.mdx`                           | Renders the repo's `CHANGELOG.md` via MDX import                                            |
-| `docs/pages/public/`                                 | Favicon, nav logo tiles, `og-image.png`                                                     |
-| `docs/theme/`                                        | `index.tsx` (Layout slot: version badge), `index.css` (token → `--rp-*` mapping, overrides) |
-| `docs/theme/components/`                             | Replaced Rspress components: `HomeLayout`, `CodeBlock` (title bar), `Callout` (icons)       |
-| `docs/components/LiveDemo.tsx`                       | Global MDX component that embeds a demo example in an iframe                                |
-| `docs/components/CodeTabs.tsx`                       | Code blocks as tabs, labelled by their `title` (home page)                                  |
-| `docs/plugins/rehype-api-details.ts`                 | API pages: `**Selector:**` line and "Added in x.y.z" table badges                           |
-| `src/app/examples/<slug>/<slug>.ts`                  | Live examples (Angular), served at `/examples/<slug>`                                       |
-| `scripts/assemble-site.js`                           | Copies the demo into `dist/site/demo/` and writes per-route `index.html` entry points       |
+| Path                                                 | What                                                                                                       |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `docs/rspress.config.ts`                             | Site config (base `/ngx-virtual-dnd/`, `llms`, globals, defines)                                           |
+| `docs/pages/`                                        | Content root (`root`). `_nav.json` = top nav, `_meta.json` per folder = sidebar order                      |
+| `docs/pages/guide/{start,essentials,features,more}/` | Guide sections                                                                                             |
+| `docs/pages/api/`                                    | API reference (hand-written tables)                                                                        |
+| `docs/pages/changelog.mdx`                           | Renders the repo's `CHANGELOG.md` via MDX import                                                           |
+| `docs/pages/public/`                                 | Favicon, logo tiles (the nav draws its mark inline), `og-image.png`                                        |
+| `docs/theme/`                                        | `index.tsx` (Layout slots: nav lockup, version badge), `index.css` (Night tokens, `--rp-*` map, overrides) |
+| `docs/theme/components/`                             | Replaced Rspress components: `HomeLayout`, `CodeBlock` (title bar), `Callout` (icons)                      |
+| `docs/components/LiveDemo.tsx`                       | Global MDX component that embeds a demo example in an iframe                                               |
+| `docs/components/CodeTabs.tsx`                       | Code blocks as tabs, labelled by their `title` (home page)                                                 |
+| `docs/plugins/rehype-api-details.ts`                 | API pages: `**Selector:**` line and "Added in x.y.z" table badges                                          |
+| `src/app/examples/<slug>/<slug>.ts`                  | Live examples (Angular), served at `/examples/<slug>`                                                      |
+| `scripts/assemble-site.js`                           | Copies the demo into `dist/site/demo/` and writes per-route `index.html` entry points                      |
 
 ## Commands
 
@@ -44,9 +44,9 @@ npm run site:build    # lib → demo (base href /ngx-virtual-dnd/demo/) → docs
 ## Writing conventions the theme styles
 
 - **API selector:** a paragraph that is exactly `` **Selector:** `vdnd-x` `` renders as a label and chip. **Version notes:** a table cell ending in `Added in 3.3.0` shows the version as a badge. Both come from `docs/plugins/rehype-api-details.ts`, so the source and the Markdown output stay plain text.
-- `**required**` alone in a table cell renders as an outlined tag; inline code alone in a first-column cell renders as an accent identifier.
-- **Ordered lists** render as numbered steps (the number in an accent circle).
-- **Callouts:** `:::tip`, `:::warning` and `:::danger` get an icon (`Callout.tsx`). Warning uses the `--warn-*` tokens.
+- `**required**` alone in a table cell renders as an outlined badge; inline code alone in a first-column cell renders as a plain identifier (no chip).
+- **Ordered lists** render as numbered steps (mono numbers in rings, joined by a rule).
+- **Callouts:** `:::tip`, `:::warning` and `:::danger` get an icon (`Callout.tsx`). Warning uses the `--warning-*` tokens.
 - **Code blocks:** ` ```ts file="<root>/path" ` gets the path as its title automatically; `title="…"` overrides it. `{3,5}` in the meta highlights lines. Untitled blocks show their language in the corner.
 
 ## Gotchas
