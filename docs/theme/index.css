@@ -1611,22 +1611,53 @@ html .rp-button--alt:hover {
 }
 
 /* ══════════ HOME (docs/theme/components/HomeLayout.tsx) ══════════ */
+/* Night's HomePage: HomeHero, FeatureRows, the Quick look band and the footer. Content is
+   left-aligned in --home-max (1232px, 48px side padding included). */
 .vdnd-home {
   position: relative;
   background: var(--page);
 }
 
+/* Hero: a 56px --grid-line grid masked around the art, and the --glow-a / --glow-b glows. */
 .vdnd-home-hero {
-  padding: 88px 40px 80px;
+  position: relative;
+  overflow: hidden;
+}
+
+.vdnd-home-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-position: -1px -1px;
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 62% 78% at 70% 40%, #000 15%, transparent 72%);
+  mask-image: radial-gradient(ellipse 62% 78% at 70% 40%, #000 15%, transparent 72%);
+}
+
+.vdnd-home-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(560px 420px at 73% 50%, var(--glow-a), transparent 70%),
+    radial-gradient(480px 340px at 95% 14%, var(--glow-b), transparent 70%);
 }
 
 .vdnd-home-hero__inner {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  gap: 64px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 56px;
   align-items: center;
-  max-width: 1200px;
+  max-width: var(--home-max);
   margin: 0 auto;
+  padding: 104px 48px 116px;
 }
 
 .vdnd-home-hero__text {
@@ -1636,6 +1667,7 @@ html .rp-button--alt:hover {
   min-width: 0;
 }
 
+/* Release pill: the version in an --accent tag, the note, the arrow. */
 .vdnd-home-announce {
   display: inline-flex;
   align-items: center;
@@ -1643,32 +1675,39 @@ html .rp-button--alt:hover {
   max-width: 100%;
   height: 32px;
   padding: 0 12px 0 4px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 45%, transparent);
+  border-radius: var(--radius-pill);
   background: var(--surface);
   box-shadow: var(--shadow-1);
   color: var(--ink-muted);
-  font-size: 13px;
-  font-weight: 500;
-  transition: border-color 150ms ease;
+  font: 500 13px/1 var(--font-sans);
+  transition: border-color var(--dur-quick) var(--ease-out);
+}
+
+html.rp-dark .vdnd-home-announce {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .vdnd-home-announce:hover {
-  border-color: var(--accent-hairline);
+  border-color: var(--accent-line);
   color: var(--ink);
 }
 
 .vdnd-home-announce svg {
   flex-shrink: 0;
+  color: var(--ink-faint);
 }
 
 .vdnd-home-announce__badge {
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: var(--accent-tint);
-  color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 600 11.5px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .vdnd-home-announce__text {
@@ -1677,70 +1716,92 @@ html .rp-button--alt:hover {
   text-overflow: ellipsis;
 }
 
+/* Eyebrow: the package name in mono --accent-text after a 20px rule. */
 .vdnd-home-hero__name {
-  margin: 32px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 34px 0 0;
   color: var(--accent-text);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 500;
+  font: 500 13px/1 var(--font-mono);
+}
+
+.vdnd-home-hero__name::before {
+  content: '';
+  width: 20px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.7;
 }
 
 .vdnd-home-hero__title {
-  max-width: 600px;
-  margin: 10px 0 0;
+  margin: 16px 0 0;
   color: var(--ink);
-  font-size: 52px;
-  font-weight: 700;
-  line-height: 1.06;
-  letter-spacing: -0.035em;
+  font: 620 68px/1.02 var(--font-sans);
+  letter-spacing: -0.048em;
+  text-wrap: balance;
 }
 
+/* The one gradient on paper: --grad-from to --grad-to. */
 .vdnd-home-hero__highlight {
-  color: var(--accent-text);
+  padding-bottom: 0.08em;
+  background: linear-gradient(95deg, var(--grad-from), var(--grad-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .vdnd-home-hero__tagline {
-  max-width: 540px;
-  margin: 20px 0 0;
+  max-width: 520px;
+  margin: 24px 0 0;
   color: var(--ink-muted);
-  font-size: 17px;
-  line-height: 1.6;
+  font: 400 18px/1.6 var(--font-sans);
+  letter-spacing: -0.005em;
 }
 
 .vdnd-home-hero__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
-  margin-top: 32px;
+  margin-top: 36px;
 }
 
+/* Buttons, --lg: primary (--accent fill) and secondary (--line-strong edge). */
 .vdnd-home-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 44px;
+  height: 46px;
   padding: 0 20px;
-  border-radius: 9px;
-  font-size: 14px;
-  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: 560 15px/1 var(--font-sans);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
   transition:
-    background-color 150ms ease,
-    border-color 150ms ease;
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
 }
 
-/* White on the raw accent is 3.7:1, so the button uses the darker accent (5.2:1). */
+.vdnd-home-button:active {
+  transform: translateY(1px);
+}
+
 .vdnd-home-button--brand,
 .vdnd-home-button--brand:hover {
   color: var(--on-accent);
 }
 
 .vdnd-home-button--brand {
-  background: var(--accent-hover);
-  box-shadow: var(--shadow-2);
+  background: var(--accent);
+  box-shadow: var(--shadow-btn);
 }
 
 .vdnd-home-button--brand:hover {
-  background: color-mix(in srgb, var(--accent-hover) 85%, #000);
+  background: var(--accent-hover);
 }
 
 .vdnd-home-button--alt,
@@ -1749,13 +1810,17 @@ html .rp-button--alt:hover {
 }
 
 .vdnd-home-button--alt {
-  border: 1px solid var(--line);
+  border-color: var(--line-strong);
   background: var(--surface);
   box-shadow: var(--shadow-1);
 }
 
+html.rp-dark .vdnd-home-button--alt {
+  background: var(--surface-raised);
+}
+
 .vdnd-home-button--alt:hover {
-  border-color: var(--line-strong);
+  background: var(--surface-hover);
 }
 
 /* Rspress marks external links with an arrow; the buttons draw their own icon. */
@@ -1763,64 +1828,90 @@ html .rp-button--alt:hover {
   display: none !important;
 }
 
+/* InstallCommand: a faint prompt, the command in mono, one quiet copy button. */
 .vdnd-home-install {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   height: 44px;
   margin-top: 16px;
-  padding: 0 4px 0 14px;
+  padding: 0 5px 0 16px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
   color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font: 400 14px/1 var(--font-mono);
 }
 
 .vdnd-home-install__prompt {
-  color: var(--ink-muted);
+  color: var(--ink-faint);
+  user-select: none;
 }
 
 .vdnd-home-install__command {
   flex-grow: 1;
   font-family: inherit;
+  white-space: nowrap;
 }
 
 .vdnd-home-install__copy {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--ink-muted);
+  color: var(--ink-faint);
   cursor: pointer;
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
 }
 
 .vdnd-home-install__copy:hover {
-  background: var(--surface-raised);
+  background: var(--surface-hover);
   color: var(--ink);
 }
 
-/* Hero illustration: a virtual list mid-drag. */
+.vdnd-home-install__copy[aria-label='Copied'] {
+  color: var(--success);
+}
+
+/* The Backlog art: a list panel tilted in 3D, virtual rows above and below, five rendered rows,
+   the slot and the held preview. The preview is the row at its exact size and angle: only the
+   pointer's offset separates it from the slot. useBacklogScript moves the --i indexes. */
 .vdnd-hero-art {
   position: relative;
-  justify-self: center;
-  width: 100%;
-  max-width: 540px;
-  padding: 8px 0;
+  min-width: 0;
+  perspective: 1700px;
+}
+
+.vdnd-hero-art__stage {
+  position: relative;
+  padding: 0 6px 0 18px;
+  transform: rotateX(8deg) rotateY(-16deg) rotateZ(1.2deg);
+  transform-origin: 45% 50%;
 }
 
 .vdnd-hero-art__virtuals {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 0 76px 0 24px;
-  opacity: 0.6;
+}
+
+.vdnd-hero-art__virtuals--top {
+  margin-bottom: 12px;
+  -webkit-mask-image: linear-gradient(transparent, #000 90%);
+  mask-image: linear-gradient(transparent, #000 90%);
+}
+
+.vdnd-hero-art__virtuals--bottom {
+  margin-top: 12px;
+  -webkit-mask-image: linear-gradient(#000 10%, transparent);
+  mask-image: linear-gradient(#000 10%, transparent);
 }
 
 .vdnd-hero-art__virtual {
@@ -1828,50 +1919,88 @@ html .rp-button--alt:hover {
   align-items: center;
   justify-content: space-between;
   height: 40px;
-  padding: 0 14px;
-  border: 1px dashed var(--line-strong);
+  margin: 0 30px;
+  padding: 0 16px;
+  border: 1px dashed var(--ghost);
   border-radius: 10px;
-  color: var(--ink-muted);
-  font-size: 13px;
+  color: var(--ink-faint);
+  font: 500 13.5px/1 var(--font-sans);
 }
 
 .vdnd-hero-art__virtual-tag {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  color: var(--accent-text);
+  font: 500 11px/1 var(--font-mono);
 }
 
 .vdnd-hero-art__list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 10px 56px 10px 0;
-  padding: 12px;
-  border: 1.5px solid var(--accent);
-  border-radius: 15px;
-  background: var(--surface);
-  box-shadow: var(--shadow-2);
+  position: relative;
+  padding: 14px;
+  border: 1px solid var(--list-edge);
+  border-radius: var(--radius-xl);
+  background: var(--list-bg);
+  box-shadow: var(--shadow-panel);
+}
+
+html.rp-dark .vdnd-hero-art__list {
+  background: linear-gradient(180deg, #0e1622, #090d14);
 }
 
 .vdnd-hero-art__head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 2px 6px 6px;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 12px;
 }
 
 .vdnd-hero-art__name {
+  margin-right: auto;
   color: var(--ink);
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font: 600 14.5px/1.2 var(--font-sans);
+  letter-spacing: -0.015em;
 }
 
+/* Chips: "1,000 items" and the live "5 in the DOM". */
 .vdnd-hero-art__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
   color: var(--ink-muted);
-  font-size: 12px;
+  font: 500 11px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vdnd-hero-art__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent);
+}
+
+.vdnd-hero-art__rows {
+  position: relative;
+  height: calc(46px * 5 + 8px * 4);
+}
+
+.vdnd-hero-art__row,
+.vdnd-hero-art__placeholder,
+.vdnd-hero-art__preview {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 46px;
+  border-radius: var(--radius-md);
+}
+
+.vdnd-hero-art__row,
+.vdnd-hero-art__placeholder {
+  transform: translateY(calc(var(--i) * 54px));
 }
 
 .vdnd-hero-art__row,
@@ -1879,130 +2008,164 @@ html .rp-button--alt:hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  padding: 0 14px;
   color: var(--ink);
-  font-size: 13.5px;
+  font: 500 14.5px/1 var(--font-sans);
+  letter-spacing: -0.01em;
 }
 
-.vdnd-hero-art__row svg {
+.vdnd-hero-art__row {
+  border: 1px solid var(--row-line);
+  background: var(--row-bg);
+}
+
+.vdnd-hero-art__row svg,
+.vdnd-hero-art__preview svg {
+  flex-shrink: 0;
   color: var(--ink-faint);
 }
 
 .vdnd-hero-art__placeholder {
-  height: 44px;
-  border: 1.5px dashed var(--accent);
-  border-radius: 10px;
+  border: 1.5px dashed var(--accent-line);
   background: var(--accent-tint);
 }
 
 .vdnd-hero-art__preview {
+  z-index: 2;
+  border: 1.5px solid var(--held);
+  background: var(--list-bg);
+  box-shadow: var(--shadow-lift);
+  transform: translate(22px, calc(var(--i) * 54px + 10px));
+}
+
+html.rp-dark .vdnd-hero-art__preview {
+  background: #17202d;
+}
+
+.vdnd-hero-art__preview > svg:first-child {
+  color: var(--held);
+}
+
+.vdnd-hero-art__preview .vdnd-hero-art__cursor {
   position: absolute;
-  top: 262px;
-  left: 36%;
-  right: 0;
-  border-color: var(--accent-hairline);
-  border-radius: 12px;
-  box-shadow: var(--shadow-popover);
-  transform: rotate(1.5deg);
-  font-weight: 500;
+  top: 24px;
+  right: 34px;
+  width: 22px;
+  height: 22px;
 }
 
-.vdnd-hero-art__preview svg {
-  color: var(--accent-text);
+.vdnd-hero-art__cursor path {
+  fill: #0a0d14;
+  stroke: #ffffff;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
 }
 
-/* Feature cards. */
-.vdnd-home-features {
-  padding: 0 40px 104px;
+html.rp-dark .vdnd-hero-art__cursor path {
+  fill: #ffffff;
+  stroke: #05070b;
 }
 
+/* Rows shift with --ease-shift; the preview travels between rows with --ease-in-out. */
+.vdnd-hero-art--live .vdnd-hero-art__row,
+.vdnd-hero-art--live .vdnd-hero-art__placeholder {
+  transition: transform var(--dur-base) var(--ease-shift);
+}
+
+.vdnd-hero-art--live .vdnd-hero-art__preview {
+  transition: transform var(--dur-settle) var(--ease-in-out);
+}
+
+/* FeatureRows: six cards in three columns. */
 .vdnd-home-features__grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
-  max-width: 1200px;
+  max-width: var(--home-max);
   margin: 0 auto;
+  padding: 8px 48px 112px;
 }
 
 .vdnd-home-feature {
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 26px 26px 28px;
   border: 1px solid var(--line);
-  border-radius: 15px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-2);
+}
+
+html.rp-dark .vdnd-home-feature {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
 }
 
 .vdnd-home-feature__icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
   background: var(--accent-tint);
+  box-shadow:
+    inset 0 0 0 1px var(--accent-hairline),
+    var(--glow-accent);
   color: var(--accent-text);
 }
 
 .vdnd-home-feature__title {
-  margin: 16px 0 0;
+  margin: 20px 0 0;
   color: var(--ink);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: -0.01em;
+  font: 600 16.5px/1.35 var(--font-sans);
+  letter-spacing: -0.02em;
 }
 
 .vdnd-home-feature__details {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: var(--ink-muted);
-  font-size: 13.5px;
-  line-height: 1.6;
+  font: 400 14.5px/1.6 var(--font-sans);
 }
 
-/* The page's MDX content ("Quick look" in index.mdx), on a surface band. */
+/* The page's MDX content ("Quick look" in index.mdx), on a --page-sunk band between hairlines. */
 .vdnd-home-content {
-  padding: 96px 40px;
   border-block: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--page-sunk);
 }
 
 .vdnd-home-content__inner {
-  max-width: 1200px;
+  max-width: var(--home-max);
   margin: 0 auto;
+  padding: 96px 48px 104px;
 }
 
 .vdnd-quick-look {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  gap: 64px;
-  align-items: center;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
 }
 
 .vdnd-quick-look__text {
   min-width: 0;
-  max-width: 460px;
 }
 
+/* Kicker: mono, uppercase from CSS. */
 .vdnd-quick-look .vdnd-quick-look__eyebrow {
   margin: 0;
   color: var(--accent-text);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+  font: 500 12px/1.2 var(--font-mono);
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
 .vdnd-quick-look h2 {
-  margin: 12px 0 0;
+  margin: 16px 0 0;
   color: var(--ink);
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.025em;
+  font: 600 34px/1.14 var(--font-sans);
+  letter-spacing: -0.04em;
+  text-wrap: balance;
 }
 
 /* Rspress's heading anchor (#) is not useful on the home page. */
@@ -2012,17 +2175,17 @@ html .rp-button--alt:hover {
 }
 
 .vdnd-quick-look p {
-  margin: 14px 0 0;
+  margin: 16px 0 0;
   color: var(--ink-muted);
-  font-size: 15px;
-  line-height: 1.65;
+  font: 400 16.5px/1.65 var(--font-sans);
 }
 
+/* Numbered steps: mono numbers in rings, joined by a --line rule. */
 .vdnd-quick-look ol {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  margin: 28px 0 0;
+  gap: 22px;
+  margin: 34px 0 0;
   padding: 0;
   list-style: none;
   counter-reset: vdnd-step;
@@ -2030,121 +2193,140 @@ html .rp-button--alt:hover {
 
 .vdnd-quick-look li {
   position: relative;
-  padding-left: 40px;
+  padding-left: 42px;
   color: var(--ink-muted);
-  font-size: 13.5px;
-  line-height: 1.6;
+  font: 400 14.5px/1.6 var(--font-sans);
   counter-increment: vdnd-step;
 }
 
 .vdnd-quick-look li::before {
   content: counter(vdnd-step);
   position: absolute;
-  top: 0;
+  top: -3px;
   left: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  background: var(--accent-tint);
-  color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 700;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--ink);
+  font: 600 12px/1 var(--font-mono);
+}
+
+.vdnd-quick-look li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 29px;
+  bottom: -21px;
+  left: 14px;
+  width: 1px;
+  background: var(--line);
 }
 
 /* The step's bold lead is its title, on its own line. */
 .vdnd-quick-look li strong {
   display: block;
-  margin-bottom: 2px;
+  margin-bottom: 5px;
   color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
+  font: 600 15.5px/1.4 var(--font-sans);
+  letter-spacing: -0.015em;
 }
 
 .vdnd-quick-look :not(pre) > code {
-  padding: 1px 5px;
-  border-radius: 5px;
-  background: var(--page-sunk);
+  padding: 0.18em 0.4em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
   color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font: 500 0.86em/1 var(--font-mono);
   font-variant-ligatures: none;
+  white-space: nowrap;
 }
 
 .vdnd-quick-look p:has(> a:only-child) {
-  margin-top: 28px;
+  margin-top: 30px;
 }
 
 .vdnd-quick-look p > a:only-child {
   color: var(--accent-text);
-  font-size: 14px;
-  font-weight: 600;
+  font: 560 15px/1 var(--font-sans);
 }
 
 .vdnd-quick-look p > a:only-child:hover {
-  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
 
-/* Code tabs (docs/components/CodeTabs.tsx). */
+/* CodeBlock tabs (docs/components/CodeTabs.tsx), the hero variant (--shadow-code). */
 .vdnd-code-tabs {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--code-line);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--code-bg);
-  box-shadow: var(--shadow-popover);
+  box-shadow: var(--shadow-code);
+  color-scheme: dark;
 }
 
 .vdnd-code-tabs__bar {
   display: flex;
   align-items: stretch;
-  height: 44px;
-  padding: 0 6px 0 8px;
+  gap: 2px;
+  height: 46px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--code-line);
   background: var(--code-bar);
 }
 
 .vdnd-code-tabs__tab {
+  position: relative;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 13px;
   border: 0;
   background: transparent;
   color: var(--code-punct);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font: 500 12.5px/1 var(--font-mono);
   cursor: pointer;
 }
 
-.vdnd-code-tabs__tab:hover {
+.vdnd-code-tabs__tab:hover,
+.vdnd-code-tabs__tab[aria-selected='true'] {
   color: var(--code-ink);
 }
 
-.vdnd-code-tabs__tab[aria-selected='true'] {
-  box-shadow: inset 0 -2px 0 var(--accent);
-  color: var(--code-ink);
-  font-weight: 500;
+.vdnd-code-tabs__tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  right: 13px;
+  bottom: -1px;
+  left: 13px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--code-accent);
 }
 
 .vdnd-code-tabs__tab:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--code-accent);
   outline-offset: -4px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
 }
 
 .vdnd-code-tabs .rp-codeblock {
   margin: 0;
   border: 0;
   border-radius: 0;
+  box-shadow: none;
 }
 
 .vdnd-code-tabs .vdnd-codeblock__lang {
   display: none;
 }
 
-/* Footer. */
+/* Footer: the licence line in --ink-faint, the links in --ink-muted on the right. */
 html .vdnd-home .rp-home-footer {
   margin-top: 0;
   padding: 0;
@@ -2153,30 +2335,47 @@ html .vdnd-home .rp-home-footer {
 }
 
 html .vdnd-home .rp-home-footer__container {
-  padding: 32px 40px 40px;
+  max-width: var(--home-max);
+  margin: 0 auto;
+  padding: 34px 48px 44px;
 }
 
 html .rp-home-footer__message {
-  font-weight: 400;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 8px 20px;
-  color: var(--ink-muted);
-  font-size: 13px;
+  justify-content: flex-start;
+  gap: 8px 24px;
+  color: var(--ink-faint);
+  font: 400 14px/1.4 var(--font-sans);
+}
+
+html .rp-home-footer__message > span:first-child {
+  margin-right: auto;
 }
 
 html .rp-home-footer__message a {
   color: var(--ink-muted);
+  font-weight: 500;
 }
 
 html .rp-home-footer__message a:hover {
-  color: var(--accent-text);
+  color: var(--ink);
+}
+
+/* One column below 760px, headline at 42px. */
+@media (width < 760px) {
+  .vdnd-home-hero__inner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+
+  .vdnd-home-hero__title {
+    font-size: 42px;
+  }
 }
 
 @media (width <= 1000px) {
-  .vdnd-home-hero__inner,
   .vdnd-quick-look {
     grid-template-columns: minmax(0, 1fr);
     gap: 48px;
@@ -2188,12 +2387,8 @@ html .rp-home-footer__message a:hover {
 }
 
 @media (width <= 640px) {
-  .vdnd-home-hero {
-    padding: 40px 16px 56px;
-  }
-
-  .vdnd-home-hero__title {
-    font-size: 38px;
+  .vdnd-home-hero__inner {
+    padding: 48px 16px 64px;
   }
 
   .vdnd-home-hero__actions {
@@ -2205,16 +2400,13 @@ html .rp-home-footer__message a:hover {
     align-self: stretch;
   }
 
-  .vdnd-home-features {
-    padding: 0 16px 64px;
-  }
-
   .vdnd-home-features__grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
+    padding: 0 16px 64px;
   }
 
-  .vdnd-home-content {
+  .vdnd-home-content__inner {
     padding: 64px 16px;
   }
 

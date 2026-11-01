@@ -41,6 +41,8 @@ npm run site:build    # lib → demo (base href /ngx-virtual-dnd/demo/) → docs
 
 `docs/theme/components/HomeLayout.tsx` renders `pageType: home` from `docs/pages/index.mdx`: Rspress's `hero` and `features` frontmatter plus this theme's keys (`hero.announcement` pill, `hero.highlight` for the accent part of `hero.text`, `hero.install` command, `features[].glyph` icon from `docs/theme/components/icons.tsx`). The page's MDX body (the "Quick look" section) renders below the features. Update `hero.announcement` when a release has a headline change.
 
+The hero's Backlog art plays one scripted drag (`useBacklogScript` in `HomeLayout.tsx`, Night's `mountBacklog`): four slot moves 800ms apart when the art scrolls into view, replayed on hover, stopped when the tab hides, never under reduced motion. Rows sit on `--i` indexes and move with CSS transforms only.
+
 ## Writing conventions the theme styles
 
 - **API selector:** a paragraph that is exactly `` **Selector:** `vdnd-x` `` renders as a label and chip. **Version notes:** a table cell ending in `Added in 3.3.0` shows the version as a badge. Both come from `docs/plugins/rehype-api-details.ts`, so the source and the Markdown output stay plain text.
