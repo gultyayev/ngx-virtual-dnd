@@ -2118,10 +2118,12 @@ html.rp-dark .vdnd-hero-art__cursor path {
   stroke: #05070b;
 }
 
-/* Rows shift with --ease-shift; the preview travels between rows with --ease-in-out. */
+/* The preview travels between rows with --ease-in-out. The rows and the slot shift (--ease-shift)
+   once it is halfway, as in a real drag, where the slot moves when the dragged row's center
+   crosses into the next row. Starting together would show the slot leading the preview. */
 .vdnd-hero-art--live .vdnd-hero-art__row,
 .vdnd-hero-art--live .vdnd-hero-art__placeholder {
-  transition: transform var(--dur-base) var(--ease-shift);
+  transition: transform var(--dur-base) var(--ease-shift) calc(var(--dur-settle) / 2);
 }
 
 .vdnd-hero-art--live .vdnd-hero-art__preview {
