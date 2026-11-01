@@ -36,18 +36,9 @@
             @if (showBanner()) {
               <div class="tm-note">
                 <span class="tm-note-ico">
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M12 3v18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3" />
-                    <path d="M4 8h3M4 16h3M17 8h3M17 16h3" opacity="0.55" />
+                  <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="4" y="3.5" width="16" height="5" rx="1.5" />
+                    <rect x="4" y="11" width="16" height="9.5" rx="1.5" />
                   </svg>
                 </span>
                 <div>
@@ -64,15 +55,7 @@
                   aria-label="Dismiss"
                   (click)="dismissBanner()"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                  >
+                  <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
                 </button>
@@ -121,17 +104,7 @@
 
       <!-- Footer that appears after list -->
       <button type="button" class="tm-add" data-testid="add-task-footer" (click)="addTask()">
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
         Add task
       </button>
     </div>

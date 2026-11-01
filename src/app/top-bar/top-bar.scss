@@ -1,5 +1,6 @@
 /* stylelint-disable */
 /*
+ * Night NavBar, demo app variant (vd-nav--app): glass bar, lockup, demo tabs, theme button.
  * Non-sticky by design: on the window-scrolling main demo a position:sticky topbar
  * triggers a Firefox bug where a constrained drag whose pointer-up lands below the
  * viewport never finalizes. On the Ionic task pages the topbar is pinned by the
@@ -9,42 +10,65 @@
   position: relative;
   z-index: 20;
   display: block;
-  background: var(--topbar-bg);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
-  border-bottom: 1px solid var(--border);
+  background: var(--nav-glass);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+  border-bottom: 1px solid var(--line);
 }
 
 .topbar-in {
-  width: min(1160px, 100% - 48px);
-  margin-inline: auto;
-  height: 60px;
+  height: var(--nav-h);
+  padding: 0 28px;
   display: flex;
   align-items: center;
   gap: 14px;
 }
 
 .brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
+  color: var(--ink);
   text-decoration: none;
 }
 
+.brand:hover {
+  text-decoration: none;
+}
+
+/* vd-mark: the frame in accent, the dragged row in held, the rows in ink. */
 .brand-mark {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  display: block;
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+
+.brand-mark .m-ghost {
+  fill: var(--ink);
+  opacity: 0.25;
+}
+
+.brand-mark .m-row {
+  fill: var(--ink);
+}
+
+.brand-mark .m-held {
+  fill: var(--held);
+}
+
+.brand-mark .m-frame {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
 }
 
 .wordmark {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1;
   letter-spacing: -0.02em;
+  white-space: nowrap;
   color: var(--ink);
 }
 
@@ -52,57 +76,80 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
 }
 
 .nav-tab {
-  padding: 7px 13px;
-  border-radius: 9px;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
   font-weight: 500;
+  line-height: 1.2;
   white-space: nowrap;
-  color: var(--ink-2);
+  color: var(--ink-muted);
   text-decoration: none;
   transition:
-    background 0.15s,
-    color 0.15s;
+    background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
 }
 
 .nav-tab:hover {
-  background: var(--surface-2);
   color: var(--ink);
+  text-decoration: none;
 }
 
 .nav-tab.is-active {
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-weight: 600;
+  background: var(--surface-hover);
+  color: var(--ink);
 }
 
+.nav-tab .ico {
+  width: 14px;
+  height: 14px;
+}
+
+.nav-sep {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--line-strong);
+  opacity: 0.45;
+}
+
+/* Button quiet icon */
 .icon-btn {
   display: grid;
   place-items: center;
+  flex: none;
   width: 36px;
   height: 36px;
-  border-radius: 9px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--ink-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-muted);
   cursor: pointer;
-  transition: all 0.15s;
-  flex-shrink: 0;
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
 }
 
 .icon-btn:hover {
-  background: var(--surface-2);
+  background: var(--surface-hover);
   color: var(--ink);
-  border-color: var(--border-2);
+}
+
+.icon-btn:active {
+  transform: translateY(1px);
 }
 
 /* Mobile nav toggle + dropdown sheet (hidden on desktop) */
 .nav-toggle.icon-btn {
   display: none;
-  margin-left: 6px;
 }
 
 /*
@@ -112,7 +159,7 @@
 .nav-sheet-backdrop {
   position: fixed;
   inset: 0;
-  top: 60px;
+  top: var(--nav-h);
   z-index: 19;
   background: color-mix(in srgb, var(--ink) 22%, transparent);
   -webkit-backdrop-filter: blur(2px);
@@ -121,18 +168,18 @@
 
 .nav-sheet {
   position: fixed;
-  top: 72px;
-  right: max(16px, (100% - 1160px) / 2 + 24px);
+  top: calc(var(--nav-h) + 12px);
+  right: 16px;
   z-index: 20;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 220px;
   padding: 8px;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-popover);
 }
 
 .nav-sheet-item {
@@ -141,22 +188,25 @@
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   font-size: 15px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--ink-muted);
   text-decoration: none;
-  transition: background 0.15s;
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
 }
 
 .nav-sheet-item:hover {
-  background: var(--surface-2);
+  background: var(--surface-hover);
+  color: var(--ink);
+  text-decoration: none;
 }
 
 .nav-sheet-item.is-active {
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-weight: 600;
+  background: var(--surface-hover);
+  color: var(--ink);
 }
 
 .nav-sheet-dot {
@@ -168,11 +218,21 @@
 }
 
 @media (max-width: 620px) {
-  .nav {
+  .topbar-in {
+    padding: 0 16px;
+  }
+
+  .nav,
+  .nav-sep {
     display: none;
+  }
+
+  .icon-btn {
+    margin-left: auto;
   }
 
   .nav-toggle.icon-btn {
     display: grid;
+    margin-left: 0;
   }
 }
