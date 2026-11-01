@@ -4,15 +4,17 @@
   display: block;
 }
 
+/* vd-panel__chev: points down while the panel is open, right while it is closed. */
 .chev {
   display: grid;
   place-items: center;
-  color: var(--ink-3);
+  color: var(--ink-faint);
+  transform: rotate(-90deg);
 }
 /* Like .collapse (styles.scss), rotate only on user toggles, not on the first render. */
 .panels-animated .chev {
-  transition: transform 0.2s cubic-bezier(0.3, 0.7, 0.4, 1);
+  transition: transform var(--dur-settle) var(--ease-out);
 }
-.chev.up {
-  transform: rotate(180deg);
+.chev.is-open {
+  transform: none;
 }

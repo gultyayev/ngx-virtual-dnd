@@ -22,7 +22,7 @@ ion-header::after {
 ion-toolbar {
   --background: transparent;
   --border-width: 0;
-  --min-height: 60px;
+  --min-height: var(--nav-h);
   --padding-top: 0;
   --padding-bottom: 0;
   --padding-start: 0;
@@ -30,7 +30,7 @@ ion-toolbar {
 }
 
 ion-content {
-  --background: var(--bg);
+  --background: var(--page);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -68,21 +68,20 @@ ion-content::part(scroll) {
 .tm-stage.is-sticky {
   padding-bottom: 0;
 }
-.is-sticky .page-header,
+.is-sticky .page-header {
+  position: sticky;
+  z-index: 2;
+  background: var(--page);
+}
 .is-sticky .tm-add {
   position: sticky;
   z-index: 2;
-  background: var(--bg);
 }
 .is-sticky .page-header {
   top: 0;
 }
 .is-sticky .tm-add {
   bottom: 0;
-}
-/* The hover tint over the opaque background (the global hover rule loses to the one above) */
-.is-sticky .tm-add:hover {
-  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg);
 }
 
 /* Fixed-height virtual mode: every row must render at exactly itemHeight (72px). */
@@ -91,15 +90,20 @@ ion-content::part(scroll) {
   align-items: center;
 }
 
-/* Ionic component restyles */
+/* Ionic checkbox as the Night checkbox (Field): 18px, line-strong edge, accent fill. */
 ion-checkbox.task-check {
-  --size: 20px;
-  --border-radius: 6px;
-  --border-width: 1.5px;
-  --border-color: var(--border-2);
+  --size: 18px;
+  --border-radius: 5px;
+  --border-width: 1px;
+  --border-color: var(--line-strong);
+  --checkbox-background: var(--surface);
   --border-color-checked: var(--accent);
   --checkbox-background-checked: var(--accent);
-  --checkmark-color: #fff;
+  --checkmark-color: var(--on-accent);
+  --checkmark-width: 2px;
   flex-shrink: 0;
   margin-top: 1px;
+}
+:host-context([data-theme='dark']) ion-checkbox.task-check {
+  --checkbox-background: var(--surface-raised);
 }

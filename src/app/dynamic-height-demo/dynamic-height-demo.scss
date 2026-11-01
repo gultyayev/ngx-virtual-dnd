@@ -22,7 +22,7 @@ ion-header::after {
 ion-toolbar {
   --background: transparent;
   --border-width: 0;
-  --min-height: 60px;
+  --min-height: var(--nav-h);
   --padding-top: 0;
   --padding-bottom: 0;
   --padding-start: 0;
@@ -30,7 +30,7 @@ ion-toolbar {
 }
 
 ion-content {
-  --background: var(--bg);
+  --background: var(--page);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -55,15 +55,18 @@ ion-content::part(scroll) {
 
 /* Header sits inside the card at the top, dividing from the first row. */
 .page-header {
-  padding: 22px 18px;
-  border-bottom: 1px solid var(--border);
+  padding: 22px 22px;
+  border-bottom: 1px solid var(--line);
 }
 .page-header .tm-tools {
   margin-bottom: 0;
 }
 /* Title/count is inside the card here, so temper the page-title scale a touch. */
 .page-header .tm-title {
-  font-size: 22px;
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
 }
 
 /* Rows are variable height (dynamic mode) — no fixed height. Multi-line rows keep
@@ -72,15 +75,20 @@ ion-content::part(scroll) {
   margin-top: 2px;
 }
 
-/* Ionic component restyles */
+/* Ionic checkbox as the Night checkbox (Field): 18px, line-strong edge, accent fill. */
 ion-checkbox.task-check {
-  --size: 20px;
-  --border-radius: 6px;
-  --border-width: 1.5px;
-  --border-color: var(--border-2);
+  --size: 18px;
+  --border-radius: 5px;
+  --border-width: 1px;
+  --border-color: var(--line-strong);
+  --checkbox-background: var(--surface);
   --border-color-checked: var(--accent);
   --checkbox-background-checked: var(--accent);
-  --checkmark-color: #fff;
+  --checkmark-color: var(--on-accent);
+  --checkmark-width: 2px;
   flex-shrink: 0;
   margin-top: 1px;
+}
+:host-context([data-theme='dark']) ion-checkbox.task-check {
+  --checkbox-background: var(--surface-raised);
 }

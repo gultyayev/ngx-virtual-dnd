@@ -97,6 +97,7 @@
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 body {
   font-family: var(--font-sans);
@@ -111,7 +112,18 @@ a {
   text-decoration: none;
 }
 a:hover {
-  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+code,
+pre {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 ::-webkit-scrollbar {
   width: 9px;
@@ -121,13 +133,13 @@ a:hover {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-2);
+  background: var(--ghost);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--ink-3);
+  background: var(--ink-faint);
 }
 
 .app {
@@ -136,93 +148,137 @@ a:hover {
   flex-direction: column;
 }
 
-/* ══════════ HERO ══════════ */
+/* Inline SVG icons: 24px grid, 1.75px stroke, round caps (Night iconography). */
+.ico {
+  display: block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ══════════ HERO (vd-app__hero) ══════════ */
 .hero--flat {
-  padding: 38px 0 6px;
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+/* One of the three places Night allows a gradient: the hero glow. */
+.hero--flat::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(520px 260px at 82% 0%, var(--glow-a), transparent 70%),
+    radial-gradient(420px 220px at 100% 100%, var(--glow-b), transparent 70%);
 }
 .hero--flat .hero-in {
-  width: min(1160px, 100% - 48px);
-  margin-inline: auto;
+  position: relative;
+  max-width: var(--home-max);
+  margin: 0 auto;
+  padding: 44px 48px 36px;
 }
 .hero-title {
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
+  font-size: 40px;
+  font-weight: 620;
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
   color: var(--ink);
 }
 .hero-sub {
-  margin-top: 11px;
-  max-width: 600px;
-  font-size: 15px;
-  line-height: 1.55;
-  color: var(--ink-2);
+  margin-top: 12px;
+  max-width: 620px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-muted);
 }
 .hero-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 9px;
-  margin-top: 20px;
+  gap: 8px;
+  margin-top: 22px;
 }
 .htag {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 12px;
-  border-radius: 999px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
   white-space: nowrap;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   background: var(--surface);
-  font-size: 12.5px;
+  box-shadow: var(--shadow-1);
+  font-size: 13px;
   font-weight: 500;
-  color: var(--ink-2);
+  line-height: 1;
+  color: var(--ink-muted);
 }
-.htag svg {
-  flex-shrink: 0;
-  color: var(--accent);
+[data-theme='dark'] .htag {
+  background: var(--surface-raised);
+}
+.htag .ico {
+  width: 15px;
+  height: 15px;
+  color: var(--accent-text);
 }
 
-/* ══════════ STAGE ══════════ */
+/* ══════════ STAGE (vd-app__main) ══════════ */
 .stage {
-  width: min(1160px, 100% - 48px);
-  margin-inline: auto;
-  padding: 22px 0 72px;
+  width: 100%;
+  max-width: var(--home-max);
+  margin: 0 auto;
+  padding: 24px 48px 56px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 20px;
 }
 
-/* ══════════ PANEL ══════════ */
+/* ══════════ PANEL (vd-panel) ══════════ */
 .panel {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 15px;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
   overflow: hidden;
 }
 .panel-hd {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   width: 100%;
-  padding: 15px 18px;
-  background: none;
+  height: 60px;
+  padding: 0 18px;
+  background: transparent;
   border: 0;
   cursor: pointer;
   color: var(--ink);
   font-family: inherit;
-  transition: background 0.15s;
+  text-align: left;
+  transition: background-color var(--dur-quick) var(--ease-out);
 }
 .panel-hd:hover {
-  background: var(--surface-2);
+  background: var(--page-sunk);
+}
+.panel-hd:focus-visible {
+  outline-offset: -2px;
+  border-radius: var(--radius-lg);
 }
 .panel-hd-l {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  line-height: 1;
+  letter-spacing: -0.015em;
 }
 .panel-ico {
   display: grid;
@@ -230,21 +286,29 @@ a:hover {
   width: 30px;
   height: 30px;
   border-radius: 9px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
+  background: var(--accent-tint);
+  box-shadow: inset 0 0 0 1px var(--accent-hairline);
+}
+.panel-ico .ico {
+  width: 16px;
+  height: 16px;
 }
 .panel-ico--muted {
-  background: var(--surface-2);
-  color: var(--ink-2);
+  color: var(--ink-muted);
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 .panel-hd-r {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--ink-3);
+  color: var(--ink-faint);
 }
 .panel-hint {
   font-size: 13px;
+  line-height: 1;
+  color: var(--ink-faint);
 }
 .collapse {
   display: grid;
@@ -253,7 +317,7 @@ a:hover {
 /* Only user toggles animate. The router inserts the view before its bindings apply, so an
    always-on transition would play 0fr → 1fr on every load of an initially open panel. */
 .panels-animated .collapse {
-  transition: grid-template-rows 0.28s cubic-bezier(0.3, 0.7, 0.4, 1);
+  transition: grid-template-rows var(--dur-settle) var(--ease-out);
 }
 .collapse.is-open {
   grid-template-rows: 1fr;
@@ -263,119 +327,146 @@ a:hover {
   overflow: hidden;
 }
 
-/* ══════════ SETTINGS GRID ══════════ */
+/* ══════════ SETTINGS GRID (vd-panel__grid) ══════════ */
 .settings-grid {
-  border-top: 1px solid var(--border);
-  padding: 22px 20px 24px;
+  border-top: 1px solid var(--line);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .setgroup {
   display: flex;
   flex-direction: column;
-  gap: 13px;
-  padding-inline: 22px;
-  border-left: 1px solid var(--border);
+  gap: 14px;
+  min-width: 0;
+  padding: 22px 20px 24px;
 }
-.setgroup:first-child {
-  border-left: 0;
-  padding-left: 2px;
+.setgroup + .setgroup {
+  border-left: 1px solid var(--line);
 }
+/* type-kicker: written in sentence case, displayed in uppercase mono. */
 .set-label {
-  font-size: 11px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--ink-3);
+  color: var(--ink-faint);
 }
+
+/* Field */
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
+  min-width: 0;
 }
 .field-lbl {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--ink);
 }
 .input {
   height: 38px;
+  width: 100%;
   padding: 0 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line-strong);
   border-radius: 9px;
-  background: var(--field-bg);
+  background: var(--surface);
   color: var(--ink);
   font-family: inherit;
   font-size: 14px;
-  width: 100%;
+  line-height: 1;
   outline: none;
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+    border-color var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
+}
+[data-theme='dark'] .input {
+  background: var(--surface-raised);
+}
+.input[type='number'] {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
 }
 .input:hover {
-  border-color: var(--border-2);
+  border-color: var(--ink-faint);
 }
 .input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.select-wrap {
-  position: relative;
-}
-.select-wrap select {
+select.input {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 34px;
   cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-muted) 50%),
+    linear-gradient(135deg, var(--ink-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) 16px,
+    calc(100% - 12px) 16px;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
 }
-.select-wrap svg {
-  position: absolute;
-  right: 11px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: var(--ink-3);
-}
+
+/* Button (secondary) */
 .btn {
-  height: 38px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 15px;
-  border-radius: 9px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   font-family: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 560;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
   cursor: pointer;
-  border: 0;
-  transition: all 0.15s;
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn .ico {
+  width: 16px;
+  height: 16px;
 }
 .btn-secondary {
-  background: var(--field-bg);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border-color: var(--line-strong);
   color: var(--ink);
+  box-shadow: var(--shadow-1);
+}
+[data-theme='dark'] .btn-secondary {
+  background: var(--surface-raised);
 }
 .btn-secondary:hover {
-  background: var(--surface-2);
-  border-color: var(--border-2);
-}
-.btn-secondary svg {
-  color: var(--accent);
+  background: var(--surface-hover);
 }
 
+/* Checkbox. The input fills its label so Playwright can .check()/.uncheck() it, but is
+   visually replaced by .check-box. (opacity:0 keeps it "visible" to actionability checks;
+   width:0/height:0 would make it unactionable.) */
 .check {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
-  padding: 3px 0;
-  position: relative;
 }
-/* Input fills its label so Playwright can .check()/.uncheck() it, but is visually
-   replaced by .check-box. (opacity:0 keeps it "visible" to actionability checks;
-   width:0/height:0 would make it unactionable.) */
 .check input {
   position: absolute;
   inset: 0;
@@ -388,148 +479,196 @@ a:hover {
 .check-box {
   display: grid;
   place-items: center;
-  width: 19px;
-  height: 19px;
-  border-radius: 6px;
-  border: 1.5px solid var(--border-2);
-  color: transparent;
-  transition: all 0.15s;
-  flex-shrink: 0;
-  background: var(--field-bg);
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--on-accent);
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out);
+}
+[data-theme='dark'] .check-box {
+  background: var(--surface-raised);
 }
 .check-box svg {
   width: 12px;
   height: 12px;
+  transform: scale(0);
+  transition: transform var(--dur-quick) var(--ease-lift);
 }
 .check input:checked + .check-box {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+}
+.check input:checked + .check-box svg {
+  transform: scale(1);
 }
 .check input:focus-visible + .check-box {
-  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .check-lbl {
   font-size: 14px;
+  line-height: 1.4;
   color: var(--ink);
 }
 
+/* Segmented control (vd-seg--block) */
 .segmented {
   position: relative;
   display: flex;
   padding: 3px;
-  background: var(--bg-sunk);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
+  background: var(--page-sunk);
+  border: 1px solid var(--line);
+}
+[data-theme='dark'] .segmented {
+  background: rgba(255, 255, 255, 0.03);
 }
 .seg-thumb {
   position: absolute;
   top: 3px;
   bottom: 3px;
+  left: 3px;
   width: calc(50% - 3px);
-  border-radius: 7px;
+  border-radius: calc(var(--radius-md) - 3px);
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
-  transition: left 0.2s cubic-bezier(0.3, 0.7, 0.4, 1);
+  box-shadow:
+    var(--shadow-1),
+    0 0 0 1px var(--line);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.seg-thumb.is-end {
+  transform: translateX(100%);
+}
+[data-theme='dark'] .seg-thumb {
+  background: var(--surface-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px var(--line);
 }
 .seg-btn {
   position: relative;
   z-index: 1;
   flex: 1;
-  height: 32px;
+  height: 30px;
+  padding: 0 14px;
   border: 0;
+  border-radius: calc(var(--radius-md) - 3px);
   background: transparent;
   font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-muted);
   cursor: pointer;
-  transition: color 0.15s;
+  transition: color var(--dur-quick) var(--ease-out);
 }
 .seg-btn.is-active {
   color: var(--ink);
 }
 .hint {
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.5;
-  color: var(--ink-3);
+  color: var(--ink-faint);
 }
 .hint code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: var(--bg-sunk);
-  padding: 1px 5px;
-  border-radius: 5px;
-  color: var(--ink-2);
+  font-size: 0.92em;
+  font-weight: 500;
+  color: var(--ink-muted);
 }
 
 /* ══════════ LISTS (main demo) ══════════ */
 .lists {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
 }
+/* vd-app__list */
 .listcard {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 15px;
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  transition:
+    border-color var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
+}
+/* Drop target: the card's edge turns accent-line with a 3px accent-tint halo; the fill stays. */
+.listcard:has(.vdnd-droppable-active) {
+  border-color: var(--accent-line);
+  box-shadow:
+    var(--shadow-2),
+    0 0 0 3px var(--accent-tint);
 }
 .list-hd {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  height: 54px;
+  padding: 0 16px 0 18px;
+  border-bottom: 1px solid var(--line);
 }
 .list-title {
+  margin-right: auto;
   font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
   color: var(--ink);
 }
 .list-meta {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 8px;
 }
+/* vd-badge--accent */
 .virt {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-}
-.count-badge {
-  min-width: 26px;
-  height: 24px;
-  padding: 0 9px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-size: 12.5px;
-  font-weight: 700;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--accent-hairline);
+  background: var(--accent-tint);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
   color: var(--accent-text);
-  background: var(--accent-soft);
-  border-radius: 999px;
+  white-space: nowrap;
+}
+/* vd-app__count */
+.count-badge {
+  min-width: 34px;
+  height: 24px;
+  padding: 0 8px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Droppable body: sunk background. No padding so the droppable's bounds match the
-   inner scroller exactly (constrain-to-container clamps against these bounds). Row
-   gaps/insets come from the rows themselves, keeping the itemHeight math intact. */
+/* Droppable body. No padding, so the droppable's bounds match the inner scroller exactly
+   (constrain-to-container clamps against these bounds); the margin gives the first and last
+   rows the card's breathing room outside the droppable. Row insets come from the rows
+   themselves, keeping the itemHeight math intact. */
 .list {
-  background: var(--bg-sunk);
-  border-radius: 12px;
-  overflow: hidden;
-  transition:
-    background 0.15s,
-    box-shadow 0.15s;
-}
-.list.vdnd-droppable-active {
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1.5px var(--accent-soft-bd);
+  margin: 8px 0;
 }
 .virtual-scroll-container {
   display: block;
@@ -542,17 +681,17 @@ a:hover {
   min-height: 120px;
   display: grid;
   place-items: center;
-  color: var(--ink-3);
+  color: var(--ink-faint);
   font-size: 13px;
 }
 
-/* Row = exactly itemHeight (50px). Visual card is the inset .item-inner so
-   adjacent rows show a gap without breaking fixed-height positioning. */
+/* ListItem. The row is exactly itemHeight (50px); the visible card is the inset .item-inner,
+   so adjacent rows read as cards with 6px gaps without breaking fixed-height positioning. */
 .item {
   height: 50px;
-  box-sizing: border-box;
-  padding: 3px 8px;
+  padding: 3px 10px;
   cursor: grab;
+  outline: none;
 }
 .item:active {
   cursor: grabbing;
@@ -564,46 +703,61 @@ a:hover {
   height: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 0 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: var(--shadow-sm);
+  background: var(--row-bg);
+  border: 1px solid var(--row-line);
+  border-radius: var(--radius-md);
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+    border-color var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
 }
 .item:hover .item-inner {
-  border-color: var(--border-2);
-  box-shadow: var(--shadow);
+  border-color: var(--line-strong);
+}
+.item:focus-visible .item-inner {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .item-handle {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  color: var(--ink-3);
-  transition: color 0.15s;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--ink-faint);
+  transition: color var(--dur-quick) var(--ease-out);
 }
 .item.use-handle .item-handle {
   cursor: grab;
 }
 .item:hover .item-handle {
-  color: var(--accent);
+  color: var(--ink-muted);
 }
 .item-handle svg {
   width: 16px;
   height: 16px;
 }
 .item-text {
+  flex: 1;
+  min-width: 0;
   font-size: var(--row-fs);
   font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.01em;
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.item.vdnd-draggable-disabled {
+  cursor: not-allowed;
+}
+.item.vdnd-draggable-disabled .item-text {
+  color: var(--ink-faint);
+}
+.item.vdnd-draggable-disabled .item-handle {
+  opacity: 0.4;
 }
 
 /* ══════════ DEBUG ══════════ */
@@ -611,22 +765,22 @@ a:hover {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--ink-3);
-  transition: background 0.2s;
+  background: var(--ink-faint);
+  transition: background-color var(--dur-quick) var(--ease-out);
 }
 .live-dot.is-live {
-  background: #22c55e;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 30%, transparent);
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent);
 }
+/* vd-panel__pre */
 .debug-json {
   margin: 0;
-  border-top: 1px solid var(--border);
-  padding: 16px 20px;
-  background: var(--bg-sunk);
+  border-top: 1px solid var(--line);
+  padding: 16px 20px 20px;
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.75;
-  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-muted);
   overflow-x: auto;
   white-space: pre;
 }
@@ -645,76 +799,100 @@ a:hover {
   margin-bottom: 6px;
 }
 .tm-title {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: 40px;
+  font-weight: 620;
+  line-height: 1.08;
+  letter-spacing: -0.045em;
   color: var(--ink);
 }
+/* vd-chip */
 .tm-count {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-2);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 7px 13px;
-  border-radius: 999px;
+  display: inline-block;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 26px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .tm-count b {
-  color: var(--accent-text);
+  font-weight: 600;
+  color: var(--ink);
 }
+/* Callout (tip): accent-tint with an accent-hairline edge, no side stripe. */
 .tm-note {
   position: relative;
   display: flex;
   gap: 14px;
   align-items: flex-start;
   margin-top: 18px;
-  padding: 16px 18px;
-  border-radius: 14px;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-soft-bd);
+  padding: 16px 52px 16px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-hairline);
 }
 .tm-note-ico {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  flex: none;
   background: var(--surface);
-  color: var(--accent);
-  box-shadow: var(--shadow-sm);
+  color: var(--accent-text);
+  box-shadow: inset 0 0 0 1px var(--accent-hairline);
+}
+[data-theme='dark'] .tm-note-ico {
+  background: var(--surface-raised);
+}
+.tm-note-ico .ico {
+  width: 16px;
+  height: 16px;
 }
 .tm-note h2 {
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 600;
-  color: var(--ink);
+  line-height: 1.35;
   letter-spacing: -0.01em;
+  color: var(--ink);
 }
 .tm-note p {
-  margin-top: 3px;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--ink-2);
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-body);
 }
+/* Button quiet icon, small */
 .tm-note-x {
   position: absolute;
   top: 12px;
   right: 12px;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
   border: 0;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--ink-muted);
   cursor: pointer;
-  transition: all 0.15s;
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
 }
 .tm-note-x:hover {
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  background: var(--surface-hover);
   color: var(--ink);
+}
+.tm-note-x .ico {
+  width: 16px;
+  height: 16px;
 }
 .tm-tools {
   display: flex;
@@ -723,59 +901,85 @@ a:hover {
   margin: 22px 0 14px;
   flex-wrap: wrap;
 }
+/* Filter chips: the tag shape; the current filter takes the quiet accent fill. */
 .chip {
-  padding: 8px 15px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
   background: var(--surface);
-  color: var(--ink-2);
-  transition: all 0.15s;
+  box-shadow: var(--shadow-1);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+[data-theme='dark'] .chip {
+  background: var(--surface-raised);
 }
 .chip:hover:not(.is-active) {
-  border-color: var(--border-2);
+  border-color: var(--line-strong);
   color: var(--ink);
 }
 .chip.is-active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-  box-shadow: var(--shadow-sm);
+  background: var(--accent-tint);
+  border-color: var(--accent-hairline);
+  color: var(--accent-text);
 }
 .chip-count {
-  margin-left: 6px;
-  opacity: 0.75;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
+}
+.chip.is-active .chip-count {
+  color: var(--accent-text);
 }
 
 .tasklist {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
   overflow: hidden;
 }
+/* ListItem: the row box keeps its height (itemHeight, or the measured height in dynamic mode);
+   the visible card is the ::before inset 3px inside it. */
 .task {
   position: relative;
+  isolation: isolate;
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  padding: var(--tm-pad) 18px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  box-sizing: border-box;
+  gap: 12px;
+  padding: var(--tm-pad) 22px;
   cursor: grab;
-  transition:
-    background 0.15s,
-    opacity 0.15s;
+  outline: none;
 }
-.task:last-child {
-  border-bottom: 0;
+.task::before {
+  content: '';
+  position: absolute;
+  inset: 3px 8px;
+  z-index: -1;
+  border-radius: var(--radius-md);
+  background: var(--row-bg);
+  border: 1px solid var(--row-line);
+  transition: border-color var(--dur-quick) var(--ease-out);
 }
-.task:hover {
-  background: var(--surface-2);
+.task:hover::before {
+  border-color: var(--line-strong);
+}
+.task:focus-visible::before {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .task:active {
   cursor: grabbing;
@@ -783,16 +987,16 @@ a:hover {
 .task-handle {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  font-size: 20px;
-  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  font-size: 18px;
+  flex: none;
   margin-top: 1px;
-  color: var(--ink-3);
-  transition: color 0.15s;
+  color: var(--ink-faint);
+  transition: color var(--dur-quick) var(--ease-out);
 }
 .task:hover .task-handle {
-  color: var(--accent);
+  color: var(--ink-muted);
 }
 .task-main {
   flex: 1;
@@ -807,118 +1011,191 @@ a:hover {
   gap: 12px;
 }
 .task-title {
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 500;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 .task.is-done .task-title {
   text-decoration: line-through;
-  color: var(--ink-3);
+  color: var(--ink-faint);
 }
 .task-desc {
   font-size: 13.5px;
   line-height: 1.5;
-  color: var(--ink-2);
+  color: var(--ink-muted);
 }
 .task.is-done .task-desc {
-  color: var(--ink-3);
+  color: var(--ink-faint);
 }
+/* vd-badge, toned per category */
 .tag {
   margin-left: auto;
-  flex-shrink: 0;
-  font-size: 10.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 4px 9px;
-  border-radius: 6px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-muted);
 }
 .tag--work {
-  background: var(--accent-soft);
+  background: var(--accent-tint);
+  border-color: var(--accent-hairline);
   color: var(--accent-text);
 }
 .tag--personal {
-  background: var(--cat-personal-soft);
-  color: var(--cat-personal-text);
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--ink-muted);
 }
 .tag--urgent {
-  background: var(--danger-soft);
-  color: var(--danger-text);
+  background: var(--danger-tint);
+  border-color: var(--danger-line);
+  color: var(--danger);
 }
+/* Button secondary, full width */
 .tm-add {
   margin-top: 16px;
   width: 100%;
   height: 48px;
-  border-radius: 13px;
-  border: 1px dashed var(--border-2);
-  background: transparent;
-  color: var(--ink-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--ink);
   font-family: inherit;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 560;
+  letter-spacing: -0.01em;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: all 0.15s;
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
+}
+[data-theme='dark'] .tm-add {
+  background: var(--surface-raised);
 }
 .tm-add:hover {
-  border-color: var(--accent);
-  color: var(--accent-text);
-  background: var(--accent-soft);
+  background: var(--surface-hover);
+}
+.tm-add:active {
+  transform: translateY(1px);
+}
+.tm-add .ico {
+  width: 16px;
+  height: 16px;
 }
 .tm-empty {
   padding: 56px 20px;
   text-align: center;
-  color: var(--ink-3);
+  color: var(--ink-faint);
   font-size: 14px;
 }
 
-/* ══════════ LIBRARY DRAG PLACEHOLDER ══════════ */
-/* The library renders <vdnd-drag-placeholder> with its height set to itemHeight.
-   Render it as a dashed accent drop indicator, inset to match row gaps. */
+/* ══════════ LIBRARY DRAG PLACEHOLDER (the slot) ══════════ */
+/* The library renders <vdnd-drag-placeholder> with its height set to itemHeight. Render it as
+   the slot: a 1.5px dashed accent-line card on accent-tint, inset like the row cards. */
 .vdnd-drag-placeholder-visible {
   display: block;
-  box-sizing: border-box;
-  padding: 3px 8px;
+  padding: 3px 10px;
 }
 .vdnd-drag-placeholder-visible::before {
   content: '';
   display: block;
   height: 100%;
-  border: 1.5px dashed var(--accent);
-  background: var(--accent-soft);
-  border-radius: 10px;
+  border: 1.5px dashed var(--accent-line);
+  background: var(--accent-tint);
+  border-radius: var(--radius-md);
 }
-/* On the task lists the rows sit flush with no inset. */
-.tasklist .vdnd-drag-placeholder-visible,
+.tasklist .vdnd-drag-placeholder-visible {
+  padding: 3px 8px;
+}
+/* The virtual viewport demo's rows sit flush with no inset. */
 .virtual-list-wrapper .vdnd-drag-placeholder-visible {
   padding: 0;
 }
-.tasklist .vdnd-drag-placeholder-visible::before,
 .virtual-list-wrapper .vdnd-drag-placeholder-visible::before {
   border-radius: 0;
   border-left: 0;
   border-right: 0;
 }
 
-/* ══════════ DRAG PREVIEW ══════════ */
-/* The preview clone teleports to a body-level overlay, so these must be global. */
+/* ══════════ DRAG PREVIEW (held) ══════════ */
+/* The preview clone teleports to a body-level overlay, so these must be global. It is the row
+   at its exact size and angle, never tilted or scaled: list-bg (#17202d in dark), a 1.5px held
+   edge and shadow-lift. The edge and lift fade in on pick-up and out while the drop settles. */
 .vdnd-drag-preview {
   pointer-events: none;
 }
-.vdnd-drag-preview .item {
+/* The library clips the default (cloned) preview to the row's box; let the lift show. */
+body .vdnd-drag-preview .vdnd-drag-preview-clone {
+  overflow: visible;
+}
+.vdnd-drag-preview .item,
+.vdnd-drag-preview .task {
   cursor: grabbing;
 }
-.vdnd-drag-preview .item-inner,
-.vdnd-drag-preview .task {
-  box-shadow: var(--shadow-lg);
-  border-radius: 12px;
-  transform: rotate(1.5deg);
+/* The main demo's preview is the library's clone of the row, which carries the row's computed
+   colours inline, so the held look overrides them. */
+.vdnd-drag-preview .item-inner {
+  position: relative;
+  background: var(--list-bg) !important;
+  border-color: transparent !important;
 }
 .vdnd-drag-preview .task {
-  border: 1px solid var(--border);
+  position: relative;
+  background: var(--list-bg);
+  border-radius: var(--radius-md);
+}
+.vdnd-drag-preview .task::before {
+  display: none;
+}
+[data-theme='dark'] .vdnd-drag-preview .item-inner {
+  background: #17202d !important;
+}
+[data-theme='dark'] .vdnd-drag-preview .task {
+  background: #17202d;
+}
+.vdnd-drag-preview .item-inner::after,
+.vdnd-drag-preview .task::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1.5px solid var(--held);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lift);
+  pointer-events: none;
+  animation: vdnd-demo-lift var(--dur-quick) var(--ease-out) backwards;
+  transition: opacity var(--dur-settle) var(--ease-out);
+}
+.vdnd-drag-preview .task::after {
+  inset: 0;
+}
+.vdnd-drag-preview-dropping .item-inner::after,
+.vdnd-drag-preview-dropping .task::after {
+  opacity: 0;
+}
+.vdnd-drag-preview .item-handle {
+  color: var(--held) !important;
+}
+.vdnd-drag-preview .task-handle {
+  color: var(--held);
+}
+@keyframes vdnd-demo-lift {
+  from {
+    opacity: 0;
+  }
 }
 
 /* Suppress hover styles on draggable items during drag to prevent stuck states. */
@@ -929,30 +1206,44 @@ body.vdnd-dragging .vdnd-draggable {
 /* ══════════ RESPONSIVE ══════════ */
 @media (max-width: 860px) {
   .settings-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 22px 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .setgroup {
+  .setgroup + .setgroup {
     border-left: 0;
-    padding-inline: 2px;
   }
   .setgroup:nth-child(2n) {
-    border-left: 1px solid var(--border);
-    padding-left: 22px;
+    border-left: 1px solid var(--line);
+  }
+  .setgroup:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
   }
   .panel-hint {
     display: none;
   }
 }
-@media (max-width: 620px) {
+@media (max-width: 760px) {
+  .hero--flat .hero-in {
+    padding: 32px 20px 28px;
+  }
+  .hero-title {
+    font-size: 32px;
+  }
+  .stage {
+    padding: 20px 20px 48px;
+  }
   .lists {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .settings-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .setgroup:nth-child(2n) {
     border-left: 0;
-    padding-left: 2px;
+  }
+  .setgroup + .setgroup {
+    border-top: 1px solid var(--line);
+  }
+  .tm-title {
+    font-size: 32px;
   }
 }
