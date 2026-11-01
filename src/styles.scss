@@ -1181,14 +1181,16 @@ body .vdnd-drag-preview .vdnd-drag-preview-clone {
   box-shadow: var(--shadow-lift);
   pointer-events: none;
   animation: vdnd-demo-lift var(--dur-quick) var(--ease-out) backwards;
-  transition: opacity var(--dur-settle) var(--ease-out);
 }
 .vdnd-drag-preview .task::after {
   inset: 0;
 }
+/* A keyframe animation, not a transition: the layer restarts when the drop begins (its pick-up
+   animation replays), so a transition finds no held state to start from and the edge would
+   vanish at once. */
 .vdnd-drag-preview-dropping .item-inner::after,
 .vdnd-drag-preview-dropping .task::after {
-  opacity: 0;
+  animation: vdnd-demo-settle var(--dur-settle) var(--ease-out) forwards;
 }
 .vdnd-drag-preview .item-handle {
   color: var(--held) !important;
@@ -1198,6 +1200,11 @@ body .vdnd-drag-preview .vdnd-drag-preview-clone {
 }
 @keyframes vdnd-demo-lift {
   from {
+    opacity: 0;
+  }
+}
+@keyframes vdnd-demo-settle {
+  to {
     opacity: 0;
   }
 }

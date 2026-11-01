@@ -8,14 +8,25 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { IsActiveMatchOptions, RouterLink, RouterLinkActive } from '@angular/router';
 import { ThemeService } from '../theme.service';
 
 interface NavTab {
   readonly label: string;
   readonly link: string;
-  readonly exact: boolean;
+  readonly match: IsActiveMatchOptions;
 }
+
+/**
+ * Matches a tab by its path alone. The query is ignored: the docs open the demo with
+ * `?theme=light|dark`, which must not change the current tab.
+ */
+const matchPath = (paths: IsActiveMatchOptions['paths']): IsActiveMatchOptions => ({
+  paths,
+  queryParams: 'ignored',
+  matrixParams: 'ignored',
+  fragment: 'ignored',
+});
 
 /**
  * Shared top navigation bar used across all demo pages: brand, page tabs and a
@@ -49,7 +60,7 @@ interface NavTab {
             class="nav-tab"
             [routerLink]="tab.link"
             routerLinkActive="is-active"
-            [routerLinkActiveOptions]="{ exact: tab.exact }"
+            [routerLinkActiveOptions]="tab.match"
             >{{ tab.label }}</a
           >
         }
@@ -125,7 +136,7 @@ interface NavTab {
               [routerLink]="tab.link"
               routerLinkActive="is-active"
               #rla="routerLinkActive"
-              [routerLinkActiveOptions]="{ exact: tab.exact }"
+              [routerLinkActiveOptions]="tab.match"
               (click)="closeMenu()"
             >
               {{ tab.label }}
@@ -156,9 +167,9 @@ export class TopBarComponent {
   readonly menuOpen = signal(false);
 
   protected readonly tabs: readonly NavTab[] = [
-    { label: 'Main demo', link: '/', exact: true },
-    { label: 'Page scroll', link: '/page-scroll', exact: false },
-    { label: 'Dynamic height', link: '/dynamic-height', exact: false },
+    { label: 'Main demo', link: '/', match: matchPath('exact') },
+    { label: 'Page scroll', link: '/page-scroll', match: matchPath('subset') },
+    { label: 'Dynamic height', link: '/dynamic-height', match: matchPath('subset') },
   ];
 
   /** Absolute so it resolves the same from any demo route and from local dev. */

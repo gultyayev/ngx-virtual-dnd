@@ -1,90 +1,142 @@
-// Shared look for the docs live examples. Scoped to the shell host (unencapsulated).
+// Shared look for the docs live examples, on the Night design system (its ListItem and
+// LiveDemoFrame cards). Scoped to the shell host (unencapsulated), except where marked: the
+// page ground, and the drag preview, which renders in a body-level overlay outside the shell.
+
+// The docs frame shows the example on page-sunk with an 18px dot grid. The example draws the
+// same ground, so it reads the same in the frame and in its own tab.
+html:has(app-examples-shell) {
+  background-color: var(--page-sunk);
+  background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.5px);
+  background-size: 18px 18px;
+}
+
+html:has(app-examples-shell) body {
+  background: transparent;
+}
+
+// Text above the lists uses whole-pixel line heights, so every list lands on a whole pixel.
 app-examples-shell {
   display: block;
   padding: 16px;
   color: var(--ink);
   font-size: 14px;
+  line-height: 20px;
 
-  // List body: the sortable list host.
+  // The list panel (Night's list card): a surface card with a line edge. The vertical padding
+  // sits outside the droppable, so its bounds stay those of the scroller; rows inset their cards.
   .list {
     display: block;
     overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--bg-sunk);
+    padding: 6px 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+    transition:
+      border-color var(--dur-quick) var(--ease-out),
+      box-shadow var(--dur-quick) var(--ease-out);
   }
 
-  .list .vdnd-droppable-active {
-    background: var(--accent-soft);
-    box-shadow: inset 0 0 0 1.5px var(--accent-soft-bd);
+  // Drop target: the panel's edge turns accent-line with a 3px accent-tint halo; the fill stays.
+  .list:has(.vdnd-droppable-active),
+  .page:has(.vdnd-droppable-active) {
+    border-color: var(--accent-line);
+    box-shadow:
+      var(--shadow-1),
+      0 0 0 3px var(--accent-tint);
   }
 
-  // Rows sit flush; each row is exactly itemHeight tall (fixed-height examples).
+  // Rows (their card and tracking are below, shared with the drag preview). Each row box is
+  // exactly itemHeight tall (fixed-height examples) and its card is inset 3px 6px inside it.
   .row {
     display: flex;
     align-items: center;
     gap: 10px;
-    box-sizing: border-box;
     height: 48px;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
+    padding: 0 20px;
+    outline: 0;
+    color: var(--ink);
+    font-size: 14.5px;
+    font-weight: 500;
+    line-height: 1;
     cursor: grab;
     user-select: none;
   }
 
-  .row:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
+  .row:active {
+    cursor: grabbing;
+  }
+
+  .row:hover::before {
+    border-color: var(--line-strong);
+  }
+
+  .row:focus-visible::before {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
   }
 
   // Dynamic-height rows grow with their content.
   .row.note {
-    align-items: flex-start;
     flex-direction: column;
+    align-items: flex-start;
     gap: 4px;
     height: auto;
-    padding: 12px 16px;
+    padding: 15px 20px;
   }
 
   .note-title {
-    font-weight: 600;
+    line-height: 22px;
   }
 
   .note-body {
-    color: var(--ink-2);
-    line-height: 1.45;
+    color: var(--ink-muted);
+    font-size: 13.5px;
+    font-weight: 400;
+    line-height: 20px;
   }
 
+  // Drag handle: only the grip starts a drag. Its 24px target keeps the 16px grip 14px from
+  // the card's edge.
   .row.with-handle {
+    gap: 6px;
+    padding-left: 16px;
     cursor: default;
   }
 
   .handle {
     display: grid;
+    flex: none;
     place-items: center;
     width: 24px;
     height: 24px;
-    border-radius: 6px;
-    color: var(--ink-3);
+    border-radius: var(--radius-xs);
+    color: var(--ink-faint);
     cursor: grab;
+    transition: color var(--dur-quick) var(--ease-out);
+  }
+
+  .row:hover .handle {
+    color: var(--ink-muted);
   }
 
   .handle:hover {
-    background: var(--surface-2);
     color: var(--ink);
   }
 
-  // One-line status above a list (event counters).
+  // One-line status above a list (event counters); the values are mono.
   .status {
-    margin: 0 0 8px;
-    color: var(--ink-2);
-    font-size: 13px;
+    margin: 0 0 12px;
+    color: var(--ink-muted);
+    font-size: 13.5px;
   }
 
   .status strong {
     color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
     font-variant-numeric: tabular-nums;
+    font-weight: 600;
   }
 
   // Multiple lists: two columns side by side.
@@ -94,61 +146,188 @@ app-examples-shell {
     gap: 16px;
   }
 
+  // Column heading: a kicker (uppercase mono from CSS, sentence case in the source) and a
+  // count chip.
   .column h3 {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    margin: 0 0 8px;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.07em;
+    margin: 0 0 10px;
+    padding: 0 2px 0 4px;
+    color: var(--ink-faint);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.09em;
+    line-height: 24px;
     text-transform: uppercase;
-    color: var(--ink-3);
   }
 
-  // Page-level scroll: the vdndScrollable element owns the scroll, header and footer included.
+  h3 > span {
+    display: inline-grid;
+    place-items: center;
+    min-width: 34px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    color: var(--ink);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  // Page-level scroll: the vdndScrollable element is the panel and owns the scroll, header and
+  // footer included.
   .page {
     height: 400px;
     overflow: auto;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--bg-sunk);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+    transition:
+      border-color var(--dur-quick) var(--ease-out),
+      box-shadow var(--dur-quick) var(--ease-out);
   }
 
   .page-header {
     margin: 0;
-    padding: 16px 16px 12px;
+    padding: 18px 20px 10px;
+    color: var(--ink);
     font-size: 15px;
     font-weight: 600;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
+    line-height: 18px;
   }
 
   .page-footer {
-    padding: 24px 16px;
-    color: var(--ink-3);
+    padding: 24px 20px;
+    color: var(--ink-faint);
+    font-size: 13.5px;
     text-align: center;
   }
 
+  // The slot: the global placeholder style, inset like the row cards.
   .vdnd-drag-placeholder-visible {
-    padding: 0;
-  }
-
-  .vdnd-drag-placeholder-visible::before {
-    border-radius: 0;
-    border-right: 0;
-    border-left: 0;
+    padding: 3px 6px;
   }
 }
 
-// Custom preview template: rendered in the body-level overlay, outside the shell.
+// ══ Row card: in the shell, and in the drag preview (global) ══
+// The default drag preview is the library's clone of the row, under <body>: it keeps the row's
+// classes and gets the row's box, colours and font inline, but not its pseudo-elements,
+// tracking or wrapping, so those are declared for both. At rest the card is row-bg with a
+// row-line edge.
+app-examples-shell .row,
+.vdnd-drag-preview .row {
+  position: relative;
+  isolation: isolate;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+app-examples-shell .row.note,
+.vdnd-drag-preview .row.note {
+  white-space: normal;
+}
+
+app-examples-shell .note-title,
+.vdnd-drag-preview .note-title {
+  white-space: nowrap;
+}
+
+app-examples-shell .note-body,
+.vdnd-drag-preview .note-body {
+  letter-spacing: 0;
+}
+
+app-examples-shell .row::before,
+.vdnd-drag-preview .row::before {
+  position: absolute;
+  z-index: -2;
+  inset: 3px 6px;
+  border: 1px solid var(--row-line);
+  border-radius: var(--radius-md);
+  background: var(--row-bg);
+  content: '';
+  transition:
+    border-color var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
+}
+
+// ══ Drag preview (held): global ══
+// The row at its exact size and angle, never tilted or scaled: list-bg (#17202d in dark), a
+// 1.5px held edge and shadow-lift. The held layer fades in on pick-up (dur-quick) and out while
+// the drop settles (dur-settle), back to the card at rest.
+.vdnd-drag-preview .row::after,
+.preview-card::after {
+  position: absolute;
+  z-index: -1;
+  inset: 3px 6px;
+  border: 1.5px solid var(--held);
+  border-radius: var(--radius-md);
+  background: var(--list-bg);
+  box-shadow: var(--shadow-lift);
+  content: '';
+  animation: vdnd-example-lift var(--dur-quick) var(--ease-out) backwards;
+}
+
+[data-theme='dark'] .vdnd-drag-preview .row::after,
+[data-theme='dark'] .preview-card::after {
+  background: #17202d;
+}
+
+// A keyframe animation, not a transition: the layer restarts when the drop begins (its pick-up
+// animation replays), so a transition finds no held state to start from and the edge would
+// vanish at once.
+.vdnd-drag-preview-dropping .row::after,
+.vdnd-drag-preview-dropping .preview-card::after {
+  animation: vdnd-example-settle var(--dur-settle) var(--ease-out) forwards;
+}
+
+// The clone carries the grip's colour inline (it was hovered when pressed).
+.vdnd-drag-preview .handle {
+  color: var(--held) !important;
+}
+
+// Custom preview template (custom-preview example): the row's card at the row's size, with
+// the same held layer. Block, not flex, so the space before <strong> stays; the line height is
+// the row's (itemHeight 48), which centres the line.
 .preview-card {
-  box-sizing: border-box;
-  width: 240px;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-  box-shadow: var(--shadow-lg);
+  position: absolute;
+  isolation: isolate;
+  inset: 0;
+  padding: 0 20px;
   color: var(--ink);
-  font-size: 14px;
-  transform: rotate(1.5deg);
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 48px;
+  white-space: nowrap;
+}
+
+.preview-card::before {
+  position: absolute;
+  z-index: -2;
+  inset: 3px 6px;
+  border: 1px solid var(--row-line);
+  border-radius: var(--radius-md);
+  background: var(--row-bg);
+  content: '';
+}
+
+@keyframes vdnd-example-lift {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes vdnd-example-settle {
+  to {
+    opacity: 0;
+  }
 }
