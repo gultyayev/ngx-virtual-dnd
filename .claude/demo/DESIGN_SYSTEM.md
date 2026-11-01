@@ -2,7 +2,7 @@
 
 The docs site and the demo app follow the **Night** design system (neutral grounds, one accent, orange only for the item in hand; light and dark): https://claude.ai/artifact/178zESCbcsVoQpsAPpKqAf. Read it with the Artifact tool, starting with `project/README.md`; `project/rspress.md` maps it onto Rspress and, in its "Demo app" section, maps the demo's classes onto Night's components (`components/<Name>/`, `components/bundle.css`). Read Night before styling demo pages, docs pages or the docs theme.
 
-The v1 **ngx-virtual-dnd Design System** (teal accent) in the project skill (`.claude/skills/ngx-virtual-dnd-design/`) is superseded; its logo assets (`assets/`) are still the shipped favicon and lockup.
+The v1 **ngx-virtual-dnd Design System** (teal accent) in the project skill (`.claude/skills/ngx-virtual-dnd-design/`) is superseded, its logo assets included. The docs and the demo ship Night's favicon (`favicon-v2.svg` from its Logos group, copied as is), the docs nav and the demo top bar draw the mark inline, and `scripts/og-image.mjs` renders the docs' social card.
 
 ## Rules for this repo
 

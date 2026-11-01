@@ -11,7 +11,7 @@ Human-facing documentation, built with Rspress 2 (`@rspress/core`) and published
 | `docs/pages/guide/{start,essentials,features,more}/` | Guide sections                                                                                             |
 | `docs/pages/api/`                                    | API reference (hand-written tables)                                                                        |
 | `docs/pages/changelog.mdx`                           | Renders the repo's `CHANGELOG.md` via MDX import                                                           |
-| `docs/pages/public/`                                 | Favicon, logo tiles (the nav draws its mark inline), `og-image.png`                                        |
+| `docs/pages/public/`                                 | Favicon (Night's `favicon-v2.svg`; the nav draws its mark inline), `og-image.png`                          |
 | `docs/theme/`                                        | `index.tsx` (Layout slots: nav lockup, version badge), `index.css` (Night tokens, `--rp-*` map, overrides) |
 | `docs/theme/components/`                             | Replaced Rspress components: `HomeLayout`, `CodeBlock` (title bar), `Callout` (icons)                      |
 | `docs/components/LiveDemo.tsx`                       | Global MDX component that embeds a demo example in an iframe                                               |
@@ -19,6 +19,7 @@ Human-facing documentation, built with Rspress 2 (`@rspress/core`) and published
 | `docs/plugins/rehype-api-details.ts`                 | API pages: `**Selector:**` line and "Added in x.y.z" table badges                                          |
 | `src/app/examples/<slug>/<slug>.ts`                  | Live examples (Angular), served at `/examples/<slug>`                                                      |
 | `scripts/assemble-site.js`                           | Copies the demo into `dist/site/demo/` and writes per-route `index.html` entry points                      |
+| `scripts/og-image.mjs`                               | Renders `og-image.png`, the social card: the home hero in Night's dark theme (1280×640)                    |
 
 ## Commands
 
@@ -39,7 +40,7 @@ npm run site:build    # lib → demo (base href /ngx-virtual-dnd/demo/) → docs
 
 ## Home page
 
-`docs/theme/components/HomeLayout.tsx` renders `pageType: home` from `docs/pages/index.mdx`: Rspress's `hero` and `features` frontmatter plus this theme's keys (`hero.announcement` pill, `hero.highlight` for the accent part of `hero.text`, `hero.install` command, `features[].glyph` icon from `docs/theme/components/icons.tsx`). The page's MDX body (the "Quick look" section) renders below the features. Update `hero.announcement` when a release has a headline change.
+`docs/theme/components/HomeLayout.tsx` renders `pageType: home` from `docs/pages/index.mdx`: Rspress's `hero` and `features` frontmatter plus this theme's keys (`hero.announcement` pill, `hero.highlight` for the accent part of `hero.text`, `hero.install` command, `features[].glyph` icon from `docs/theme/components/icons.tsx`). The page's MDX body (the "Quick look" section) renders below the features. Update `hero.announcement` when a release has a headline change. The social card (`og-image.png`) shows `hero.text`, `hero.highlight`, the first sentence of `hero.tagline`, `hero.install` and the hero art: after changing any of them, run `node scripts/og-image.mjs` and commit the image.
 
 The hero's Backlog art plays one scripted drag (`useBacklogScript` in `HomeLayout.tsx`, Night's `mountBacklog`): four slot moves 800ms apart when the art scrolls into view, replayed on hover, stopped when the tab hides, never under reduced motion. Rows sit on `--i` indexes and move with CSS transforms only.
 
