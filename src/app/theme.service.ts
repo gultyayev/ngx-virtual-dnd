@@ -3,16 +3,14 @@ import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 export type ThemeMode = 'auto' | 'light' | 'dark';
 
 const STORAGE_KEY = 'vdnd-theme';
-const FIXED_SCHEME = 'porcelain';
-const FIXED_DENSITY = 'comfortable';
 
 /**
  * Manages the demo app's light/dark theme.
  *
- * Applies `data-theme` / `data-scheme` / `data-density` to the document root so the
- * shared design tokens in `src/styles/tokens.css` resolve. The accent (teal), light scheme
- * (porcelain) and density (comfortable) are fixed — only the light/dark mode is
- * user-toggleable via the top bar.
+ * Sets `data-theme` (`light` or `dark`) on the document root so the Night design tokens in
+ * `src/styles/tokens.css` resolve. The top bar's theme button cycles system (auto), light and
+ * dark; auto follows the OS preference. A user's switch cross-fades through a view transition
+ * (styled in `src/styles.scss`) where the browser supports one, except under reduced motion.
  *
  * Embedded use (docs live examples, rendered in an iframe by the docs' `<LiveDemo>`):
  * - a `?theme=light|dark` query param sets the initial mode;
@@ -56,9 +54,6 @@ export class ThemeService {
       }
     });
 
-    const root = document.documentElement;
-    root.setAttribute('data-scheme', FIXED_SCHEME);
-    root.setAttribute('data-density', FIXED_DENSITY);
     this.#apply();
   }
 
@@ -76,7 +71,7 @@ export class ThemeService {
     const next: Record<ThemeMode, ThemeMode> = { auto: 'light', light: 'dark', dark: 'auto' };
     this.mode.set(next[this.mode()]);
     this.#write(this.mode());
-    this.#apply();
+    this.#applyWithTransition();
   }
 
   #listenToEmbeddingPage(): void {
@@ -96,6 +91,15 @@ export class ThemeService {
 
     // No payload beyond the type, so any target origin is safe.
     window.parent.postMessage({ type: 'vdnd-theme-ready' }, '*');
+  }
+
+  #applyWithTransition(): void {
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    if (typeof document.startViewTransition !== 'function' || reduced) {
+      this.#apply();
+      return;
+    }
+    document.startViewTransition(() => this.#apply());
   }
 
   #apply(): void {

@@ -1,35 +1,88 @@
 /* stylelint-disable */
 /*
- * ngx-virtual-dnd demo — global styles.
- * Ported from the Claude Design "ngx-virtual-dnd" design system (teal accent,
- * light/dark themes). Shared design-system classes live here (not in component
- * SCSS) because several are applied to elements rendered outside a single
- * component's view: the library's drag placeholder / drag-preview clone (which
- * teleports to a body-level overlay) and Ionic light-DOM content.
+ * ngx-virtual-dnd demo — global styles, on the Night design system
+ * (https://claude.ai/artifact/178zESCbcsVoQpsAPpKqAf; the demo app's class mapping is in its
+ * project/rspress.md, "Demo app"). Shared classes live here (not in component SCSS) because
+ * several are applied to elements rendered outside a single component's view: the library's
+ * drag placeholder / drag-preview clone (which teleports to a body-level overlay) and Ionic
+ * light-DOM content.
  *
  * DO NOT import Ionic's structure.css — it sets body { position: fixed; overflow: hidden }.
  */
 @use 'styles/tokens';
 @import '@ionic/angular/css/core.css';
-/* Self-hosted (latin subset) so pages never wait on a third-party font request. */
-@import '@fontsource/inter/latin-400.css';
-@import '@fontsource/inter/latin-500.css';
-@import '@fontsource/inter/latin-600.css';
-@import '@fontsource/inter/latin-700.css';
-@import '@fontsource/jetbrains-mono/latin-400.css';
-@import '@fontsource/jetbrains-mono/latin-500.css';
+
+/* Geist and Geist Mono, self-hosted from @fontsource-variable/geist and /geist-mono (Latin and
+   Latin Extended), under the family names the Night tokens use (--font-sans, --font-mono); the
+   packages' own stylesheets name them "Geist Variable". */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/geist/files/geist-latin-ext-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/geist/files/geist-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/geist-mono/files/geist-mono-latin-ext-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 /* ══════════ IONIC BRIDGE ══════════ */
 :root {
-  --ion-color-primary: #0e9488;
-  --ion-color-primary-rgb: 14, 148, 136;
-  --ion-color-primary-contrast: #ffffff;
-  --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: #0b7a70;
-  --ion-color-primary-tint: #26a094;
-  --ion-background-color: var(--bg);
+  --ion-color-primary: var(--accent);
+  --ion-color-primary-contrast: var(--on-accent);
+  --ion-color-primary-shade: var(--accent-hover);
+  --ion-color-primary-tint: var(--accent-hover);
+  --ion-background-color: var(--page);
   --ion-text-color: var(--ink);
   --ion-font-family: var(--font-sans);
+}
+
+/* ══════════ THEME SWITCH ══════════ */
+/* ThemeService switches themes inside a view transition (as Rspress does on the docs): the
+   root cross-fades in --dur-settle. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dur-settle);
+  animation-timing-function: var(--ease-out);
 }
 
 /* ══════════ BASE ══════════ */
@@ -49,11 +102,9 @@ body {
   font-family: var(--font-sans);
   font-size: 1rem;
   line-height: 1.5;
-  background: var(--bg);
+  font-synthesis: none;
+  background: var(--page);
   color: var(--ink);
-  transition:
-    background 0.25s ease,
-    color 0.25s ease;
 }
 a {
   color: var(--accent-text);
