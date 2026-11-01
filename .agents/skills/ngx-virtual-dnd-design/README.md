@@ -6,8 +6,8 @@ A minimal, professional design system for the `ngx-virtual-dnd` Angular library,
 
 | What | Where |
 |---|---|
-| Design tokens (source of truth) | `src/styles/tokens.css` — imported by the demo (`src/styles.scss`). The docs site has moved to the Night design system (see `.claude/demo/DESIGN_SYSTEM.md`) and no longer uses these tokens |
-| Demo app styles | `src/styles.scss`, component SCSS under `src/app/` |
+| Design tokens (source of truth) | None any more: the demo and the docs site have both moved to the Night design system (see `.claude/demo/DESIGN_SYSTEM.md`); `src/styles/tokens.css` now carries Night's tokens |
+| Demo app styles | Night, not this system: `src/styles.scss`, component SCSS under `src/app/` |
 | Docs site theme | Night, not this system: `docs/theme/index.css` carries Night's tokens and maps them onto Rspress `--rp-*` variables; `docs/theme/index.tsx` holds Layout slot overrides |
 | Logo assets | `assets/` in this skill; shipped copies in `public/` (demo) and `docs/pages/public/` (docs) |
 

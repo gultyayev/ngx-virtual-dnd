@@ -1243,7 +1243,26 @@ body.vdnd-dragging .vdnd-draggable {
   .setgroup + .setgroup {
     border-top: 1px solid var(--line);
   }
+  .tm-head {
+    flex-wrap: wrap;
+    align-items: center;
+  }
   .tm-title {
     font-size: 32px;
+  }
+}
+/* Reduced motion: transitions and the pick-up fade jump to their end state. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
   }
 }

@@ -34,7 +34,7 @@ These rules prevent common mistakes that cause hard-to-debug issues:
 - **ngx-virtual-dnd** (`/projects/ngx-virtual-dnd`) - Reusable drag-and-drop library
 - **Docs site** (`/docs`) - Rspress 2 documentation site. GitHub Pages serves the docs at `/ngx-virtual-dnd/` and the demo at `/ngx-virtual-dnd/demo/` (see `.claude/DOCS_SITE.md`)
 
-Design tokens for the demo live in `src/styles/tokens.css`; the docs theme carries the Night design system's tokens in `docs/theme/index.css`.
+Both follow the Night design system: its tokens live in `src/styles/tokens.css` (demo) and `docs/theme/index.css` (docs).
 
 **Prefixes:** `app-` for main app components, `vdnd-` for library components/directives.
 
