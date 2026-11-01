@@ -90,12 +90,12 @@ export default function LiveDemo({ example, title, height = 380 }: LiveDemoProps
         <a className="vdnd-live-demo__open" href={exampleUrl} target="_blank" rel="noreferrer">
           Open in new tab
           <svg
-            width="12"
-            height="12"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.75"
             strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden="true"
@@ -104,22 +104,24 @@ export default function LiveDemo({ example, title, height = 380 }: LiveDemoProps
           </svg>
         </a>
       </figcaption>
-      {src ? (
-        <iframe
-          ref={frameRef}
-          className="vdnd-live-demo__frame"
-          src={src}
-          title={title}
-          loading="lazy"
-          style={{ height: frameHeight }}
-          onLoad={() => {
-            loadedRef.current = true;
-            postTheme();
-          }}
-        />
-      ) : (
-        <div className="vdnd-live-demo__frame" style={{ height }} />
-      )}
+      <div className="vdnd-live-demo__body">
+        {src ? (
+          <iframe
+            ref={frameRef}
+            className="vdnd-live-demo__frame"
+            src={src}
+            title={title}
+            loading="lazy"
+            style={{ height: frameHeight }}
+            onLoad={() => {
+              loadedRef.current = true;
+              postTheme();
+            }}
+          />
+        ) : (
+          <div className="vdnd-live-demo__frame" style={{ height }} />
+        )}
+      </div>
     </figure>
   );
 }

@@ -4,21 +4,21 @@ Human-facing documentation, built with Rspress 2 (`@rspress/core`) and published
 
 ## Layout
 
-| Path                                                 | What                                                                                        |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `docs/rspress.config.ts`                             | Site config (base `/ngx-virtual-dnd/`, `llms`, globals, defines)                            |
-| `docs/pages/`                                        | Content root (`root`). `_nav.json` = top nav, `_meta.json` per folder = sidebar order       |
-| `docs/pages/guide/{start,essentials,features,more}/` | Guide sections                                                                              |
-| `docs/pages/api/`                                    | API reference (hand-written tables)                                                         |
-| `docs/pages/changelog.mdx`                           | Renders the repo's `CHANGELOG.md` via MDX import                                            |
-| `docs/pages/public/`                                 | Favicon, nav logo tiles, `og-image.png`                                                     |
-| `docs/theme/`                                        | `index.tsx` (Layout slot: version badge), `index.css` (token → `--rp-*` mapping, overrides) |
-| `docs/theme/components/`                             | Replaced Rspress components: `HomeLayout`, `CodeBlock` (title bar), `Callout` (icons)       |
-| `docs/components/LiveDemo.tsx`                       | Global MDX component that embeds a demo example in an iframe                                |
-| `docs/components/CodeTabs.tsx`                       | Code blocks as tabs, labelled by their `title` (home page)                                  |
-| `docs/plugins/rehype-api-details.ts`                 | API pages: `**Selector:**` line and "Added in x.y.z" table badges                           |
-| `src/app/examples/<slug>/<slug>.ts`                  | Live examples (Angular), served at `/examples/<slug>`                                       |
-| `scripts/assemble-site.js`                           | Copies the demo into `dist/site/demo/` and writes per-route `index.html` entry points       |
+| Path                                                 | What                                                                                                       |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `docs/rspress.config.ts`                             | Site config (base `/ngx-virtual-dnd/`, `llms`, globals, defines)                                           |
+| `docs/pages/`                                        | Content root (`root`). `_nav.json` = top nav, `_meta.json` per folder = sidebar order                      |
+| `docs/pages/guide/{start,essentials,features,more}/` | Guide sections                                                                                             |
+| `docs/pages/api/`                                    | API reference (hand-written tables)                                                                        |
+| `docs/pages/changelog.mdx`                           | Renders the repo's `CHANGELOG.md` via MDX import                                                           |
+| `docs/pages/public/`                                 | Favicon, logo tiles (the nav draws its mark inline), `og-image.png`                                        |
+| `docs/theme/`                                        | `index.tsx` (Layout slots: nav lockup, version badge), `index.css` (Night tokens, `--rp-*` map, overrides) |
+| `docs/theme/components/`                             | Replaced Rspress components: `HomeLayout`, `CodeBlock` (title bar), `Callout` (icons)                      |
+| `docs/components/LiveDemo.tsx`                       | Global MDX component that embeds a demo example in an iframe                                               |
+| `docs/components/CodeTabs.tsx`                       | Code blocks as tabs, labelled by their `title` (home page)                                                 |
+| `docs/plugins/rehype-api-details.ts`                 | API pages: `**Selector:**` line and "Added in x.y.z" table badges                                          |
+| `src/app/examples/<slug>/<slug>.ts`                  | Live examples (Angular), served at `/examples/<slug>`                                                      |
+| `scripts/assemble-site.js`                           | Copies the demo into `dist/site/demo/` and writes per-route `index.html` entry points                      |
 
 ## Commands
 
@@ -41,19 +41,21 @@ npm run site:build    # lib → demo (base href /ngx-virtual-dnd/demo/) → docs
 
 `docs/theme/components/HomeLayout.tsx` renders `pageType: home` from `docs/pages/index.mdx`: Rspress's `hero` and `features` frontmatter plus this theme's keys (`hero.announcement` pill, `hero.highlight` for the accent part of `hero.text`, `hero.install` command, `features[].glyph` icon from `docs/theme/components/icons.tsx`). The page's MDX body (the "Quick look" section) renders below the features. Update `hero.announcement` when a release has a headline change.
 
+The hero's Backlog art plays one scripted drag (`useBacklogScript` in `HomeLayout.tsx`, Night's `mountBacklog`): four slot moves 800ms apart when the art scrolls into view, replayed on hover, stopped when the tab hides, never under reduced motion. Rows sit on `--i` indexes and move with CSS transforms only.
+
 ## Writing conventions the theme styles
 
 - **API selector:** a paragraph that is exactly `` **Selector:** `vdnd-x` `` renders as a label and chip. **Version notes:** a table cell ending in `Added in 3.3.0` shows the version as a badge. Both come from `docs/plugins/rehype-api-details.ts`, so the source and the Markdown output stay plain text.
-- `**required**` alone in a table cell renders as an outlined tag; inline code alone in a first-column cell renders as an accent identifier.
-- **Ordered lists** render as numbered steps (the number in an accent circle).
-- **Callouts:** `:::tip`, `:::warning` and `:::danger` get an icon (`Callout.tsx`). Warning uses the `--warn-*` tokens.
+- `**required**` alone in a table cell renders as an outlined badge; inline code alone in a first-column cell renders as a plain identifier (no chip).
+- **Ordered lists** render as numbered steps (mono numbers in rings, joined by a rule).
+- **Callouts:** `:::tip`, `:::warning` and `:::danger` get an icon (`Callout.tsx`). Warning uses the `--warning-*` tokens.
 - **Code blocks:** ` ```ts file="<root>/path" ` gets the path as its title automatically; `title="…"` overrides it. `{3,5}` in the meta highlights lines. Untitled blocks show their language in the corner.
 
 ## Gotchas
 
 - **Do not define `themeConfig.nav` in the config.** It switches off the autogenerated sidebar. The nav lives in `docs/pages/_nav.json`.
 - **`fallbackHeadingTitle: false`:** every page writes its own `# H1`. Rspress cannot see the H1 inside the imported `CHANGELOG.md`, and would add a duplicate.
-- **Rspress injects config `head` tags only into built pages**, not the dev server. The web fonts are imported from `docs/theme/index.css` for that reason.
+- **Rspress injects config `head` tags only into built pages**, not the dev server. Put anything both need (like the fonts) in `docs/theme/index.css` instead.
 - **Edge-to-edge:** the viewport tag (`viewport-fit=cover`) is set with `<Head>` in `docs/theme/index.tsx`, not the config's `head`: Rspress's head manager dedupes meta tags by name and keeps its default viewport. `index.css` pads the UI with `env(safe-area-inset-*)`, adds the top inset to `--rp-nav-height` (every Rspress offset follows it), and bleeds the nav's background `--vdnd-nav-bleed` above the viewport so in-app browsers (Telegram) and iOS overscroll never show page content above the bar.
 - **Safari 26+ status bar:** Safari ignores `theme-color`. In a tab it never shows page content under the status bar: it fills it with the solid `background-color` of a sticky/fixed header at the top edge. A transparent header gives white, and a header with `backdrop-filter` gives the page color. So the nav's blur lives on `.rp-nav::before`, and the nav itself carries `--vdnd-nav-solid` (the bar at rest) with `background-clip: text` so it never paints. Test changes in the iOS Simulator (`xcrun simctl openurl booted <url>` + `xcrun simctl io booted screenshot`); Chrome can't reproduce it.
 - **Positioned inside the nav:** the nav box includes the bleed and the side insets, so anything Rspress positions against `.rp-nav` (like the hamburger dropdown at `top: 80%`) lands in the wrong place. Anchor it to a closer ancestor.
@@ -66,4 +68,4 @@ npm run site:build    # lib → demo (base href /ngx-virtual-dnd/demo/) → docs
 - **Examples inherit the demo's app-wide providers** (`src/app/app.config.ts`), including `provideDemoAnimationConfig()` (shift duration 0 unless `?shiftAnimation=`). An example that depends on a provider must declare it in its own `providers` so the shown source is complete.
 - **Links** are root-relative to the docs root (`/guide/...`); Rspress adds the base and checks them. Links to the demo must be absolute URLs, because the demo is not part of the Rspress build.
 - **Public assets** live in `docs/pages/public/` (inside the content root), not `docs/public/`.
-- **Fonts:** the demo self-hosts Inter and JetBrains Mono (`@fontsource/*`, imported in `src/styles.scss`), so its builds and E2E runs need no network. The docs theme still loads them from Google Fonts.
+- **Fonts:** the docs self-host Geist and Geist Mono: `docs/theme/index.css` declares them as `Geist` / `Geist Mono` (the names in the Night tokens) from the `@fontsource-variable/geist` and `/geist-mono` files (`url('~@fontsource-variable/…')`; the packages' own CSS calls them "Geist Variable"). The demo self-hosts Inter and JetBrains Mono (`@fontsource/*`, imported in `src/styles.scss`). Neither build needs the network for fonts.

@@ -8,6 +8,7 @@ import {
   Link,
 } from '@rspress/core/theme-original';
 import type { Feature, Hero } from '@rspress/core';
+import { type CSSProperties, type RefObject, useEffect, useRef, useState } from 'react';
 import { useCopyText } from './useCopyText';
 import {
   FEATURE_ICONS,
@@ -69,36 +70,151 @@ function InstallCommand({ command }: { command: string }) {
   );
 }
 
-/** A virtual list mid-drag: rendered rows in the card, virtual rows outside it, Task 43 lifted. */
+/** Rendered rows of the hero list; the dragged row (Task 43) is the preview. */
+const HERO_ROWS = [41, 42, 44, 45];
+/** Slot index at rest: Task 43's own place, mid-drag. */
+const HERO_REST = 2;
+/** The four scripted moves (slot indexes), one every --dur-scene. */
+const HERO_MOVES = [HERO_REST + 1, HERO_REST + 2, HERO_REST + 1, HERO_REST];
+/** --dur-scene. */
+const HERO_STEP_MS = 800;
+
+/**
+ * The hero's scripted drag (Night's `mountBacklog`): four moves of the slot, 800ms apart, when
+ * the art scrolls into view; replayed on hover; stopped (back at rest) when the tab hides; never
+ * under reduced motion. Rows sit on `--i` indexes and CSS moves them with transform only.
+ */
+function useBacklogScript(root: RefObject<HTMLElement | null>): {
+  slot: number;
+  live: boolean;
+} {
+  const [slot, setSlot] = useState(HERO_REST);
+  const [live, setLive] = useState(false);
+
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let timers: number[] = [];
+    let busy = false;
+    let seen = false;
+
+    const stop = (): void => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      timers = [];
+      busy = false;
+      setSlot(HERO_REST);
+    };
+
+    const play = (): void => {
+      if (busy || reducedMotion.matches || document.hidden) return;
+      busy = true;
+      setLive(true);
+      HERO_MOVES.forEach((index, step) => {
+        timers.push(
+          window.setTimeout(
+            () => setSlot(Math.min(index, HERO_ROWS.length)),
+            HERO_STEP_MS * (step + 1),
+          ),
+        );
+      });
+      timers.push(
+        window.setTimeout(
+          () => {
+            busy = false;
+          },
+          HERO_STEP_MS * (HERO_MOVES.length + 1),
+        ),
+      );
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (seen || !entries.some((entry) => entry.isIntersecting)) return;
+        seen = true;
+        play();
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(el);
+
+    const onVisibilityChange = (): void => {
+      if (document.hidden) stop();
+    };
+    const onPointerEnter = (): void => {
+      if (seen) play();
+    };
+    const onReducedMotionChange = (): void => {
+      if (reducedMotion.matches) stop();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    el.addEventListener('pointerenter', onPointerEnter);
+    reducedMotion.addEventListener('change', onReducedMotionChange);
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      el.removeEventListener('pointerenter', onPointerEnter);
+      reducedMotion.removeEventListener('change', onReducedMotionChange);
+    };
+  }, [root]);
+
+  return { slot, live };
+}
+
+/**
+ * The Backlog art: a virtual list mid-drag. Rendered rows in the panel, virtual rows outside
+ * it, Task 43 lifted over its slot. Decorative (`aria-hidden`).
+ */
 function HeroIllustration() {
-  const row = (n: number) => (
-    <div key={n} className="vdnd-hero-art__row">
-      <IconGrip />
-      <span>Task {n}</span>
-    </div>
-  );
+  const rootRef = useRef<HTMLDivElement>(null);
+  const { slot, live } = useBacklogScript(rootRef);
+  const index = (style: number): CSSProperties => ({ '--i': style }) as CSSProperties;
   const virtualRow = (n: number) => (
     <div key={n} className="vdnd-hero-art__virtual">
-      <span>Task {n}</span>
-      <span className="vdnd-hero-art__virtual-tag">Virtual</span>
+      Task {n}
+      <span className="vdnd-hero-art__virtual-tag">virtual</span>
     </div>
   );
   return (
-    <div className="vdnd-hero-art" aria-hidden="true">
-      <div className="vdnd-hero-art__virtuals">{[39, 40].map(virtualRow)}</div>
-      <div className="vdnd-hero-art__list">
-        <div className="vdnd-hero-art__head">
-          <span className="vdnd-hero-art__name">Backlog</span>
-          <span className="vdnd-hero-art__count">1,000 items · 5 in the DOM</span>
+    <div
+      ref={rootRef}
+      className={`vdnd-hero-art${live ? ' vdnd-hero-art--live' : ''}`}
+      aria-hidden="true"
+    >
+      <div className="vdnd-hero-art__stage">
+        <div className="vdnd-hero-art__virtuals vdnd-hero-art__virtuals--top">
+          {[39, 40].map(virtualRow)}
         </div>
-        {[41, 42].map(row)}
-        <div className="vdnd-hero-art__placeholder" />
-        {[44, 45].map(row)}
-      </div>
-      <div className="vdnd-hero-art__virtuals">{[46, 47].map(virtualRow)}</div>
-      <div className="vdnd-hero-art__preview">
-        <IconGrip />
-        <span>Task 43</span>
+        <div className="vdnd-hero-art__list">
+          <div className="vdnd-hero-art__head">
+            <span className="vdnd-hero-art__name">Backlog</span>
+            <span className="vdnd-hero-art__count">1,000 items</span>
+            <span className="vdnd-hero-art__count">
+              <i className="vdnd-hero-art__dot" />5 in the DOM
+            </span>
+          </div>
+          <div className="vdnd-hero-art__rows">
+            {HERO_ROWS.map((n, k) => (
+              <div key={n} className="vdnd-hero-art__row" style={index(k < slot ? k : k + 1)}>
+                <IconGrip size={16} />
+                <span>Task {n}</span>
+              </div>
+            ))}
+            <div className="vdnd-hero-art__placeholder" style={index(slot)} />
+            <div className="vdnd-hero-art__preview" style={index(slot)}>
+              <IconGrip size={16} />
+              <span>Task 43</span>
+              <svg className="vdnd-hero-art__cursor" viewBox="0 0 24 24">
+                <path d="M4.5 2.5l14.8 9.1-6.5 1.3 3.7 6.7-2.6 1.4-3.7-6.7-5.1 4.6z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div className="vdnd-hero-art__virtuals vdnd-hero-art__virtuals--bottom">
+          {[46, 47].map(virtualRow)}
+        </div>
       </div>
     </div>
   );
@@ -134,7 +250,7 @@ export function HomeLayout(props: HomeLayoutProps) {
               <Link className="vdnd-home-announce" href={hero.announcement.link}>
                 <span className="vdnd-home-announce__badge">{hero.announcement.badge}</span>
                 <span className="vdnd-home-announce__text">{hero.announcement.text}</span>
-                <IconArrowRight size={14} />
+                <IconArrowRight size={15} />
               </Link>
             )}
             {hero.name && <p className="vdnd-home-hero__name">{hero.name}</p>}
@@ -151,7 +267,7 @@ export function HomeLayout(props: HomeLayoutProps) {
                   >
                     {action.text}
                     {isExternal(action.link) ? (
-                      <IconExternal size={14} />
+                      <IconExternal size={16} />
                     ) : (
                       <IconArrowRight size={16} />
                     )}

@@ -1,92 +1,411 @@
 /*
  * ngx-virtual-dnd docs theme.
- * Level 1 (CSS variables) maps the shared design tokens onto Rspress; level 2 (BEM class
- * overrides) covers what variables cannot reach. Design rules: .claude/skills/ngx-virtual-dnd-design.
+ * Night design system (https://claude.ai/artifact/178zESCbcsVoQpsAPpKqAf; rules in its
+ * project/README.md, the Rspress mapping in project/rspress.md). Level 1 (CSS variables) maps the
+ * Night tokens onto Rspress; level 2 (BEM class overrides) covers what variables cannot reach.
  */
-/* Loaded here rather than through `head` in the config: Rspress injects `head` only into
-   built pages, so the dev server would otherwise fall back to system fonts. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-@import '../../src/styles/tokens.css';
+
+/* ══════════ FONTS ══════════ */
+/* Geist and Geist Mono, self-hosted from @fontsource-variable/geist and /geist-mono (Latin and
+   Latin Extended). Declared here under the family names the Night tokens use (--font-sans,
+   --font-mono); the packages' own stylesheets name them "Geist Variable". */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('~@fontsource-variable/geist/files/geist-latin-ext-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('~@fontsource-variable/geist/files/geist-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('~@fontsource-variable/geist-mono/files/geist-mono-latin-ext-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('~@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ══════════ NIGHT TOKENS ══════════ */
+/* Copied from the Night design system's tokens.css (generated from its tokens.json; version
+   1793530998-548a). Copy new values from there; don't retype them. Light on :root, dark on
+   html.rp-dark (Rspress's theme class). */
+:root {
+  --page: #ffffff;
+  --page-sunk: #f7f8fa;
+  --surface: #ffffff;
+  --surface-raised: #f3f5f8;
+  --surface-hover: #eceff4;
+  --nav-glass: #ffffffcc;
+  --line: #e6e9ee;
+  --line-strong: #7d8696;
+  --ghost: #cfd6df;
+  --ink: #0a0d14;
+  --ink-body: #2b3341;
+  --ink-muted: #525c6c;
+  --ink-faint: #5f697b;
+  --accent: #0b71d0;
+  --accent-hover: #0960b3;
+  --on-accent: #ffffff;
+  --accent-text: #0866bd;
+  --accent-tint: #eef6fe;
+  --accent-line: #4e93dc;
+  --accent-hairline: #d3e5f8;
+  --held: #d95b0c;
+  --on-held: #1f0e04;
+  --held-tint: #fff3ea;
+  --success: #12813c;
+  --success-tint: #e9f8ef;
+  --warning: #9c5006;
+  --warning-tint: #fff8ec;
+  --warning-line: #f0d3a0;
+  --danger: #c22d2d;
+  --danger-tint: #fef1f0;
+  --danger-line: #f3c7c3;
+  --list-bg: #ffffff;
+  --list-edge: #d5e2f0;
+  --row-bg: #f7f9fb;
+  --row-line: #e6eaf0;
+  --code-bg: #0c1018;
+  --code-bar: #111722;
+  --code-line: rgba(255, 255, 255, 0.08);
+  --code-ink: #e3e8f0;
+  --code-punct: #8a94a6;
+  --code-comment: #7f8a9c;
+  --code-keyword: #7cc8ff;
+  --code-string: #9fe2c0;
+  --code-number: #ffb983;
+  --code-function: #c3a6ff;
+  --code-type: #f3d48c;
+  --code-accent: #54cdfd;
+  --code-line-hl: rgba(84, 205, 253, 0.08);
+  --grad-from: #0a86d8;
+  --grad-to: #1f57e6;
+  --glow-a: rgba(40, 150, 255, 0.22);
+  --glow-b: rgba(37, 99, 235, 0.1);
+  --grid-line: rgba(10, 13, 20, 0.06);
+  --dot: rgba(10, 13, 20, 0.11);
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-2: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 18px -10px rgba(16, 24, 40, 0.1);
+  --shadow-btn:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 1px 2px rgba(16, 24, 40, 0.14),
+    0 10px 24px -10px rgba(11, 113, 208, 0.7);
+  --shadow-panel:
+    0 0 0 5px rgba(11, 113, 208, 0.045), 0 2px 4px rgba(16, 24, 40, 0.04),
+    0 48px 90px -36px rgba(20, 60, 130, 0.38), 0 18px 36px -18px rgba(16, 24, 40, 0.16);
+  --shadow-lift:
+    0 0 0 4px rgba(217, 91, 12, 0.12), 0 26px 44px -18px rgba(217, 91, 12, 0.45),
+    0 12px 22px -12px rgba(16, 24, 40, 0.28);
+  --shadow-code: 0 2px 6px rgba(16, 24, 40, 0.08), 0 34px 64px -30px rgba(16, 24, 40, 0.5);
+  --shadow-popover: 0 12px 32px -12px rgba(16, 24, 40, 0.24), 0 2px 6px rgba(16, 24, 40, 0.06);
+  --glow-accent: none;
+}
+html.rp-dark {
+  --page: #05070b;
+  --page-sunk: #090c11;
+  --surface: #0b0f15;
+  --surface-raised: #11161e;
+  --surface-hover: #171d27;
+  --nav-glass: #05070bb8;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: #6b7483;
+  --ghost: #2b323d;
+  --ink: #eef2f7;
+  --ink-body: #c3cbd6;
+  --ink-muted: #98a2b1;
+  --ink-faint: #7f899a;
+  --accent: #54cdfd;
+  --accent-hover: #86dcff;
+  --on-accent: #03111a;
+  --accent-text: #72d6fe;
+  --accent-tint: rgba(84, 205, 253, 0.09);
+  --accent-line: rgba(84, 205, 253, 0.62);
+  --accent-hairline: rgba(84, 205, 253, 0.22);
+  --held: #ff9a58;
+  --held-tint: rgba(255, 154, 88, 0.12);
+  --success: #3ddc84;
+  --success-tint: rgba(61, 220, 132, 0.1);
+  --warning: #f4b552;
+  --warning-tint: rgba(244, 181, 82, 0.07);
+  --warning-line: rgba(244, 181, 82, 0.24);
+  --danger: #ff8a80;
+  --danger-tint: rgba(255, 138, 128, 0.08);
+  --danger-line: rgba(255, 138, 128, 0.24);
+  --list-bg: #0c121b;
+  --list-edge: rgba(84, 205, 253, 0.6);
+  --row-bg: #141a23;
+  --row-line: #212833;
+  --code-bg: #0a0d13;
+  --code-bar: #0d1118;
+  --grad-from: #8fe6ff;
+  --grad-to: #4f9dff;
+  --glow-a: rgba(84, 205, 253, 0.15);
+  --glow-b: rgba(59, 110, 255, 0.13);
+  --grid-line: rgba(255, 255, 255, 0.055);
+  --dot: rgba(255, 255, 255, 0.09);
+  --shadow-1: none;
+  --shadow-2: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-btn: 0 0 0 1px rgba(84, 205, 253, 0.7), 0 12px 36px -10px rgba(84, 205, 253, 0.6);
+  --shadow-panel:
+    0 0 0 1px rgba(84, 205, 253, 0.18), 0 0 70px -12px rgba(84, 205, 253, 0.38),
+    0 60px 100px -40px #000000;
+  --shadow-lift: 0 0 40px -6px rgba(255, 154, 88, 0.55), 0 34px 54px -20px #000000;
+  --shadow-code: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 40px 80px -40px #000000;
+  --shadow-popover: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 48px -16px #000000;
+  --glow-accent: 0 0 24px -6px rgba(84, 205, 253, 0.45);
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+  --row-comfortable: 48px;
+  --row-compact: 36px;
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 11px;
+  --radius-lg: 16px;
+  --radius-xl: 18px;
+  --radius-pill: 999px;
+  --dur-instant: 90ms;
+  --dur-quick: 140ms;
+  --dur-base: 220ms;
+  --dur-settle: 360ms;
+  --dur-scene: 800ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-shift: cubic-bezier(0.2, 0, 0, 1);
+  --ease-lift: cubic-bezier(0.3, 1.45, 0.6, 1);
+  --ease-settle: linear(
+    0,
+    0.163 6%,
+    0.475 12%,
+    0.763 18%,
+    0.958 24%,
+    1.056 30%,
+    1.082 38%,
+    1.055 46%,
+    1.015 56%,
+    0.994 68%,
+    0.995 82%,
+    1
+  );
+  --nav-h: 64px;
+  --sidebar-w: 276px;
+  --outline-w: 252px;
+  --content-max: 720px;
+  --prose-max: 68ch;
+  --home-max: 1232px;
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.type-display {
+  font-family: var(--font-sans);
+  font-size: 68px;
+  line-height: 1.02;
+  font-weight: 620;
+  letter-spacing: -0.048em;
+}
+.type-title-1 {
+  font-family: var(--font-sans);
+  font-size: 42px;
+  line-height: 1.08;
+  font-weight: 620;
+  letter-spacing: -0.045em;
+}
+.type-section {
+  font-family: var(--font-sans);
+  font-size: 34px;
+  line-height: 1.14;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+.type-title-2 {
+  font-family: var(--font-sans);
+  font-size: 25px;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.type-title-3 {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.type-lead {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  line-height: 1.6;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+}
+.type-body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.75;
+  font-weight: 400;
+}
+.type-ui {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+.type-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.type-caption {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+.type-kicker {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+}
+.type-code {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.78;
+  font-weight: 400;
+}
+.type-code-inline {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  line-height: 1.4;
+  font-weight: 500;
+}
+.type-readout {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
 
 /* ══════════ TOKEN → RSPRESS MAPPING ══════════ */
-/* `html:root` outranks Rspress's own `:root` / `.dark` blocks regardless of load order.
-   Values are var() references, so they follow the light/dark tokens automatically. */
+/* The Night variable map (rspress.md, "Variable map"). `html:root` outranks Rspress's own
+   `:root` / `.rp-dark` blocks regardless of load order. Values are var() references, so they
+   follow the light/dark tokens automatically. */
 html:root {
   --rp-font-family-base: var(--font-sans);
   --rp-font-family-mono: var(--font-mono);
-
-  /* Rspress also uses --rp-c-brand as a text color (edit link, anchors), so it takes the
-     AA-safe --accent-text rather than the raw accent. */
-  --rp-c-brand: var(--accent-text);
-  --rp-c-brand-light: color-mix(in srgb, var(--accent) 85%, #fff);
-  --rp-c-brand-lighter: color-mix(in srgb, var(--accent) 60%, #fff);
+  --rp-c-brand: var(--accent);
+  --rp-c-brand-light: var(--accent-hover);
   --rp-c-brand-dark: var(--accent-hover);
-  --rp-c-brand-darker: color-mix(in srgb, var(--accent) 70%, #000);
-  --rp-c-brand-tint: var(--accent-soft);
-
-  --rp-c-bg: var(--surface);
-  --rp-c-bg-soft: var(--field-bg);
-  --rp-c-bg-mute: var(--surface-2);
-  --rp-c-bg-alt: var(--surface);
-  --rp-c-divider: var(--border-2);
-  --rp-c-divider-light: var(--border);
-
+  --rp-c-brand-darker: var(--accent-hover);
+  --rp-c-brand-lighter: var(--accent-tint);
+  --rp-c-brand-tint: var(--accent-tint);
+  --rp-c-link: var(--accent-text);
+  --rp-c-bg: var(--page);
+  --rp-c-bg-soft: var(--page-sunk);
+  --rp-c-bg-mute: var(--surface-raised);
+  --rp-c-bg-alt: var(--page-sunk);
+  --rp-c-divider: var(--line);
+  --rp-c-divider-light: var(--line);
   --rp-c-text-0: var(--ink);
   --rp-c-text-1: var(--ink);
-  --rp-c-text-2: var(--ink-2);
-  /* --ink-3 is below 4.5:1 on light surfaces; Rspress uses text-3 for readable text. */
-  --rp-c-text-3: var(--ink-2);
-  --rp-c-text-4: var(--border-2);
-  --rp-c-link: var(--accent-text);
-
+  --rp-c-text-2: var(--ink-muted);
+  --rp-c-text-3: var(--ink-faint);
+  --rp-c-text-4: var(--ink-faint);
   --rp-c-text-code: var(--ink);
-  --rp-c-text-code-bg: var(--bg-sunk);
-  --rp-c-text-code-border: transparent;
-
-  --rp-radius: 15px;
-  --rp-radius-small: 9px;
-  --rp-radius-large: 16px;
-  --rp-shadow-1: var(--shadow-sm);
-  --rp-shadow-2: var(--shadow);
-  --rp-shadow-3: var(--shadow-lg);
-
-  --rp-nav-height: 60px;
-
-  /* Doc layout: 264px sidebar and outline around an 800px article (plus 56px padding). */
-  --rp-sidebar-width: 264px;
-  --rp-outline-width: 264px;
-  --rp-content-max-width: 912px;
-
-  /* No gradients anywhere: flat hero title, flat page background. */
+  --rp-c-text-code-bg: var(--surface-raised);
+  --rp-c-text-code-border: var(--line);
+  /* Code blocks are dark in both themes. */
+  --rp-code-block-bg: var(--code-bg);
+  --rp-code-title-bg: var(--code-bar);
+  --rp-code-block-color: var(--code-ink);
+  --rp-code-block-border: 1px solid var(--code-line);
+  --rp-code-block-shadow: none;
+  --rp-container-tip-bg: var(--accent-tint);
+  --rp-container-tip-border: var(--accent-hairline);
+  --rp-container-tip-text: var(--ink-body);
+  --rp-container-warning-bg: var(--warning-tint);
+  --rp-container-warning-border: var(--warning-line);
+  --rp-container-warning-text: var(--ink-body);
+  --rp-container-danger-bg: var(--danger-tint);
+  --rp-container-danger-border: var(--danger-line);
+  --rp-container-danger-text: var(--ink-body);
+  --rp-container-info-bg: var(--surface-raised);
+  --rp-container-info-border: var(--line);
+  --rp-container-info-text: var(--ink-body);
+  --rp-container-note-bg: var(--surface-raised);
+  --rp-container-note-border: var(--line);
+  --rp-container-note-text: var(--ink-body);
+  --rp-container-details-bg: var(--surface-raised);
+  --rp-container-details-border: var(--line);
+  --rp-container-details-text: var(--ink-body);
+  /* Rspress ships a gradient hero title and a radial-gradient home background; Night has neither. */
   --rp-home-hero-title-color: var(--ink);
   --rp-home-hero-title-bg: none;
-  --rp-home-hero-secondary-color: var(--accent);
-  --rp-home-background-bg: var(--bg);
+  --rp-home-hero-secondary-color: var(--accent-text);
+  --rp-home-background-bg: var(--page);
   --rp-home-feature-bg: var(--surface);
+  --rp-nav-height: var(--nav-h);
+  --rp-sidebar-width: var(--sidebar-w);
+  --rp-outline-width: var(--outline-w);
+  --rp-radius: 16px;
+  --rp-radius-small: 11px;
+  --rp-radius-large: 18px;
+  --rp-shadow-2: var(--shadow-2);
+  --rp-shadow-3: var(--shadow-popover);
 
-  /* Code blocks are dark in both themes. */
-  --rp-code-font-size: 13px;
-  --rp-code-block-bg: var(--code-bg);
-  --rp-code-title-bg: var(--code-title-bg);
-  --rp-code-block-color: var(--code-fg);
-  --rp-code-block-border: 1px solid var(--code-border);
-  --rp-code-block-shadow: none;
-  --rp-code-line-highlight-color: var(--code-highlight);
-
-  /* Callouts: tip uses the accent, info is neutral; warning and danger keep Rspress's hues. */
-  --rp-container-tip-bg: var(--accent-soft);
-  --rp-container-tip-border: var(--accent-soft-bd);
-  --rp-container-tip-text: var(--accent-text);
-  --rp-container-tip-code-bg: color-mix(in srgb, var(--accent) 16%, transparent);
-  /* Info is neutral (Rspress's default is an off-palette blue). */
-  --rp-container-info-bg: var(--field-bg);
-  --rp-container-info-border: var(--border);
-  --rp-container-info-text: var(--ink);
-  --rp-container-info-code-bg: var(--surface-2);
-  --rp-container-warning-bg: var(--warn-soft);
-  --rp-container-warning-border: var(--warn-bd);
-  --rp-container-warning-text: var(--warn-text);
-  --rp-container-warning-code-bg: color-mix(in srgb, var(--warn-bd) 45%, transparent);
+  /* Not in the map. At 1440px wide the sidebar (276px) and outline (252px) leave 912px, and the
+     article (--content-max, 720px) sits centered in it. */
+  --rp-content-max-width: calc(var(--content-max) + 192px);
+  --rp-code-font-size: 13.5px;
+  --rp-code-line-highlight-color: var(--code-line-hl);
 }
 
 @media (width >= 1280px) {
@@ -95,35 +414,28 @@ html:root {
   }
 }
 
-/* Dark --bg-sunk is darker than the page, which makes inline code look like holes. */
-html.dark:root {
-  --rp-c-text-code-bg: var(--surface-2);
-}
-
-/* Shiki (css-variables theme) — one dark palette, since code blocks are always dark. */
+/* Shiki (css-variables theme): one palette, since code blocks are dark in both themes. */
 html:root:not(.rp-dark),
 html:root.rp-dark {
-  --shiki-foreground: var(--code-fg);
+  --shiki-foreground: var(--code-ink);
   --shiki-background: transparent;
-  --shiki-token-constant: var(--code-number);
-  --shiki-token-string: var(--code-string);
-  --shiki-token-comment: var(--code-comment);
   --shiki-token-keyword: var(--code-keyword);
-  --shiki-token-parameter: var(--code-fg);
-  --shiki-token-function: var(--code-function);
+  --shiki-token-string: var(--code-string);
   --shiki-token-string-expression: var(--code-string);
-  --shiki-token-punctuation: var(--code-muted);
-  --shiki-token-link: var(--code-keyword);
-  --shiki-token-deleted: var(--code-deleted);
-  --shiki-token-inserted: var(--code-string);
+  --shiki-token-constant: var(--code-number);
+  --shiki-token-function: var(--code-function);
+  --shiki-token-parameter: var(--code-ink);
+  --shiki-token-comment: var(--code-comment);
+  --shiki-token-punctuation: var(--code-punct);
+  --shiki-token-link: var(--code-accent);
 }
 
 /* ══════════ TOP BAR ══════════ */
 /* BEM overrides are prefixed with `html` so they outrank Rspress's equal-specificity
    rules regardless of stylesheet order. */
-/* Mirrors the demo's top bar: 60px, translucent, blurred, 1px bottom border. */
+/* NavBar: a 64px glass bar (--nav-glass, blurred) with a --line bottom edge. */
 html .rp-nav {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
 }
 
 /* The translucent, blurred background is drawn by ::before, not the nav itself. Safari 26+
@@ -133,12 +445,13 @@ html .rp-nav {
    never paints (opaque glyphs cover it). */
 html:root {
   --vdnd-page-bg: var(--rp-c-bg);
-  /* --topbar-bg (tokens.css) composited over the page. */
-  --vdnd-nav-solid: color-mix(in srgb, #fff 80%, var(--vdnd-page-bg));
+  /* --nav-glass (#ffffffcc: white at 80%) composited over the page. */
+  --vdnd-nav-solid: color-mix(in srgb, #ffffff 80%, var(--vdnd-page-bg));
 }
 
-html.dark:root {
-  --vdnd-nav-solid: color-mix(in srgb, #10151f 78%, var(--vdnd-page-bg));
+html.rp-dark:root {
+  /* --nav-glass (#05070bb8: #05070b at 72%) composited over the page. */
+  --vdnd-nav-solid: color-mix(in srgb, #05070b 72%, var(--vdnd-page-bg));
 }
 
 html:root:has(.rp-home-background) {
@@ -159,9 +472,9 @@ html .rp-nav::before {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: var(--topbar-bg);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
+  background: var(--nav-glass);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
 }
 
 /* Home page at the top: Rspress makes the nav transparent over the hero. */
@@ -179,7 +492,7 @@ html:root:has(.rp-home-background) body:not(.notTopArrived) .rp-nav::before {
 /* The nav grows by the top safe area and pads its content below it. Every Rspress offset
    (sticky menu, sidebar, nav screen, scroll-padding) is based on --rp-nav-height, so they follow. */
 html:root {
-  --rp-nav-height: calc(60px + env(safe-area-inset-top, 0px));
+  --rp-nav-height: calc(var(--nav-h) + env(safe-area-inset-top, 0px));
   /* How far the nav's blurred background reaches above the top edge of the viewport. */
   --vdnd-nav-bleed: 50vh;
 }
@@ -239,7 +552,7 @@ html .rp-nav-hamburger__md > .rp-hover-group {
 
 /* Rspress borders dropdowns with the (dark) code-block border. */
 html .rp-hover-group {
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
 }
 
 /* Phones in landscape are wider than Rspress's 768px breakpoint, but a fixed 320px sidebar
@@ -276,23 +589,44 @@ html .rp-hover-group {
   }
 }
 
+/* Lockup: the Night mark (theme/index.tsx renders it inline) and the wordmark, Geist 600. */
 html .rp-nav__title__link {
-  gap: 9px;
-  font-size: 15px;
-  font-weight: 700;
+  gap: 10px;
+  font: 600 15.5px/1 var(--font-sans);
   letter-spacing: -0.02em;
   color: var(--ink);
 }
 
-html .rp-nav__title__logo-image {
-  width: 32px;
-  height: 32px;
+.vdnd-mark {
+  display: block;
+  flex: none;
+  width: 24px;
+  height: 24px;
 }
 
-/* Nav tabs: compact 13px pills like the demo's, instead of full-height items.
+.vdnd-mark__ghost {
+  fill: var(--ink);
+  opacity: 0.25;
+}
+
+.vdnd-mark__row {
+  fill: var(--ink);
+}
+
+.vdnd-mark__held {
+  fill: var(--held);
+}
+
+.vdnd-mark__frame {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+}
+
+/* Nav links: 14px --ink-muted; the current section is --ink on a --surface-hover fill.
    Rspress drops the first item's left padding and the last item's right padding
    (`:first-child` / `:last-child`) and bumps the font size on `:hover`, all with more
-   specific selectors. `:is(…)` lifts these rules above them, so every pill keeps the same
+   specific selectors. `:is(…)` lifts these rules above them, so every link keeps the same
    padding and size in every state. */
 html .rp-nav-menu {
   gap: 2px;
@@ -303,132 +637,189 @@ html .rp-nav-menu__item {
 }
 
 html .rp-nav-menu__item:is(*, :first-child, :last-child, :hover) > .rp-nav-menu__item__container {
-  height: 34px;
-  padding: 0 13px;
-  border-radius: 9px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-2);
+  height: auto;
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  font: 500 14px/1.2 var(--font-sans);
+  color: var(--ink-muted);
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
 }
 
 html .rp-nav-menu__item:is(:hover, :focus-within) > .rp-nav-menu__item__container {
-  background: var(--surface-2);
   color: var(--ink);
 }
 
 html
   .rp-nav-menu__item--active:is(*, :first-child, :last-child, :hover)
   > .rp-nav-menu__item__container {
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-weight: 600;
+  background: var(--surface-hover);
+  color: var(--ink);
 }
 
+/* The rule between the links and the icon buttons. */
+html .rp-nav-menu__divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px 0 6px;
+  background: var(--line-strong);
+  opacity: 0.45;
+}
+
+/* Theme switch and GitHub: quiet icon buttons. */
+html .rp-nav__others :is(.rp-switch-appearance, .rp-social-links__item) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+html .rp-nav__others :is(.rp-switch-appearance, .rp-social-links__item):hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+html .rp-nav__others :is(.rp-switch-appearance__icon, .rp-social-links__icon) {
+  width: 18px;
+  height: 18px;
+  color: inherit;
+}
+
+/* The theme switch shows the theme it switches to: a moon in light, a sun in dark. */
+html:not(.rp-dark) .rp-switch-appearance__icon--sun,
+html.rp-dark .rp-switch-appearance__icon--moon {
+  display: none;
+}
+
+html:not(.rp-dark) .rp-switch-appearance__icon--moon,
+html.rp-dark .rp-switch-appearance__icon--sun {
+  display: block;
+}
+
+/* Version pill: mono --accent-text on --accent-tint with an --accent-hairline ring. */
 .vdnd-version-badge {
-  margin-left: 10px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--accent-soft);
+  margin-left: 14px;
+  padding: 5px 8px;
+  border: 1px solid var(--accent-hairline);
+  border-radius: var(--radius-pill);
+  background: var(--accent-tint);
   color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
+  font: 500 11.5px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-quick) var(--ease-out);
 }
 
 .vdnd-version-badge:hover {
-  color: var(--accent-hover);
+  border-color: var(--accent-line);
 }
 
-/* Search: a 232px field with a ⌘K key cap, like the demo's controls. */
+/* Search: a field-style button on --surface-raised with a ⌘K key cap. */
 html .rp-search-button {
-  width: 232px;
+  width: 248px;
   height: 36px;
-  padding: 0 6px 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--field-bg);
+  padding: 0 6px 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  transition: border-color var(--dur-quick) var(--ease-out);
 }
 
 html .rp-search-button:hover {
-  border-color: var(--border-2);
+  border-color: var(--line-strong);
 }
 
 html .rp-search-button__content {
-  gap: 8px;
+  gap: 9px;
 }
 
 html .rp-search-button__icon {
   font-size: 16px;
-  color: var(--ink-2);
+  color: var(--ink-faint);
 }
 
 html .rp-search-button__word {
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--ink-2);
+  font: 400 13.5px/1 var(--font-sans);
+  color: var(--ink-faint);
 }
 
 html .rp-search-button__hotkey {
   display: inline-flex;
   gap: 2px;
-  padding: 1px 6px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
   background: var(--surface);
-  color: var(--ink-2);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 18px;
+  color: var(--ink-muted);
+  font: 500 11px/1 var(--font-mono);
 }
 
 /* ══════════ SIDEBAR ══════════ */
+/* Sentence-case group headings; the current page on --accent-tint with an --accent-hairline ring. */
 html .rp-doc-layout__sidebar {
-  padding: 20px 16px 40px;
-  border-right: 1px solid var(--border);
-  background: var(--field-bg);
+  padding: 30px 18px 48px 26px;
+  border-right: 1px solid var(--line);
+  background: var(--page);
 }
 
 html .rp-sidebar-section-header {
-  margin-top: 22px;
-  padding: 0 12px 6px;
+  margin-top: 24px;
+  padding: 0 10px 8px;
 }
 
 html .rp-sidebar-section-header:first-child {
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 html .rp-sidebar-section-header__left {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font: 600 13px/1.35 var(--font-sans);
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
-/* 32px rows, stacked without gaps. */
+/* Rspress sets the left padding inline (it indents nested items). */
 html .rp-sidebar-item {
-  margin-top: 0;
-  padding: 4px 12px;
-  border-radius: 9px;
-  font-size: 13.5px;
-  line-height: 24px;
+  margin-top: 1px;
+  padding-block: 7px;
+  padding-right: 10px;
+  border-radius: var(--radius-sm);
+  font: 400 14px/1.3 var(--font-sans);
+  letter-spacing: -0.005em;
+  color: var(--ink-muted);
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+/* The item's text span also carries .rp-doc (prose size and color). */
+html .rp-sidebar-item .rp-doc {
+  font: inherit;
+  color: inherit;
 }
 
 html .rp-sidebar-item:hover {
-  background-color: var(--surface-2);
+  background-color: var(--surface-hover);
+  color: var(--ink);
 }
 
 html .rp-sidebar-item--active,
 html .rp-sidebar-item--active:hover {
-  background-color: var(--accent-soft);
+  background-color: var(--accent-tint);
+  box-shadow: inset 0 0 0 1px var(--accent-hairline);
   color: var(--accent-text);
-  font-weight: 600;
+  font-weight: 560;
 }
 
 /* ══════════ OUTLINE ══════════ */
-/* A 1px rail beside the headings only; the active heading gets a 2px accent bar on it. */
+/* A 1px --line rail; the current item gets a 2px --accent marker on it. */
 html .rp-outline {
   border-left: 0;
 }
@@ -442,12 +833,10 @@ html .rp-outline {
 html .rp-outline__title {
   height: auto;
   margin-bottom: 12px;
-  padding-inline: 8px 24px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  line-height: 1.5;
-  text-transform: uppercase;
+  padding-inline: 4px 28px;
+  font: 600 13px/1.35 var(--font-sans);
+  letter-spacing: -0.01em;
+  text-transform: none;
   color: var(--ink);
 }
 
@@ -457,44 +846,48 @@ html .rp-outline__title > * {
 }
 
 html .rp-outline__toc {
-  margin-left: 8px;
-  margin-right: 24px;
+  margin-left: 4px;
+  margin-right: 28px;
   padding: 0;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--line);
   -webkit-mask-image: none;
   mask-image: none;
 }
 
 html .rp-toc-item {
   margin-top: 0;
-  padding: 5px 0 5px 15px;
+  padding: 6px 0 6px 14px;
 }
 
 /* Rspress indents nested headings with an inline padding-left. */
 html .rp-toc-item[data-depth='0'] {
-  padding-left: 15px !important;
+  padding-left: 14px !important;
 }
 
 html .rp-toc-item[data-depth='1'] {
-  padding-left: 27px !important;
+  padding-left: 26px !important;
 }
 
 html .rp-toc-item[data-depth='2'] {
-  padding-left: 39px !important;
+  padding-left: 38px !important;
 }
 
 html .rp-toc-item--active::before {
   left: -1px;
   width: 2px;
+  border-radius: 2px;
   background-color: var(--accent);
 }
 
-/* Outline: 13px fits the longest API names (VirtualScrollContainerComponent) on one line.
-   The text span also carries .rp-doc, hence the extra class. */
+/* The text span also carries .rp-doc, hence the extra class. */
 html .rp-toc-item .rp-toc-item__text {
+  font: 400 13.5px/1.4 var(--font-sans);
+  color: var(--ink-muted);
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+html .rp-toc-item:not([data-depth='0']) .rp-toc-item__text {
   font-size: 13px;
-  line-height: 1.45;
-  color: var(--ink-2);
 }
 
 html .rp-toc-item:hover .rp-toc-item__text {
@@ -508,52 +901,62 @@ html .rp-toc-item--active:hover .rp-toc-item__text {
 }
 
 html .rp-outline__divider {
-  margin: 20px 24px 12px 8px;
-  background: var(--border);
+  margin: 22px 28px 12px 4px;
+  background: var(--line);
 }
 
 html .rp-outline__bottom {
-  gap: 0;
-  padding-inline: 8px 24px;
+  gap: 4px;
+  padding-inline: 4px 28px;
 }
 
 html .rp-outline__bottom :where(a, button) {
-  min-height: 30px;
-  font-size: 13px;
-  color: var(--ink-2);
+  gap: 8px;
+  min-height: 28px;
+  font: 400 13px/1 var(--font-sans);
+  color: var(--ink-faint);
+}
+
+html .rp-outline__bottom :where(a, button):hover {
+  color: var(--ink);
 }
 
 html .rp-outline__bottom svg {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
 }
 
 /* ══════════ DOC CONTENT ══════════ */
 html .rp-doc {
-  font-size: 15px;
-  line-height: 1.7;
-  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--ink-body);
 }
 
-html .rp-doc-layout__doc-container > .rp-doc {
-  max-width: 800px;
+html .rp-doc-layout__doc-container > :is(.rp-doc, .rp-doc-footer) {
+  max-width: var(--content-max);
   margin-inline: auto;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(p, li) {
+  max-width: var(--prose-max);
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h1) {
   margin-bottom: 0;
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.025em;
+  font: 620 42px/1.08 var(--font-sans);
+  letter-spacing: -0.045em;
+  color: var(--ink);
+  text-wrap: balance;
 }
 
 /* The page's lead paragraph. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h1 + p) {
-  margin-top: 12px;
-  font-size: 17px;
+  margin-top: 14px;
+  font-size: 18.5px;
   line-height: 1.6;
-  color: var(--ink-2);
+  letter-spacing: -0.01em;
+  color: var(--ink-muted);
 }
 
 /* Sections are separated by space, not rules. */
@@ -561,10 +964,10 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2) {
   margin-top: 56px;
   padding-top: 0;
   border-top: 0;
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.3;
-  letter-spacing: -0.015em;
+  font: 600 25px/1.25 var(--font-sans);
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-wrap: balance;
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2)::before {
@@ -572,16 +975,35 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2)::before {
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h3) {
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  margin-top: 36px;
+  font: 600 17px/1.4 var(--font-sans);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(strong) {
+  color: var(--ink);
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(li)::marker {
-  color: var(--ink-3);
+  color: var(--ink-faint);
 }
 
-/* Numbered steps: the number sits in an accent-soft circle. */
+/* Prose links: --accent-text with an --accent-hairline underline. */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(p, li, td) > a.rp-link {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-hairline);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(p, li, td) > a.rp-link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Numbered steps: mono numbers in 28px rings, joined by a --line rule. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol) {
   padding-left: 0;
   list-style: none;
@@ -590,27 +1012,49 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol) {
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li) {
   position: relative;
-  margin-top: 14px;
-  padding-left: 38px;
+  margin-top: 18px;
+  padding-left: 42px;
   counter-increment: vdnd-step;
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li)::before {
   content: counter(vdnd-step);
   position: absolute;
-  top: 2px;
+  top: 0;
   left: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--ink);
+  font: 600 12px/1 var(--font-mono);
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li:not(:last-child))::after {
+  content: '';
+  position: absolute;
+  top: 32px;
+  bottom: -16px;
+  left: 14px;
+  width: 1px;
+  background: var(--line);
+}
+
+/* Rspress's <Steps> (headings as steps), in the same style. */
+html .rp-steps {
+  border-left-color: var(--line);
+}
+
+html .rp-steps > :is(h2, h3, h4, h5, h6)::before {
+  border: 1px solid var(--line-strong);
+  outline-color: var(--page);
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 12px/1 var(--font-mono);
 }
 
 /* Code ligatures turn `=>` into an arrow; show what the reader should type. */
@@ -618,25 +1062,23 @@ html .rp-doc code {
   font-variant-ligatures: none;
 }
 
+/* Inline code and key caps: mono on --surface-raised with a --line edge. The padding stays
+   inside the line box, so lines with code are not taller. */
+html .rp-doc :not(pre) > code,
 html .rp-doc kbd {
-  padding: 1px 6px;
-  border: 1px solid var(--border-2);
-  border-bottom-width: 2px;
-  border-radius: 5px;
-  background: var(--surface);
+  padding: 0.18em 0.4em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 0.8em;
+  font-size: 0.86em;
+  font-weight: 500;
   line-height: 1.4;
-  white-space: nowrap;
 }
 
-/* Inline code: the padding stays inside the line box, so lines with code are not taller. */
-html .rp-doc :not(pre) > code {
-  padding: 1px 5px;
-  border-radius: 5px;
-  font-size: 0.85em;
-  line-height: 1.4;
+html .rp-doc kbd {
+  white-space: nowrap;
 }
 
 /* API selector line (docs/plugins/rehype-api-details.ts). */
@@ -644,16 +1086,14 @@ html .rp-doc .vdnd-api-selector {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 14px;
   font-size: 13px;
 }
 
 html .rp-doc .vdnd-api-selector strong {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-2);
+  font: 600 13px/1.35 var(--font-sans);
+  letter-spacing: -0.01em;
+  color: var(--ink-muted);
 }
 
 html .rp-doc .vdnd-api-selector__colon {
@@ -661,26 +1101,65 @@ html .rp-doc .vdnd-api-selector__colon {
 }
 
 html .rp-doc .vdnd-api-selector code {
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--field-bg);
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
   color: var(--ink);
   font-size: 12.5px;
 }
 
-/* "Added in x.y.z" badge in API tables (docs/plugins/rehype-api-details.ts). */
-.vdnd-since {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 6px;
-  border-radius: 6px;
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
+/* Badges: mono on a 22px chip. "Added in x.y.z" (rehype-api-details.ts) is the accent tone. */
+.vdnd-since,
+html .rp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
+  color: var(--ink-muted);
+  font: 500 11.5px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  vertical-align: middle;
+}
+
+.vdnd-since {
+  margin-left: 6px;
+}
+
+.vdnd-since,
+html .rp-badge--tip {
+  border-color: var(--accent-hairline);
+  background: var(--accent-tint);
+  color: var(--accent-text);
+}
+
+html .rp-badge--info {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink-muted);
+}
+
+html .rp-badge--warning {
+  border-color: var(--warning-line);
+  background: var(--warning-tint);
+  color: var(--warning);
+}
+
+html .rp-badge--danger {
+  border-color: var(--danger-line);
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+
+html .rp-badge.rp-badge--outline {
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--ink-muted);
 }
 
 .vdnd-sr-only {
@@ -696,20 +1175,40 @@ html .rp-doc .vdnd-api-selector code {
 }
 
 /* ══════════ CALLOUTS (docs/theme/components/Callout.tsx) ══════════ */
+/* A tint plus a hairline edge, a toned title with an icon, no side stripe. */
 html .rp-callout {
-  max-width: 700px;
-  margin: 28px 0;
-  padding: 14px 18px 16px;
-  border-radius: 12px;
+  --vdnd-callout-ink: var(--ink);
+  margin: 24px 0;
+  padding: 16px 18px 17px;
+  border-radius: var(--radius-lg);
 }
 
-html .rp-callout__title {
+html .rp-callout--tip,
+html .rp-callout--important {
+  --vdnd-callout-ink: var(--accent-text);
+  border-color: var(--accent-hairline);
+  background-color: var(--accent-tint);
+}
+
+html .rp-callout--warning,
+html .rp-callout--caution {
+  --vdnd-callout-ink: var(--warning);
+  border-color: var(--warning-line);
+  background-color: var(--warning-tint);
+}
+
+html .rp-callout--danger {
+  --vdnd-callout-ink: var(--danger);
+}
+
+html .rp-callout .rp-callout__title {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
-  font-size: 14px;
-  font-weight: 600;
+  margin-bottom: 0;
+  font: 600 14.5px/1.35 var(--font-sans);
+  letter-spacing: -0.01em;
+  color: var(--vdnd-callout-ink);
 }
 
 html .rp-callout__title svg {
@@ -722,9 +1221,9 @@ html .rp-callout__title::before {
 }
 
 html .rp-callout__content {
-  font-size: 14px;
-  line-height: 1.65;
-  color: var(--ink);
+  margin-top: 6px;
+  font: 400 15px/1.7 var(--font-sans);
+  color: var(--ink-body);
 }
 
 html .rp-callout__content p {
@@ -736,62 +1235,83 @@ html .rp-callout__content p + p {
 }
 
 html .rp-callout__content a {
-  text-underline-offset: 2px;
-  font-weight: 500;
+  color: var(--accent-text);
 }
 
-html .rp-callout :not(pre) > code {
+html .rp-callout :not(pre) > code,
+html .rp-callout kbd {
+  border-color: var(--line);
+  background-color: var(--surface);
   color: var(--ink);
-  background-color: var(--rp-c-text-code-bg);
+}
+
+html.rp-dark .rp-callout :not(pre) > code,
+html.rp-dark .rp-callout kbd {
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 /* ══════════ TABLES ══════════ */
-/* Rspress draws tables with the code-block border and title colors, which are dark here. */
+/* The ApiTable: a --surface panel with a --line edge; headers on --page-sunk. Rspress draws
+   tables with the code-block border and title colors, which are dark here. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(table) {
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--ink-body);
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(thead) {
-  background: var(--surface-2);
-  color: var(--ink);
+  background: var(--page-sunk);
 }
 
-/* Column labels: 11px uppercase, like the sidebar's group labels. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(th) {
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-2);
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  font: 600 12.5px/1.3 var(--font-sans);
+  color: var(--ink-muted);
+  white-space: nowrap;
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(td) {
-  padding: 11px 16px;
+  padding: 12px 16px;
+  border-color: var(--line);
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.5;
   vertical-align: top;
 }
 
-/* Names in the first column read as identifiers in the accent color, without a chip. */
-html .rp-doc td:first-child > code:only-child {
-  padding: 0;
-  background: none;
-  color: var(--accent-text);
-  font-weight: 500;
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(tbody tr) {
+  transition: background-color var(--dur-quick) var(--ease-out);
 }
 
-/* **required** in a table cell becomes an outlined tag. */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(tbody tr:hover) {
+  background: var(--page-sunk);
+}
+
+html .rp-doc td code {
+  font-size: 12.5px;
+}
+
+/* Names in the first column read as identifiers, without a chip. */
+html .rp-doc td:first-child > code:only-child {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+}
+
+/* **required** in a table cell becomes an outlined badge. */
 html .rp-doc td > strong:only-child {
-  display: inline-block;
-  padding: 0 7px;
-  border: 1px solid var(--border-2);
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+  color: var(--ink-muted);
+  font: 500 11.5px/1 var(--font-mono);
   white-space: nowrap;
 }
 
@@ -826,6 +1346,8 @@ html .rp-doc td:first-child code {
     display: block;
     border: 0;
     border-radius: 0;
+    background: none;
+    box-shadow: none;
   }
 
   html .rp-doc table:has(td:nth-child(4)) thead {
@@ -843,8 +1365,8 @@ html .rp-doc td:first-child code {
   html .rp-doc table:has(td:nth-child(4)) tr {
     margin-bottom: 10px;
     padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
     background: var(--surface);
   }
 
@@ -860,9 +1382,8 @@ html .rp-doc td:first-child code {
   html .rp-doc table:has(td:nth-child(4)) td:nth-child(2)::before,
   html .rp-doc table:has(td:nth-child(4)) td:nth-child(3)::before {
     margin-right: 8px;
-    color: var(--ink-2);
-    font-size: 12px;
-    font-weight: 600;
+    color: var(--ink-muted);
+    font: 600 12.5px/1.3 var(--font-sans);
   }
 
   html .rp-doc table:has(td:nth-child(4)) td:nth-child(2)::before {
@@ -886,25 +1407,41 @@ html .rp-doc td:first-child code {
 }
 
 /* ══════════ CODE BLOCKS (docs/theme/components/CodeBlock.tsx) ══════════ */
+/* Dark in both themes. Light: --shadow-1 plus a soft drop; dark: a --code-line edge. */
 html .rp-codeblock {
-  margin: 20px 0;
-  border-radius: 12px;
+  margin: 24px 0;
+  border: 0;
+  border-radius: var(--radius-lg);
   background: var(--code-bg);
+  box-shadow:
+    var(--shadow-1),
+    0 12px 28px -18px rgba(16, 24, 40, 0.35);
+  color-scheme: dark;
 }
 
-/* Title bar: file icon, muted directory, the file name, copy button. */
+html.rp-dark .rp-codeblock {
+  box-shadow:
+    0 0 0 1px var(--code-line),
+    var(--shadow-1);
+}
+
+/* Title bar: file icon, the path in mono --code-punct, copy button. */
 html .rp-codeblock__title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 42px;
-  padding: 0 6px 0 16px;
-  color: var(--code-muted);
-  font-size: 12px;
+  gap: 10px;
+  height: 46px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--code-line);
+  background: var(--code-bar);
+  color: var(--code-punct);
+  font: 500 12.5px/1 var(--font-mono);
 }
 
 .vdnd-codeblock__icon {
   flex-shrink: 0;
+  width: 15px;
+  height: 15px;
 }
 
 .vdnd-codeblock__path {
@@ -916,7 +1453,7 @@ html .rp-codeblock__title {
 }
 
 .vdnd-codeblock__file {
-  color: var(--code-fg);
+  color: var(--code-punct);
 }
 
 html .rp-codeblock__title .rp-code-button-group {
@@ -926,36 +1463,47 @@ html .rp-codeblock__title .rp-code-button-group {
 html .rp-codeblock__title .rp-code-button-group__button {
   width: 32px;
   height: 32px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   opacity: 1;
 }
 
 html .rp-codeblock__title .rp-code-button-group__button:hover {
-  background: var(--code-border);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 html .rp-codeblock__title .rp-code-button-group__icon {
   width: 16px;
   height: 16px;
-  color: var(--code-muted);
+  color: var(--code-punct);
 }
 
 html .rp-codeblock__title .rp-code-button-group__button:hover .rp-code-button-group__icon {
-  color: var(--code-fg);
+  color: var(--code-ink);
+}
+
+html .rp-codeblock :focus-visible {
+  outline-color: var(--code-accent);
+}
+
+html .rp-codeblock__content :where(code) {
+  padding: 18px 0 20px;
+  line-height: 1.78;
+}
+
+html .rp-codeblock__content :where(code) .line {
+  padding: 0 22px;
 }
 
 /* Untitled blocks: the language in the corner, hidden while the hover buttons show. */
 .vdnd-codeblock__lang {
   position: absolute;
-  top: 10px;
-  right: 14px;
+  top: 12px;
+  right: 16px;
   z-index: 2;
-  color: var(--code-muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1;
+  color: var(--code-punct);
+  font: 500 11.5px/1 var(--font-mono);
   pointer-events: none;
-  transition: opacity 150ms ease;
+  transition: opacity var(--dur-quick) var(--ease-out);
 }
 
 html .rp-codeblock:hover .vdnd-codeblock__lang {
@@ -963,18 +1511,18 @@ html .rp-codeblock:hover .vdnd-codeblock__lang {
 }
 
 html .rp-code-button-group {
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
 }
 
 html .rp-code-button-group__icon {
-  width: 18px;
-  height: 18px;
-  color: var(--code-muted);
+  width: 16px;
+  height: 16px;
+  color: var(--code-punct);
 }
 
 html .rp-code-button-group__icon:hover {
-  color: var(--code-fg);
+  color: var(--code-ink);
 }
 
 /* Keyboard users see the hover buttons too. */
@@ -982,94 +1530,186 @@ html .rp-codeblock__content:focus-within .rp-code-button-group__button {
   opacity: 1;
 }
 
-/* Highlighted lines ({3} in the fence meta): accent tint with a 2px accent edge. */
+/* Highlighted lines ({3} in the fence meta): --code-line-hl with a 2px --code-accent edge. */
 html .shiki.has-highlighted .line.highlighted:not(.error):not(.warning) {
-  background-color: var(--code-highlight);
-  box-shadow: inset 2px 0 0 var(--accent);
+  background-color: var(--code-line-hl);
+  box-shadow: inset 2px 0 0 var(--code-accent);
 }
 
 /* ══════════ PREVIOUS / NEXT ══════════ */
+/* PageNav: two cards under a hairline; the arrow sits beside the label and moves toward where
+   it goes. Rspress puts its arrow in the title, so the label draws its own (a mask, so it
+   takes the text color). */
+html .rp-doc-footer__divider {
+  margin-block: 64px 28px;
+  background: var(--line);
+}
+
 html .rp-prev-next-page {
   gap: 16px;
   align-items: stretch;
 }
 
 html .rp-prev-next-page__item {
-  gap: 2px;
-  padding: 14px 18px;
-  border: 1px solid var(--border);
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
-  transition: border-color 150ms ease;
+  box-shadow: none;
+  transition: border-color var(--dur-quick) var(--ease-out);
+}
+
+html.rp-dark .rp-prev-next-page__item {
+  background: rgba(255, 255, 255, 0.02);
 }
 
 html .rp-prev-next-page__item:hover {
-  border-color: var(--accent-soft-bd);
-  background: var(--surface);
+  border-color: var(--accent-line);
   opacity: 1;
 }
 
 html .rp-prev-next-page__item__desc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 0;
-  font-size: 12px;
-  color: var(--ink-2);
+  font: 400 12.5px/1.3 var(--font-sans);
+  color: var(--ink-faint);
+}
+
+html .rp-prev-next-page__prev .rp-prev-next-page__item__desc::before,
+html .rp-prev-next-page__next .rp-prev-next-page__item__desc::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  -webkit-mask: var(--vdnd-arrow) center / contain no-repeat;
+  mask: var(--vdnd-arrow) center / contain no-repeat;
+  transition: transform var(--dur-quick) var(--ease-out);
+}
+
+html .rp-prev-next-page__prev {
+  --vdnd-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 12H5M11 6l-6 6 6 6'/%3E%3C/svg%3E");
+}
+
+html .rp-prev-next-page__next {
+  --vdnd-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E");
+}
+
+html .rp-prev-next-page__prev:hover .rp-prev-next-page__item__desc::before {
+  transform: translateX(-2px);
+}
+
+html .rp-prev-next-page__next:hover .rp-prev-next-page__item__desc::after {
+  transform: translateX(2px);
 }
 
 html .rp-prev-next-page__item__title {
-  gap: 6px;
-  font-size: 15px;
-  font-weight: 600;
+  font: 600 15.5px/1.3 var(--font-sans);
+  letter-spacing: -0.015em;
   color: var(--ink);
 }
 
 html .rp-prev-next-page__icon {
-  color: var(--accent-text);
+  display: none;
 }
 
 html .rp-prev-next-page__next {
+  align-items: flex-end;
   text-align: right;
 }
 
 /* ══════════ BUTTONS (404 page) ══════════ */
 html .rp-button {
-  border-radius: 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: 560 14px/1 var(--font-sans);
+  letter-spacing: -0.01em;
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
 }
 
-/* White on the raw accent is 3.7:1, so buttons use the darker accent (5.2:1). */
+html .rp-button:active {
+  transform: translateY(1px);
+}
+
 html .rp-button--brand {
-  background: var(--accent-hover);
+  background: var(--accent);
+  box-shadow: var(--shadow-btn);
   color: var(--on-accent);
 }
 
 html .rp-button--brand:hover {
-  background: color-mix(in srgb, var(--accent-hover) 85%, #000);
+  background: var(--accent-hover);
   opacity: 1;
 }
 
 html .rp-button--alt {
-  border: 1px solid var(--border);
+  border-color: var(--line-strong);
   background: var(--surface);
+  box-shadow: var(--shadow-1);
   color: var(--ink);
 }
 
-/* ══════════ HOME (docs/theme/components/HomeLayout.tsx) ══════════ */
-.vdnd-home {
-  position: relative;
-  background: var(--bg);
+html.rp-dark .rp-button--alt {
+  background: var(--surface-raised);
 }
 
+html .rp-button--alt:hover {
+  background: var(--surface-hover);
+}
+
+/* ══════════ HOME (docs/theme/components/HomeLayout.tsx) ══════════ */
+/* Night's HomePage: HomeHero, FeatureRows, the Quick look band and the footer. Content is
+   left-aligned in --home-max (1232px, 48px side padding included). */
+.vdnd-home {
+  position: relative;
+  background: var(--page);
+}
+
+/* Hero: a 56px --grid-line grid masked around the art, and the --glow-a / --glow-b glows. */
 .vdnd-home-hero {
-  padding: 88px 40px 80px;
+  position: relative;
+  overflow: hidden;
+}
+
+.vdnd-home-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-position: -1px -1px;
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 62% 78% at 70% 40%, #000 15%, transparent 72%);
+  mask-image: radial-gradient(ellipse 62% 78% at 70% 40%, #000 15%, transparent 72%);
+}
+
+.vdnd-home-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(560px 420px at 73% 50%, var(--glow-a), transparent 70%),
+    radial-gradient(480px 340px at 95% 14%, var(--glow-b), transparent 70%);
 }
 
 .vdnd-home-hero__inner {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  gap: 64px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 56px;
   align-items: center;
-  max-width: 1200px;
+  max-width: var(--home-max);
   margin: 0 auto;
+  padding: 104px 48px 116px;
 }
 
 .vdnd-home-hero__text {
@@ -1079,6 +1719,7 @@ html .rp-button--alt {
   min-width: 0;
 }
 
+/* Release pill: the version in an --accent tag, the note, the arrow. */
 .vdnd-home-announce {
   display: inline-flex;
   align-items: center;
@@ -1086,32 +1727,39 @@ html .rp-button--alt {
   max-width: 100%;
   height: 32px;
   padding: 0 12px 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 45%, transparent);
+  border-radius: var(--radius-pill);
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
-  color: var(--ink-2);
-  font-size: 13px;
-  font-weight: 500;
-  transition: border-color 150ms ease;
+  box-shadow: var(--shadow-1);
+  color: var(--ink-muted);
+  font: 500 13px/1 var(--font-sans);
+  transition: border-color var(--dur-quick) var(--ease-out);
+}
+
+html.rp-dark .vdnd-home-announce {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .vdnd-home-announce:hover {
-  border-color: var(--accent-soft-bd);
+  border-color: var(--accent-line);
   color: var(--ink);
 }
 
 .vdnd-home-announce svg {
   flex-shrink: 0;
+  color: var(--ink-faint);
 }
 
 .vdnd-home-announce__badge {
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 600 11.5px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .vdnd-home-announce__text {
@@ -1120,70 +1768,92 @@ html .rp-button--alt {
   text-overflow: ellipsis;
 }
 
+/* Eyebrow: the package name in mono --accent-text after a 20px rule. */
 .vdnd-home-hero__name {
-  margin: 32px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 34px 0 0;
   color: var(--accent-text);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 500;
+  font: 500 13px/1 var(--font-mono);
+}
+
+.vdnd-home-hero__name::before {
+  content: '';
+  width: 20px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.7;
 }
 
 .vdnd-home-hero__title {
-  max-width: 600px;
-  margin: 10px 0 0;
+  margin: 16px 0 0;
   color: var(--ink);
-  font-size: 52px;
-  font-weight: 700;
-  line-height: 1.06;
-  letter-spacing: -0.035em;
+  font: 620 68px/1.02 var(--font-sans);
+  letter-spacing: -0.048em;
+  text-wrap: balance;
 }
 
+/* The one gradient on paper: --grad-from to --grad-to. */
 .vdnd-home-hero__highlight {
-  color: var(--accent-text);
+  padding-bottom: 0.08em;
+  background: linear-gradient(95deg, var(--grad-from), var(--grad-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .vdnd-home-hero__tagline {
-  max-width: 540px;
-  margin: 20px 0 0;
-  color: var(--ink-2);
-  font-size: 17px;
-  line-height: 1.6;
+  max-width: 520px;
+  margin: 24px 0 0;
+  color: var(--ink-muted);
+  font: 400 18px/1.6 var(--font-sans);
+  letter-spacing: -0.005em;
 }
 
 .vdnd-home-hero__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
-  margin-top: 32px;
+  margin-top: 36px;
 }
 
+/* Buttons, --lg: primary (--accent fill) and secondary (--line-strong edge). */
 .vdnd-home-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 44px;
+  height: 46px;
   padding: 0 20px;
-  border-radius: 9px;
-  font-size: 14px;
-  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: 560 15px/1 var(--font-sans);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
   transition:
-    background-color 150ms ease,
-    border-color 150ms ease;
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
 }
 
-/* White on the raw accent is 3.7:1, so the button uses the darker accent (5.2:1). */
+.vdnd-home-button:active {
+  transform: translateY(1px);
+}
+
 .vdnd-home-button--brand,
 .vdnd-home-button--brand:hover {
   color: var(--on-accent);
 }
 
 .vdnd-home-button--brand {
-  background: var(--accent-hover);
-  box-shadow: var(--shadow);
+  background: var(--accent);
+  box-shadow: var(--shadow-btn);
 }
 
 .vdnd-home-button--brand:hover {
-  background: color-mix(in srgb, var(--accent-hover) 85%, #000);
+  background: var(--accent-hover);
 }
 
 .vdnd-home-button--alt,
@@ -1192,13 +1862,17 @@ html .rp-button--alt {
 }
 
 .vdnd-home-button--alt {
-  border: 1px solid var(--border);
+  border-color: var(--line-strong);
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-1);
+}
+
+html.rp-dark .vdnd-home-button--alt {
+  background: var(--surface-raised);
 }
 
 .vdnd-home-button--alt:hover {
-  border-color: var(--border-2);
+  background: var(--surface-hover);
 }
 
 /* Rspress marks external links with an arrow; the buttons draw their own icon. */
@@ -1206,64 +1880,90 @@ html .rp-button--alt {
   display: none !important;
 }
 
+/* InstallCommand: a faint prompt, the command in mono, one quiet copy button. */
 .vdnd-home-install {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   height: 44px;
   margin-top: 16px;
-  padding: 0 4px 0 14px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--field-bg);
+  padding: 0 5px 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
   color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font: 400 14px/1 var(--font-mono);
 }
 
 .vdnd-home-install__prompt {
-  color: var(--ink-2);
+  color: var(--ink-faint);
+  user-select: none;
 }
 
 .vdnd-home-install__command {
   flex-grow: 1;
   font-family: inherit;
+  white-space: nowrap;
 }
 
 .vdnd-home-install__copy {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--ink-faint);
   cursor: pointer;
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
 }
 
 .vdnd-home-install__copy:hover {
-  background: var(--surface-2);
+  background: var(--surface-hover);
   color: var(--ink);
 }
 
-/* Hero illustration: a virtual list mid-drag. */
+.vdnd-home-install__copy[aria-label='Copied'] {
+  color: var(--success);
+}
+
+/* The Backlog art: a list panel tilted in 3D, virtual rows above and below, five rendered rows,
+   the slot and the held preview. The preview is the row at its exact size and angle: only the
+   pointer's offset separates it from the slot. useBacklogScript moves the --i indexes. */
 .vdnd-hero-art {
   position: relative;
-  justify-self: center;
-  width: 100%;
-  max-width: 540px;
-  padding: 8px 0;
+  min-width: 0;
+  perspective: 1700px;
+}
+
+.vdnd-hero-art__stage {
+  position: relative;
+  padding: 0 6px 0 18px;
+  transform: rotateX(8deg) rotateY(-16deg) rotateZ(1.2deg);
+  transform-origin: 45% 50%;
 }
 
 .vdnd-hero-art__virtuals {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 0 76px 0 24px;
-  opacity: 0.6;
+}
+
+.vdnd-hero-art__virtuals--top {
+  margin-bottom: 12px;
+  -webkit-mask-image: linear-gradient(transparent, #000 90%);
+  mask-image: linear-gradient(transparent, #000 90%);
+}
+
+.vdnd-hero-art__virtuals--bottom {
+  margin-top: 12px;
+  -webkit-mask-image: linear-gradient(#000 10%, transparent);
+  mask-image: linear-gradient(#000 10%, transparent);
 }
 
 .vdnd-hero-art__virtual {
@@ -1271,50 +1971,88 @@ html .rp-button--alt {
   align-items: center;
   justify-content: space-between;
   height: 40px;
-  padding: 0 14px;
-  border: 1px dashed var(--border-2);
+  margin: 0 30px;
+  padding: 0 16px;
+  border: 1px dashed var(--ghost);
   border-radius: 10px;
-  color: var(--ink-2);
-  font-size: 13px;
+  color: var(--ink-faint);
+  font: 500 13.5px/1 var(--font-sans);
 }
 
 .vdnd-hero-art__virtual-tag {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  color: var(--accent-text);
+  font: 500 11px/1 var(--font-mono);
 }
 
 .vdnd-hero-art__list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 10px 56px 10px 0;
-  padding: 12px;
-  border: 1.5px solid var(--accent);
-  border-radius: 15px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  position: relative;
+  padding: 14px;
+  border: 1px solid var(--list-edge);
+  border-radius: var(--radius-xl);
+  background: var(--list-bg);
+  box-shadow: var(--shadow-panel);
+}
+
+html.rp-dark .vdnd-hero-art__list {
+  background: linear-gradient(180deg, #0e1622, #090d14);
 }
 
 .vdnd-hero-art__head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 2px 6px 6px;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 12px;
 }
 
 .vdnd-hero-art__name {
+  margin-right: auto;
   color: var(--ink);
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font: 600 14.5px/1.2 var(--font-sans);
+  letter-spacing: -0.015em;
 }
 
+/* Chips: "1,000 items" and the live "5 in the DOM". */
 .vdnd-hero-art__count {
-  color: var(--ink-2);
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink-muted);
+  font: 500 11px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vdnd-hero-art__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent);
+}
+
+.vdnd-hero-art__rows {
+  position: relative;
+  height: calc(46px * 5 + 8px * 4);
+}
+
+.vdnd-hero-art__row,
+.vdnd-hero-art__placeholder,
+.vdnd-hero-art__preview {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 46px;
+  border-radius: var(--radius-md);
+}
+
+.vdnd-hero-art__row,
+.vdnd-hero-art__placeholder {
+  transform: translateY(calc(var(--i) * 54px));
 }
 
 .vdnd-hero-art__row,
@@ -1322,130 +2060,166 @@ html .rp-button--alt {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
+  padding: 0 14px;
   color: var(--ink);
-  font-size: 13.5px;
+  font: 500 14.5px/1 var(--font-sans);
+  letter-spacing: -0.01em;
 }
 
-.vdnd-hero-art__row svg {
-  color: var(--ink-3);
+.vdnd-hero-art__row {
+  border: 1px solid var(--row-line);
+  background: var(--row-bg);
+}
+
+.vdnd-hero-art__row svg,
+.vdnd-hero-art__preview svg {
+  flex-shrink: 0;
+  color: var(--ink-faint);
 }
 
 .vdnd-hero-art__placeholder {
-  height: 44px;
-  border: 1.5px dashed var(--accent);
-  border-radius: 10px;
-  background: var(--accent-soft);
+  border: 1.5px dashed var(--accent-line);
+  background: var(--accent-tint);
 }
 
 .vdnd-hero-art__preview {
+  z-index: 2;
+  border: 1.5px solid var(--held);
+  background: var(--list-bg);
+  box-shadow: var(--shadow-lift);
+  transform: translate(22px, calc(var(--i) * 54px + 10px));
+}
+
+html.rp-dark .vdnd-hero-art__preview {
+  background: #17202d;
+}
+
+.vdnd-hero-art__preview > svg:first-child {
+  color: var(--held);
+}
+
+.vdnd-hero-art__preview .vdnd-hero-art__cursor {
   position: absolute;
-  top: 262px;
-  left: 36%;
-  right: 0;
-  border-color: var(--accent-soft-bd);
-  border-radius: 12px;
-  box-shadow: var(--shadow-lg);
-  transform: rotate(1.5deg);
-  font-weight: 500;
+  top: 24px;
+  right: 34px;
+  width: 22px;
+  height: 22px;
 }
 
-.vdnd-hero-art__preview svg {
-  color: var(--accent-text);
+.vdnd-hero-art__cursor path {
+  fill: #0a0d14;
+  stroke: #ffffff;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
 }
 
-/* Feature cards. */
-.vdnd-home-features {
-  padding: 0 40px 104px;
+html.rp-dark .vdnd-hero-art__cursor path {
+  fill: #ffffff;
+  stroke: #05070b;
 }
 
+/* The preview travels between rows with --ease-in-out. The rows and the slot shift (--ease-shift)
+   once it is halfway, as in a real drag, where the slot moves when the dragged row's center
+   crosses into the next row. Starting together would show the slot leading the preview. */
+.vdnd-hero-art--live .vdnd-hero-art__row,
+.vdnd-hero-art--live .vdnd-hero-art__placeholder {
+  transition: transform var(--dur-base) var(--ease-shift) calc(var(--dur-settle) / 2);
+}
+
+.vdnd-hero-art--live .vdnd-hero-art__preview {
+  transition: transform var(--dur-settle) var(--ease-in-out);
+}
+
+/* FeatureRows: six cards in three columns. */
 .vdnd-home-features__grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
-  max-width: 1200px;
+  max-width: var(--home-max);
   margin: 0 auto;
+  padding: 8px 48px 112px;
 }
 
 .vdnd-home-feature {
-  padding: 24px;
-  border: 1px solid var(--border);
-  border-radius: 15px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 26px 26px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-2);
+}
+
+html.rp-dark .vdnd-home-feature {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
 }
 
 .vdnd-home-feature__icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
-  background: var(--accent-soft);
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--accent-tint);
+  box-shadow:
+    inset 0 0 0 1px var(--accent-hairline),
+    var(--glow-accent);
   color: var(--accent-text);
 }
 
 .vdnd-home-feature__title {
-  margin: 16px 0 0;
+  margin: 20px 0 0;
   color: var(--ink);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: -0.01em;
+  font: 600 16.5px/1.35 var(--font-sans);
+  letter-spacing: -0.02em;
 }
 
 .vdnd-home-feature__details {
-  margin: 6px 0 0;
-  color: var(--ink-2);
-  font-size: 13.5px;
-  line-height: 1.6;
+  margin: 8px 0 0;
+  color: var(--ink-muted);
+  font: 400 14.5px/1.6 var(--font-sans);
 }
 
-/* The page's MDX content ("Quick look" in index.mdx), on a surface band. */
+/* The page's MDX content ("Quick look" in index.mdx), on a --page-sunk band between hairlines. */
 .vdnd-home-content {
-  padding: 96px 40px;
-  border-block: 1px solid var(--border);
-  background: var(--surface);
+  border-block: 1px solid var(--line);
+  background: var(--page-sunk);
 }
 
 .vdnd-home-content__inner {
-  max-width: 1200px;
+  max-width: var(--home-max);
   margin: 0 auto;
+  padding: 96px 48px 104px;
 }
 
 .vdnd-quick-look {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  gap: 64px;
-  align-items: center;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
 }
 
 .vdnd-quick-look__text {
   min-width: 0;
-  max-width: 460px;
 }
 
+/* Kicker: mono, uppercase from CSS. */
 .vdnd-quick-look .vdnd-quick-look__eyebrow {
   margin: 0;
   color: var(--accent-text);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+  font: 500 12px/1.2 var(--font-mono);
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
 .vdnd-quick-look h2 {
-  margin: 12px 0 0;
+  margin: 16px 0 0;
   color: var(--ink);
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.025em;
+  font: 600 34px/1.14 var(--font-sans);
+  letter-spacing: -0.04em;
+  text-wrap: balance;
 }
 
 /* Rspress's heading anchor (#) is not useful on the home page. */
@@ -1455,17 +2229,17 @@ html .rp-button--alt {
 }
 
 .vdnd-quick-look p {
-  margin: 14px 0 0;
-  color: var(--ink-2);
-  font-size: 15px;
-  line-height: 1.65;
+  margin: 16px 0 0;
+  color: var(--ink-muted);
+  font: 400 16.5px/1.65 var(--font-sans);
 }
 
+/* Numbered steps: mono numbers in rings, joined by a --line rule. */
 .vdnd-quick-look ol {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  margin: 28px 0 0;
+  gap: 22px;
+  margin: 34px 0 0;
   padding: 0;
   list-style: none;
   counter-reset: vdnd-step;
@@ -1473,153 +2247,189 @@ html .rp-button--alt {
 
 .vdnd-quick-look li {
   position: relative;
-  padding-left: 40px;
-  color: var(--ink-2);
-  font-size: 13.5px;
-  line-height: 1.6;
+  padding-left: 42px;
+  color: var(--ink-muted);
+  font: 400 14.5px/1.6 var(--font-sans);
   counter-increment: vdnd-step;
 }
 
 .vdnd-quick-look li::before {
   content: counter(vdnd-step);
   position: absolute;
-  top: 0;
+  top: -3px;
   left: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 700;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--ink);
+  font: 600 12px/1 var(--font-mono);
+}
+
+.vdnd-quick-look li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 29px;
+  bottom: -21px;
+  left: 14px;
+  width: 1px;
+  background: var(--line);
 }
 
 /* The step's bold lead is its title, on its own line. */
 .vdnd-quick-look li strong {
   display: block;
-  margin-bottom: 2px;
+  margin-bottom: 5px;
   color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
+  font: 600 15.5px/1.4 var(--font-sans);
+  letter-spacing: -0.015em;
 }
 
 .vdnd-quick-look :not(pre) > code {
-  padding: 1px 5px;
-  border-radius: 5px;
-  background: var(--bg-sunk);
+  padding: 0.18em 0.4em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
   color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font: 500 0.86em/1 var(--font-mono);
   font-variant-ligatures: none;
+  white-space: nowrap;
 }
 
 .vdnd-quick-look p:has(> a:only-child) {
-  margin-top: 28px;
+  margin-top: 30px;
 }
 
 .vdnd-quick-look p > a:only-child {
   color: var(--accent-text);
-  font-size: 14px;
-  font-weight: 600;
+  font: 560 15px/1 var(--font-sans);
 }
 
 .vdnd-quick-look p > a:only-child:hover {
-  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
 
-/* Code tabs (docs/components/CodeTabs.tsx). */
+/* CodeBlock tabs (docs/components/CodeTabs.tsx), the hero variant (--shadow-code). */
 .vdnd-code-tabs {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--code-border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--code-bg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-code);
+  color-scheme: dark;
 }
 
 .vdnd-code-tabs__bar {
   display: flex;
   align-items: stretch;
-  height: 44px;
-  padding: 0 6px 0 8px;
-  border-bottom: 1px solid var(--code-border);
-  background: var(--code-title-bg);
+  gap: 2px;
+  height: 46px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--code-line);
+  background: var(--code-bar);
 }
 
 .vdnd-code-tabs__tab {
+  position: relative;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 13px;
   border: 0;
   background: transparent;
-  color: var(--code-muted);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  color: var(--code-punct);
+  font: 500 12.5px/1 var(--font-mono);
   cursor: pointer;
 }
 
-.vdnd-code-tabs__tab:hover {
-  color: var(--code-fg);
+.vdnd-code-tabs__tab:hover,
+.vdnd-code-tabs__tab[aria-selected='true'] {
+  color: var(--code-ink);
 }
 
-.vdnd-code-tabs__tab[aria-selected='true'] {
-  box-shadow: inset 0 -2px 0 var(--accent);
-  color: var(--code-fg);
-  font-weight: 500;
+.vdnd-code-tabs__tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  right: 13px;
+  bottom: -1px;
+  left: 13px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--code-accent);
 }
 
 .vdnd-code-tabs__tab:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--code-accent);
   outline-offset: -4px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
 }
 
 .vdnd-code-tabs .rp-codeblock {
   margin: 0;
   border: 0;
   border-radius: 0;
+  box-shadow: none;
 }
 
 .vdnd-code-tabs .vdnd-codeblock__lang {
   display: none;
 }
 
-/* Footer. */
+/* Footer: the licence line in --ink-faint, the links in --ink-muted on the right. */
 html .vdnd-home .rp-home-footer {
   margin-top: 0;
   padding: 0;
   border-top: 0;
-  background: var(--bg);
+  background: var(--page);
 }
 
 html .vdnd-home .rp-home-footer__container {
-  padding: 32px 40px 40px;
+  max-width: var(--home-max);
+  margin: 0 auto;
+  padding: 34px 48px 44px;
 }
 
 html .rp-home-footer__message {
-  font-weight: 400;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 8px 20px;
-  color: var(--ink-2);
-  font-size: 13px;
+  justify-content: flex-start;
+  gap: 8px 24px;
+  color: var(--ink-faint);
+  font: 400 14px/1.4 var(--font-sans);
+}
+
+html .rp-home-footer__message > span:first-child {
+  margin-right: auto;
 }
 
 html .rp-home-footer__message a {
-  color: var(--ink-2);
+  color: var(--ink-muted);
+  font-weight: 500;
 }
 
 html .rp-home-footer__message a:hover {
-  color: var(--accent-text);
+  color: var(--ink);
+}
+
+/* One column below 760px, headline at 42px. */
+@media (width < 760px) {
+  .vdnd-home-hero__inner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+
+  .vdnd-home-hero__title {
+    font-size: 42px;
+  }
 }
 
 @media (width <= 1000px) {
-  .vdnd-home-hero__inner,
   .vdnd-quick-look {
     grid-template-columns: minmax(0, 1fr);
     gap: 48px;
@@ -1631,12 +2441,8 @@ html .rp-home-footer__message a:hover {
 }
 
 @media (width <= 640px) {
-  .vdnd-home-hero {
-    padding: 40px 16px 56px;
-  }
-
-  .vdnd-home-hero__title {
-    font-size: 38px;
+  .vdnd-home-hero__inner {
+    padding: 48px 16px 64px;
   }
 
   .vdnd-home-hero__actions {
@@ -1648,16 +2454,13 @@ html .rp-home-footer__message a:hover {
     align-self: stretch;
   }
 
-  .vdnd-home-features {
-    padding: 0 16px 64px;
-  }
-
   .vdnd-home-features__grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
+    padding: 0 16px 64px;
   }
 
-  .vdnd-home-content {
+  .vdnd-home-content__inner {
     padding: 64px 16px;
   }
 
@@ -1671,66 +2474,97 @@ html .rp-home-footer__message a:hover {
 }
 
 /* ══════════ LIVE DEMO (docs/components/LiveDemo.tsx) ══════════ */
+/* LiveDemoFrame: a --surface frame; the bar shows the live label in mono --success with its dot,
+   the title in --ink-muted and a quiet small button; the demo sits on --page-sunk with an 18px
+   --dot grid. */
 .vdnd-live-demo {
-  margin: 28px 0;
+  margin: 24px 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 15px;
-  background: var(--bg);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
 }
 
 .vdnd-live-demo__bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  height: 42px;
-  padding: 0 14px 0 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  height: 46px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--line);
 }
 
 .vdnd-live-demo__caption {
   display: flex;
+  flex: 1;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
 .vdnd-live-demo__label {
+  display: inline-flex;
   flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+  align-items: center;
+  gap: 7px;
+  color: var(--success);
+  font: 600 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-2);
 }
 
+.vdnd-live-demo__label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
+}
+
+/* The separator dot between label and title; the label's own dot replaces it. */
 .vdnd-live-demo__dot {
-  flex-shrink: 0;
-  width: 3px;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--border-2);
+  display: none;
 }
 
 .vdnd-live-demo__title {
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 12.5px;
-  color: var(--ink-2);
+  color: var(--ink-muted);
+  font: 500 13.5px/1.2 var(--font-sans);
 }
 
+/* Quiet small button with a --line edge. */
 .vdnd-live-demo__open {
-  display: flex;
+  display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 4px;
-  color: var(--accent-text);
-  font-size: 12.5px;
-  font-weight: 500;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  font: 560 13px/1 var(--font-sans);
+  letter-spacing: -0.01em;
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+.vdnd-live-demo__open:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.vdnd-live-demo__body {
+  background-color: var(--page-sunk);
+  background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.5px);
+  background-size: 18px 18px;
 }
 
 .vdnd-live-demo__frame {
@@ -1740,7 +2574,6 @@ html .rp-home-footer__message a:hover {
 }
 
 @media (width <= 480px) {
-  .vdnd-live-demo__dot,
   .vdnd-live-demo__title {
     display: none;
   }

@@ -1,6 +1,6 @@
 import type { ReactNode, SVGProps } from 'react';
 
-/** Stroke icons on a 24px grid (design system: stroke-width 2, currentColor). */
+/** Stroke icons on a 24px grid (Night: 1.75px stroke, round caps and joins, currentColor). */
 function StrokeIcon({
   size = 16,
   children,
@@ -13,7 +13,7 @@ function StrokeIcon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      strokeWidth={1.75}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
