@@ -261,8 +261,8 @@ app-examples-shell .row::before,
 
 // ══ Drag preview (held): global ══
 // The row at its exact size and angle, never tilted or scaled: list-bg (#17202d in dark), a
-// 1.5px held edge and shadow-lift. The held layer fades in on pick-up and out while the drop
-// settles, back to the card at rest.
+// 1.5px held edge and shadow-lift. The held layer fades in on pick-up (dur-quick) and out while
+// the drop settles (dur-settle), back to the card at rest.
 .vdnd-drag-preview .row::after,
 .preview-card::after {
   position: absolute;
@@ -274,7 +274,6 @@ app-examples-shell .row::before,
   box-shadow: var(--shadow-lift);
   content: '';
   animation: vdnd-example-lift var(--dur-quick) var(--ease-out) backwards;
-  transition: opacity var(--dur-settle) var(--ease-out);
 }
 
 [data-theme='dark'] .vdnd-drag-preview .row::after,
@@ -282,9 +281,12 @@ app-examples-shell .row::before,
   background: #17202d;
 }
 
+// A keyframe animation, not a transition: the layer restarts when the drop begins (its pick-up
+// animation replays), so a transition finds no held state to start from and the edge would
+// vanish at once.
 .vdnd-drag-preview-dropping .row::after,
 .vdnd-drag-preview-dropping .preview-card::after {
-  opacity: 0;
+  animation: vdnd-example-settle var(--dur-settle) var(--ease-out) forwards;
 }
 
 // The clone carries the grip's colour inline (it was hovered when pressed).
@@ -320,6 +322,12 @@ app-examples-shell .row::before,
 
 @keyframes vdnd-example-lift {
   from {
+    opacity: 0;
+  }
+}
+
+@keyframes vdnd-example-settle {
+  to {
     opacity: 0;
   }
 }

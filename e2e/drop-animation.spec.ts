@@ -36,6 +36,29 @@ async function opacity(locator: Locator): Promise<number> {
   return locator.evaluate((el) => Number(getComputedStyle(el).opacity));
 }
 
+/**
+ * Pause the animation of the preview's held layer (the `::after` the demo draws the held edge
+ * and lift with) at `progress` (0–1) and return the layer's opacity then; null without one.
+ */
+async function heldLayerOpacityAt(preview: Locator, progress: number): Promise<number | null> {
+  return preview.evaluate((el, fraction) => {
+    const animation = document.getAnimations().find((candidate) => {
+      const effect = candidate.effect;
+      return (
+        effect instanceof KeyframeEffect &&
+        effect.pseudoElement === '::after' &&
+        !!effect.target &&
+        el.contains(effect.target)
+      );
+    });
+    const effect = animation?.effect;
+    if (!animation || !(effect instanceof KeyframeEffect) || !effect.target) return null;
+    animation.pause();
+    animation.currentTime = Number(effect.getComputedTiming().duration ?? 0) * fraction;
+    return Number(getComputedStyle(effect.target, '::after').opacity);
+  }, progress);
+}
+
 function expectSameBox(actual: Rect, expected: Rect): void {
   expect(actual.x).toBeCloseTo(expected.x, 0);
   expect(actual.y).toBeCloseTo(expected.y, 0);
@@ -84,6 +107,22 @@ test.describe('Drop animation', () => {
     await finishAnimations(demoPage.dropGhost);
     await expect(demoPage.dropGhost).toHaveCount(0);
     expect(await opacity(dropped)).toBe(1);
+  });
+
+  // Night: on drop, the lift and the held edge return to rest while the preview travels.
+  test('the held edge fades back to rest while the preview settles', async ({ page }) => {
+    const demoPage = new DemoPage(page);
+    await demoPage.goto({ dropAnimation: DROP_MS });
+
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+    await demoPage.keyboardMoveDown();
+    await demoPage.keyboardDrop();
+    await expect(demoPage.dropGhost).toBeVisible();
+
+    // Still held when the settle starts (not cut at the drop), at rest when it ends
+    expect(await heldLayerOpacityAt(demoPage.dropGhost, 0)).toBe(1);
+    expect(await heldLayerOpacityAt(demoPage.dropGhost, 1)).toBe(0);
   });
 
   test('a pointer drop into another list lands on the item there', async ({ page }) => {
