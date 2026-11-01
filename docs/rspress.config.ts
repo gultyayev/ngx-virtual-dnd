@@ -56,7 +56,6 @@ export default defineConfig({
   title: 'ngx-virtual-dnd',
   description: DESCRIPTION,
   icon: '/favicon.svg',
-  logo: { light: '/logo-tile-light.svg', dark: '/logo-tile-dark.svg' },
   logoText: 'ngx-virtual-dnd',
   llms: true,
   markdown: {
@@ -81,7 +80,9 @@ export default defineConfig({
     outlineTitle: { ...source['outlineTitle'], en: 'On this page' },
   }),
   head: [
-    ['meta', { name: 'theme-color', content: '#0e9488' }],
+    // Night's page colour per scheme (the browser chrome above the nav).
+    ['meta', { name: 'theme-color', content: '#ffffff', media: '(prefers-color-scheme: light)' }],
+    ['meta', { name: 'theme-color', content: '#05070b', media: '(prefers-color-scheme: dark)' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'ngx-virtual-dnd' }],
     ['meta', { property: 'og:image', content: `${SITE_ORIGIN}${BASE}og-image.png` }],
