@@ -80,10 +80,7 @@ export default defineConfig({
     nextPageText: { ...source['nextPageText'], en: 'Next' },
     outlineTitle: { ...source['outlineTitle'], en: 'On this page' },
   }),
-  // The font stylesheet itself is imported by theme/index.css (works in dev too).
   head: [
-    '<link rel="preconnect" href="https://fonts.googleapis.com">',
-    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
     ['meta', { name: 'theme-color', content: '#0e9488' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'ngx-virtual-dnd' }],
