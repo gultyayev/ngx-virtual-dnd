@@ -479,6 +479,26 @@
     }
   </main>
 
-  <!-- Drag Preview -->
-  <vdnd-drag-preview />
+  <!-- Drag Preview: the row at its size, naming its destination ("→ List 2, #3") -->
+  <ng-template #previewTpl let-item>
+    <div class="item">
+      <div class="item-inner">
+        <span class="item-handle">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="9" cy="6" r="1.6" />
+            <circle cx="15" cy="6" r="1.6" />
+            <circle cx="9" cy="12" r="1.6" />
+            <circle cx="15" cy="12" r="1.6" />
+            <circle cx="9" cy="18" r="1.6" />
+            <circle cx="15" cy="18" r="1.6" />
+          </svg>
+        </span>
+        <span class="item-text">{{ item.name }}</span>
+        @if (previewDestination(); as destination) {
+          <span class="item-meta" data-testid="demo-preview-destination">{{ destination }}</span>
+        }
+      </div>
+    </div>
+  </ng-template>
+  <vdnd-drag-preview [previewTemplate]="previewTpl" />
 </div>

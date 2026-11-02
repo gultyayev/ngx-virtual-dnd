@@ -10,9 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { IonCheckbox, IonContent, IonHeader, IonIcon, IonToolbar } from '@ionic/angular/standalone';
-import { addIcons } from 'ionicons';
-import { reorderThree } from 'ionicons/icons';
+import { IonCheckbox, IonContent, IonHeader, IonToolbar } from '@ionic/angular/standalone';
 import {
   DraggableDirective,
   DragPreviewComponent,
@@ -39,6 +37,9 @@ interface Task {
 
 type CategoryFilter = 'all' | 'work' | 'personal' | 'urgent';
 
+/** The list card's top border (1px) and padding (5px) above the first row (`.tasklist`). */
+const LIST_INSET_TOP = 6;
+
 /**
  * Demo showing page-level scroll with header/footer and virtual list.
  *
@@ -61,7 +62,6 @@ type CategoryFilter = 'all' | 'work' | 'personal' | 'urgent';
     IonHeader,
     IonToolbar,
     IonCheckbox,
-    IonIcon,
     ScrollableDirective,
     VirtualForDirective,
     DraggableDirective,
@@ -104,6 +104,9 @@ export class PageScrollDemoComponent implements OnDestroy {
   // Header height for offset calculation
   readonly headerHeight = signal(0);
 
+  /** Where the rows start: below the header and the list card's top border and padding. */
+  readonly contentOffset = computed(() => this.headerHeight() + LIST_INSET_TOP);
+
   // "Add task" button height, the space it covers at the bottom when pinned
   readonly footerHeight = signal(0);
 
@@ -131,8 +134,6 @@ export class PageScrollDemoComponent implements OnDestroy {
   #resizeObserver: ResizeObserver | null = null;
 
   constructor() {
-    addIcons({ reorderThree });
-
     // Set up header and footer height tracking after render
     afterNextRender(() => {
       const headerEl = this.headerElement().nativeElement;

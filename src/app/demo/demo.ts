@@ -36,6 +36,9 @@ interface Item {
   name: string;
 }
 
+/** The lists' names as their cards show them, for the preview's destination label. */
+const LIST_NAMES: Readonly<Record<string, string>> = { 'list-1': 'List 1', 'list-2': 'List 2' };
+
 /** Initial values of the settings panel. */
 interface DemoSettings {
   itemCount: number;
@@ -162,6 +165,23 @@ export class DemoComponent {
 
   /** List 2 items */
   readonly list2 = signal<Item[]>([]);
+
+  /**
+   * The drag preview names its destination (Night's DemoApp: "→ List 2, #3"): the list under the
+   * pointer and the position the item would land at there, counted from 1 (the drop's
+   * destination index + 1). The placeholder index counts the hidden source in its own list, so a
+   * slot after it is one position closer. Null while no list is targeted.
+   */
+  readonly previewDestination = computed(() => {
+    const list = this.#dragState.activeDroppableId();
+    const placeholder = this.#dragState.placeholderIndex();
+    if (list === null || placeholder === null) return null;
+    const source = this.#dragState.sourceIndex();
+    const afterOwnSource =
+      list === this.#dragState.sourceDroppableId() && source !== null && placeholder > source;
+    const landing = afterOwnSource ? placeholder - 1 : placeholder;
+    return `→ ${LIST_NAMES[list] ?? list}, #${landing + 1}`;
+  });
 
   /** IDs of items that should always be rendered (dragged item needs to stay for reference) */
   readonly stickyIds = computed(() => {

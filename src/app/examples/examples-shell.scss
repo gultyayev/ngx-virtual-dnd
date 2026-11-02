@@ -15,18 +15,33 @@ html:has(app-examples-shell) body {
 }
 
 // Text above the lists uses whole-pixel line heights, so every list lands on a whole pixel.
+// The padding is the frame body's (Night's LiveDemoFrame: 40px 24px 44px).
 app-examples-shell {
   display: block;
-  padding: 16px;
+  padding: 40px 24px 44px;
   color: var(--ink);
   font-size: 14px;
   line-height: 20px;
 
+  // A single list sits in a centered column on the dot grid, as in the frame's reference; the
+  // two-column board takes the frame's full width (and stays centered in a wide tab).
+  > :not(router-outlet, app-drag-state-debug) {
+    display: block;
+    max-width: 392px;
+    margin-inline: auto;
+  }
+
+  > :has(> .board) {
+    max-width: 800px;
+  }
+
   // The list panel (Night's list card): a surface card with a line edge. The vertical padding
   // sits outside the droppable, so its bounds stay those of the scroller; rows inset their cards.
+  // margin: 0 overrides the main demo's global .list margin.
   .list {
     display: block;
     overflow: hidden;
+    margin: 0;
     padding: 6px 0;
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
