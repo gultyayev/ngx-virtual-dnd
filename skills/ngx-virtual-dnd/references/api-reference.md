@@ -138,7 +138,7 @@ Virtual content for external scroll containers (page-level scroll). Must be plac
 | Input | Type | Default | Required | Description |
 |-------|------|---------|----------|-------------|
 | `itemHeight` | `number` | - | Yes | Item height in pixels |
-| `contentOffset` | `number` | `0` | No | Manual content offset (overridden by `vdndContentHeader` auto-measurement) |
+| `contentOffset` | `number` | `0` | No | Manual content offset (with a `vdndContentHeader`, where the rows start is measured instead) |
 | `dynamicItemHeight` | `boolean` | `false` | No | Enable dynamic heights |
 
 **Outputs:** None
@@ -331,7 +331,7 @@ Structural directive that renders only the visible items. Must be inside `vdnd-v
 
 **Selector:** `[vdndContentHeader]`
 
-Marks a projected header inside `VirtualContentComponent`. Height is auto-measured via ResizeObserver and used as content offset.
+Marks a projected header inside `VirtualContentComponent`. Where the rows start below it is measured (the header's margins and anything above it in the scroll container, such as padding, count) and used as the content offset; re-measured when the header or the scroll container resizes.
 
 **Inputs:** None
 **Outputs:** None

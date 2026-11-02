@@ -10,6 +10,7 @@ import {
   NgZone,
   PLATFORM_ID,
   signal,
+  viewChild,
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { VDND_VIRTUAL_VIEWPORT, VdndVirtualViewport } from '../tokens/virtual-viewport.token';
@@ -27,8 +28,12 @@ import { ContentHeaderDirective } from '../directives/content-header.directive';
  * a content wrapper with GPU-accelerated transform positioning while delegating
  * scroll handling to the parent `vdndScrollable` container.
  *
- * Headers marked with `vdndContentHeader` are automatically measured via
- * ResizeObserver — no manual offset calculation needed.
+ * With a header marked `vdndContentHeader`, the component measures where its rows start in the
+ * scroll container's content (the header with its margins and everything above it: the
+ * container's padding, the component's border and padding, content before it), again whenever
+ * the header or the container resizes — no manual offset calculation needed. Content above the
+ * component that changes height on its own is counted at the next such resize: put it in the
+ * header, or pass `contentOffset` without a header.
  *
  * @example
  * Content projection with auto-measured header:
@@ -101,7 +106,7 @@ import { ContentHeaderDirective } from '../directives/content-header.directive';
     <ng-content select="[vdndContentHeader]" />
 
     <!-- Virtual area — sized to totalHeight, contains absolute-positioned spacer + wrapper -->
-    <div class="vdnd-virtual-area" [style.height.px]="totalHeight()">
+    <div #virtualArea class="vdnd-virtual-area" [style.height.px]="totalHeight()">
       <!-- Spacer maintains scroll height for the virtual list portion -->
       <div class="vdnd-content-spacer" [style.height.px]="totalHeight()"></div>
 
@@ -128,15 +133,19 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
   /** Projected header directive (if any) */
   private readonly headerDirective = contentChild(ContentHeaderDirective);
 
+  /** The rows' box, right below the header: where the list starts */
+  private readonly virtualArea = viewChild<ElementRef<HTMLElement>>('virtualArea');
+
   // ========== Inputs ==========
 
   /** Height of each item in pixels (used as estimate in dynamic mode) */
   itemHeight = input.required<number>();
 
   /**
-   * Offset for content above the virtual list (e.g., header height).
-   * When a `vdndContentHeader` is projected, this input is ignored —
-   * the offset is auto-measured via ResizeObserver.
+   * Offset for content above the virtual list (e.g., header height): where the rows start in
+   * the scroll container's content, measured from inside its border.
+   * When a `vdndContentHeader` is projected, this input is ignored — the component
+   * measures where its rows start instead (the header and everything above it).
    * Use this input only when the header lives outside the component.
    */
   contentOffset = input<number>(0);
@@ -156,8 +165,12 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
    */
   readonly #renderStartIndex = signal(0);
 
-  /** Auto-measured header height from ResizeObserver */
-  readonly #measuredHeaderHeight = signal(0);
+  /**
+   * Where the rows start in the parent scroll container's content, measured while a header is
+   * projected: the header with its margins and everything above it (the container's padding,
+   * this element's border and padding, content before it).
+   */
+  readonly #measuredRowsOffset = signal(0);
 
   // ========== Strategy ==========
 
@@ -188,12 +201,12 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
 
   /**
    * Effective content offset: when a `vdndContentHeader` directive is projected,
-   * returns the auto-measured header height. Otherwise falls back to the
+   * returns where the rows start (measured). Otherwise falls back to the
    * `contentOffset` input for backward compatibility.
    */
   readonly effectiveContentOffset = computed(() => {
     const header = this.headerDirective();
-    return header ? this.#measuredHeaderHeight() : this.contentOffset();
+    return header ? this.#measuredRowsOffset() : this.contentOffset();
   });
 
   /**
@@ -261,14 +274,15 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
   // ========== Private Methods ==========
 
   /**
-   * Sets up an effect that observes the projected header directive's element
-   * with a ResizeObserver, keeping `#measuredHeaderHeight` in sync.
+   * Keeps `#measuredRowsOffset` in sync while a header is projected: measures now, and again
+   * whenever a ResizeObserver reports the header or the parent scroll container resizing (the
+   * container's width can reflow what sits above the header).
    */
   #setupHeaderMeasurement(): void {
     effect((onCleanup) => {
       const dir = this.headerDirective();
       if (!dir) {
-        this.#measuredHeaderHeight.set(0);
+        this.#measuredRowsOffset.set(0);
         return;
       }
 
@@ -277,22 +291,47 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
         return;
       }
 
-      const el = dir.elementRef.nativeElement;
-      this.#measuredHeaderHeight.set(el.offsetHeight);
+      const header = dir.elementRef.nativeElement;
+      const container = this.#parentScrollContainer.nativeElement;
+      const measure = (): void => {
+        const offset = this.#measureRowsOffset(container);
+        if (offset !== null) {
+          this.#measuredRowsOffset.set(offset);
+        }
+      };
+      measure();
 
       let observer: ResizeObserver | null = null;
       this.#ngZone.runOutsideAngular(() => {
-        observer = new ResizeObserver((entries) => {
-          for (const entry of entries) {
-            const height =
-              entry.borderBoxSize?.[0]?.blockSize ?? (entry.target as HTMLElement).offsetHeight;
-            this.#measuredHeaderHeight.set(height);
-          }
-        });
-        observer.observe(el, { box: 'border-box' });
+        observer = new ResizeObserver(measure);
+        observer.observe(header, { box: 'border-box' });
+        observer.observe(container);
       });
 
       onCleanup(() => observer?.disconnect());
     });
+  }
+
+  /**
+   * Where the rows start in `container`'s scrolled content, as `contentOffset` counts it: from the
+   * top of the content, inside the container's border. In layout pixels: a transform that scales
+   * the container while it is measured (a zoom-in animation) is divided out, as no resize follows
+   * when it ends. Null while the container has no layout box or the rows' box isn't rendered.
+   */
+  #measureRowsOffset(container: HTMLElement): number | null {
+    const area = this.virtualArea()?.nativeElement;
+    const layoutHeight = container.offsetHeight;
+    if (!area || layoutHeight === 0) {
+      return null;
+    }
+    const box = container.getBoundingClientRect();
+    // offsetHeight is rounded to whole pixels: only a transform moves the ratio this far from 1
+    const ratio = box.height / layoutHeight;
+    const scale = Math.abs(ratio - 1) > 0.01 ? ratio : 1;
+    return (
+      (area.getBoundingClientRect().top - box.top) / scale -
+      container.clientTop +
+      container.scrollTop
+    );
   }
 }

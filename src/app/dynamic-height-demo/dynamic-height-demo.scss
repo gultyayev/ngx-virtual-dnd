@@ -47,16 +47,16 @@ ion-content::part(scroll) {
   overflow-x: hidden;
 }
 
-/* Horizontal centering + top/bottom breathing (nothing sits above the virtual
-   content that the header measurement can't see). */
+/* Horizontal centering + top/bottom breathing. The top padding sits above the list's header:
+   vdnd-virtual-content measures where its rows start, so it counts in the list's offset. */
 .tm-stage {
   padding-top: 24px;
 }
 
 /* The header sits inside the card at the top (so the card needs no top padding here) and divides
    it from the rows. Its divider is drawn 5px above its bottom edge, so the first row's card (3px
-   inset) starts 8px below the divider, as far as from the card's sides; the header's measured
-   height (vdndContentHeader) includes that space. */
+   inset) starts 8px below the divider, as far as from the card's sides; that space is part of
+   the header's box, so the rows start below it. */
 .tasklist {
   padding-top: 0;
 }

@@ -34,6 +34,66 @@ test.describe('Dynamic Height Demo', () => {
     expect(uniqueHeights.size).toBeGreaterThan(1);
   });
 
+  test('places the list offset where the first row starts, counting the space above the header', async ({
+    page,
+  }) => {
+    // The page's top padding and the list card's border sit above the header (vdndContentHeader).
+    // Hit-testing reads the list's offset from data-content-offset, so it must be where the rows
+    // start in the scroll container's content (from inside its border, at any scroll position).
+    await expect(async () => {
+      const { offset, firstRowTop } = await page.evaluate((selectors) => {
+        const container = document.querySelector<HTMLElement>(selectors.scrollContainer);
+        const content = document.querySelector<HTMLElement>(selectors.virtualContent);
+        const firstRow = content?.querySelector<HTMLElement>(selectors.item);
+        if (!container || !content || !firstRow) {
+          return { offset: NaN, firstRowTop: NaN };
+        }
+        return {
+          offset: parseFloat(content.getAttribute('data-content-offset') ?? ''),
+          firstRowTop:
+            firstRow.getBoundingClientRect().top -
+            container.getBoundingClientRect().top -
+            container.clientTop +
+            container.scrollTop,
+        };
+      }, taskDemoSelectors);
+      expect(Math.abs(offset - firstRowTop)).toBeLessThanOrEqual(1);
+    }).toPass();
+  });
+
+  test('drops where the pointer is with space above the header', async ({ page }) => {
+    // The placeholder passes the next row once the preview's top edge passes that row's middle
+    // (the dragged row is hidden and the rows below close up). An offset that missed the space
+    // above the header (25px here) moved it that much early, so the short drag reordered too.
+    const firstId = await taskDemo.items.nth(0).getAttribute('data-draggable-id');
+    const secondId = await taskDemo.items.nth(1).getAttribute('data-draggable-id');
+    const firstBox = await taskDemo.items.nth(0).boundingBox();
+    const secondBox = await taskDemo.items.nth(1).boundingBox();
+    if (!firstBox || !secondBox) throw new Error('Could not get the first two rows');
+    const x = firstBox.x + firstBox.width / 2;
+    const y = firstBox.y + firstBox.height / 2;
+
+    const dragFirstRowBy = async (dy: number): Promise<void> => {
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y + 8, { steps: 2 });
+      await expect(taskDemo.dragPreview).toBeVisible();
+      await page.mouse.move(x, y + dy, { steps: 8 });
+      await page.mouse.move(x, y + dy);
+      await taskDemo.settleDragPosition(x, y + dy);
+      await page.mouse.up();
+      await expect(taskDemo.dragPreview).toBeHidden();
+    };
+
+    // 10px short of the second row's middle: the first row stays first
+    await dragFirstRowBy(secondBox.height / 2 - 10);
+    await expect(taskDemo.items.first()).toHaveAttribute('data-draggable-id', firstId!);
+
+    // 10px past it: the first row lands after the second
+    await dragFirstRowBy(secondBox.height / 2 + 10);
+    await expect(taskDemo.items.first()).toHaveAttribute('data-draggable-id', secondId!);
+  });
+
   test('should re-render the list when its items are filtered', async () => {
     await taskDemo.categoryFilter('work').click();
 

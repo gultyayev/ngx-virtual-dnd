@@ -115,4 +115,4 @@ Used directly in a `vdndScrollable` element (no viewport component), it position
 
 **Selector:** `[vdndContentHeader]`
 
-Marks a header projected into `<vdnd-virtual-content>`. Its height is measured and used as the content offset. No inputs or outputs.
+Marks a header projected into `<vdnd-virtual-content>`. The component measures where its rows start below the header (counting the header's margins and anything above it in the scroll container, such as its padding) and uses that as the content offset, again whenever the header or the container resizes. No inputs or outputs.
