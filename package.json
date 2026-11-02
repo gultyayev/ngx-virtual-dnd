@@ -78,7 +78,7 @@
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@playwright/test": "^1.63.0",
-    "@rspress/core": "^2.0.22",
+    "@rspress/core": "^2.0.23",
     "@storybook/addon-a11y": "^10.1.10",
     "@storybook/addon-docs": "^10.1.10",
     "@storybook/addon-onboarding": "^10.1.10",
