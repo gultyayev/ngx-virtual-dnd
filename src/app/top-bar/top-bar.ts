@@ -145,7 +145,12 @@ const matchPath = (paths: IsActiveMatchOptions['paths']): IsActiveMatchOptions =
               }
             </a>
           }
-          <a class="nav-sheet-item" [href]="docsUrl">Docs</a>
+          <a class="nav-sheet-item" [href]="docsUrl"
+            >Docs
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 17L17 7M9 7h8v8" />
+            </svg>
+          </a>
         </nav>
       </div>
     }

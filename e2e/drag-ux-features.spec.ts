@@ -156,3 +156,38 @@ test.describe('Drag UX Features - Drag Handle', () => {
     await page.mouse.up();
   });
 });
+
+test.describe('Drag UX Features - Preview destination', () => {
+  let demoPage: DemoPage;
+
+  test.beforeEach(async ({ page }) => {
+    demoPage = new DemoPage(page);
+    await demoPage.goto();
+  });
+
+  // The main demo's preview names where the item would land ("→ List 2, #3"): the list and the
+  // 1-based position the drop then reports (its destination index + 1).
+  test('names the position the item lands at, in its own list and in the other', async ({
+    page,
+  }) => {
+    const destination = page.getByTestId('demo-preview-destination');
+
+    // Up one slot in its own list: from the third position to the second
+    await demoPage.startKeyboardDrag('list1', 2);
+    await demoPage.keyboardMoveUp();
+    await expect(destination).toHaveText('→ List 1, #2');
+    await demoPage.keyboardDrop();
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '1');
+
+    // Into the other list: the number matches the drop there too
+    await demoPage.startKeyboardDrag('list1', 0);
+    await demoPage.keyboardMoveToList('right');
+    await expect(destination).toHaveText(/^→ List 2, #\d+$/);
+    const shown = Number((await destination.textContent())?.split('#')[1]);
+    await demoPage.keyboardDrop();
+    await expect(demoPage.host).toHaveAttribute(
+      'data-last-drop-destination-index',
+      String(shown - 1),
+    );
+  });
+});

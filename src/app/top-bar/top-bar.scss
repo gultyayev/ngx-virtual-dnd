@@ -161,7 +161,7 @@
   inset: 0;
   top: var(--nav-h);
   z-index: 19;
-  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  background: var(--scrim);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
 }
@@ -207,6 +207,11 @@
 .nav-sheet-item.is-active {
   background: var(--surface-hover);
   color: var(--ink);
+}
+
+.nav-sheet-item .ico {
+  width: 16px;
+  height: 16px;
 }
 
 .nav-sheet-dot {

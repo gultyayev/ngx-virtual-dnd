@@ -103,7 +103,16 @@ export class ThemeService {
   }
 
   #apply(): void {
-    document.documentElement.setAttribute('data-theme', this.resolved());
+    const theme = this.resolved();
+    document.documentElement.setAttribute('data-theme', theme);
+    // The browser's bar takes the page colour of the theme shown: index.html has a theme-color
+    // per OS colour scheme, each naming its theme; only the shown theme's applies.
+    const metas = document.querySelectorAll<HTMLMetaElement>(
+      'meta[name="theme-color"][data-theme]',
+    );
+    for (const meta of metas) {
+      meta.media = meta.dataset['theme'] === theme ? 'all' : 'not all';
+    }
   }
 
   #readQueryTheme(): 'light' | 'dark' | null {

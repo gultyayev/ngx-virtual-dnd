@@ -76,6 +76,14 @@
   --ion-font-family: var(--font-sans);
 }
 
+/* The scrim behind the phone menu sheet: ink-dark in both themes. */
+:root {
+  --scrim: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+[data-theme='dark'] {
+  --scrim: color-mix(in srgb, var(--page) 72%, transparent);
+}
+
 /* ══════════ THEME SWITCH ══════════ */
 /* ThemeService switches themes inside a view transition (as Rspress does on the docs): the
    root cross-fades in --dur-settle. */
@@ -387,8 +395,9 @@ pre {
     border-color var(--dur-quick) var(--ease-out),
     box-shadow var(--dur-quick) var(--ease-out);
 }
+/* background-color, not the shorthand: the select's chevron is a background image. */
 [data-theme='dark'] .input {
-  background: var(--surface-raised);
+  background-color: var(--surface-raised);
 }
 .input[type='number'] {
   font-family: var(--font-mono);
@@ -753,6 +762,17 @@ select.input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* vd-item__meta: the preview's destination ("→ List 2, #3"), mono, ink-faint. */
+.item-meta {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .item.vdnd-draggable-disabled {
   cursor: not-allowed;
 }
@@ -828,47 +848,34 @@ select.input {
   font-weight: 600;
   color: var(--ink);
 }
-/* Callout (tip): accent-tint with an accent-hairline edge, no side stripe. */
+/* Callout (tip): accent-tint with an accent-hairline edge, the title in accent-text after its
+   bulb icon, the body in ink-body, no side stripe. The dismiss button sits in the corner. */
 .tm-note {
   position: relative;
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
   margin-top: 18px;
-  padding: 16px 52px 16px 18px;
+  padding: 16px 52px 17px 18px;
   border-radius: var(--radius-lg);
   background: var(--accent-tint);
   border: 1px solid var(--accent-hairline);
 }
-.tm-note-ico {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  flex: none;
-  background: var(--surface);
-  color: var(--accent-text);
-  box-shadow: inset 0 0 0 1px var(--accent-hairline);
-}
-[data-theme='dark'] .tm-note-ico {
-  background: var(--surface-raised);
-}
-.tm-note-ico .ico {
-  width: 16px;
-  height: 16px;
-}
-.tm-note h2 {
+.tm-note-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14.5px;
   font-weight: 600;
   line-height: 20px;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--accent-text);
+}
+.tm-note-title .ico {
+  width: 16px;
+  height: 16px;
 }
 .tm-note p {
-  margin-top: 4px;
-  font-size: 14px;
-  line-height: 22px;
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 25px;
   color: var(--ink-body);
 }
 /* Button quiet icon, small */
@@ -948,7 +955,10 @@ select.input {
   color: var(--accent-text);
 }
 
+/* The list card. Its 5px top and bottom padding plus the row cards' 3px inset put 8px between the
+   card's edge and the first and last row cards, as at the sides (the rows inset their cards 8px). */
 .tasklist {
+  padding: 5px 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -987,16 +997,20 @@ select.input {
 .task:active {
   cursor: grabbing;
 }
+/* The grip: Night's six dots, 16px, ink-faint (ink-muted on hover, held while dragged). */
 .task-handle {
   display: grid;
   place-items: center;
   width: 20px;
   height: 20px;
-  font-size: 18px;
   flex: none;
   margin-top: 1px;
   color: var(--ink-faint);
   transition: color var(--dur-quick) var(--ease-out);
+}
+.task-handle svg {
+  width: 16px;
+  height: 16px;
 }
 .task:hover .task-handle {
   color: var(--ink-muted);
@@ -1031,6 +1045,24 @@ select.input {
 }
 .task.is-done .task-desc {
   color: var(--ink-faint);
+}
+/* Ionic checkbox as the Night checkbox (Field): 18px, line-strong edge, accent fill. Global, so
+   the drag preview's clone of a task row (outside the component) gets it too. */
+ion-checkbox.task-check {
+  --size: 18px;
+  --border-radius: 5px;
+  --border-width: 1px;
+  --border-color: var(--line-strong);
+  --checkbox-background: var(--surface);
+  --border-color-checked: var(--accent);
+  --checkbox-background-checked: var(--accent);
+  --checkmark-color: var(--on-accent);
+  --checkmark-width: 2px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+[data-theme='dark'] ion-checkbox.task-check {
+  --checkbox-background: var(--surface-raised);
 }
 /* vd-badge, toned per category */
 .tag {
@@ -1150,25 +1182,22 @@ body .vdnd-drag-preview .vdnd-drag-preview-clone {
 .vdnd-drag-preview .task {
   cursor: grabbing;
 }
-/* The main demo's preview is the library's clone of the row, which carries the row's computed
-   colours inline, so the held look overrides them. */
+/* The preview is the library's clone of the row (the main demo's is a template of it), and the
+   clone carries the row's computed colours inline, so the held look overrides them. The held card
+   is the row's visible card: .item-inner, or the ::before card (inset 3px 8px) of a task row. */
 .vdnd-drag-preview .item-inner {
   position: relative;
   background: var(--list-bg) !important;
   border-color: transparent !important;
 }
-.vdnd-drag-preview .task {
-  position: relative;
-  background: var(--list-bg);
-  border-radius: var(--radius-md);
-}
 .vdnd-drag-preview .task::before {
-  display: none;
+  background: var(--list-bg);
+  border-color: transparent;
 }
 [data-theme='dark'] .vdnd-drag-preview .item-inner {
   background: #17202d !important;
 }
-[data-theme='dark'] .vdnd-drag-preview .task {
+[data-theme='dark'] .vdnd-drag-preview .task::before {
   background: #17202d;
 }
 .vdnd-drag-preview .item-inner::after,
@@ -1183,7 +1212,8 @@ body .vdnd-drag-preview .vdnd-drag-preview-clone {
   animation: vdnd-demo-lift var(--dur-quick) var(--ease-out) backwards;
 }
 .vdnd-drag-preview .task::after {
-  inset: 0;
+  inset: 3px 8px;
+  z-index: -1;
 }
 /* A keyframe animation, not a transition: the layer restarts when the drop begins (its pick-up
    animation replays), so a transition finds no held state to start from and the edge would
@@ -1192,11 +1222,9 @@ body .vdnd-drag-preview .vdnd-drag-preview-clone {
 .vdnd-drag-preview-dropping .task::after {
   animation: vdnd-demo-settle var(--dur-settle) var(--ease-out) forwards;
 }
-.vdnd-drag-preview .item-handle {
-  color: var(--held) !important;
-}
+.vdnd-drag-preview .item-handle,
 .vdnd-drag-preview .task-handle {
-  color: var(--held);
+  color: var(--held) !important;
 }
 @keyframes vdnd-demo-lift {
   from {

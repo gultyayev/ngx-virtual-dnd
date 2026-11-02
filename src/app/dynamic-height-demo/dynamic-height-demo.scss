@@ -53,10 +53,25 @@ ion-content::part(scroll) {
   padding-top: 24px;
 }
 
-/* Header sits inside the card at the top, dividing from the first row. */
+/* The header sits inside the card at the top (so the card needs no top padding here) and divides
+   it from the rows. Its divider is drawn 5px above its bottom edge, so the first row's card (3px
+   inset) starts 8px below the divider, as far as from the card's sides; the header's measured
+   height (vdndContentHeader) includes that space. */
+.tasklist {
+  padding-top: 0;
+}
 .page-header {
-  padding: 22px 22px;
-  border-bottom: 1px solid var(--line);
+  position: relative;
+  padding: 22px 22px 28px;
+}
+.page-header::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 5px;
+  left: 0;
+  height: 1px;
+  background: var(--line);
 }
 .page-header .tm-tools {
   margin-bottom: 0;
@@ -73,22 +88,4 @@ ion-content::part(scroll) {
    the handle/checkbox aligned to the first line (global .task uses flex-start). */
 .task-desc {
   margin-top: 2px;
-}
-
-/* Ionic checkbox as the Night checkbox (Field): 18px, line-strong edge, accent fill. */
-ion-checkbox.task-check {
-  --size: 18px;
-  --border-radius: 5px;
-  --border-width: 1px;
-  --border-color: var(--line-strong);
-  --checkbox-background: var(--surface);
-  --border-color-checked: var(--accent);
-  --checkbox-background-checked: var(--accent);
-  --checkmark-color: var(--on-accent);
-  --checkmark-width: 2px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-:host-context([data-theme='dark']) ion-checkbox.task-check {
-  --checkbox-background: var(--surface-raised);
 }

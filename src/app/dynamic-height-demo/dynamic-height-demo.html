@@ -27,28 +27,27 @@
           <!-- Static header section that scrolls away (auto-measured via vdndContentHeader) -->
           <div class="page-header" data-testid="task-page-header" vdndContentHeader>
             <div class="tm-head">
-              <h1 class="tm-title">Dynamic Height Tasks</h1>
+              <h1 class="tm-title">Dynamic height tasks</h1>
               <span class="tm-count"
                 ><b>{{ openCount() }}</b> open · {{ tasks().length }} total</span
               >
             </div>
 
             @if (showBanner()) {
-              <div class="tm-note">
-                <span class="tm-note-ico">
+              <aside class="tm-note">
+                <h2 class="tm-note-title">
                   <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
-                    <rect x="4" y="3.5" width="16" height="5" rx="1.5" />
-                    <rect x="4" y="11" width="16" height="9.5" rx="1.5" />
+                    <path
+                      d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"
+                    />
                   </svg>
-                </span>
-                <div>
-                  <h2>Variable-height rows</h2>
-                  <p>
-                    Each row sizes to its own content — descriptions run from one line to several.
-                    Heights are measured automatically with a ResizeObserver and survive reordering,
-                    so drag stays accurate.
-                  </p>
-                </div>
+                  Variable-height rows
+                </h2>
+                <p>
+                  Each row sizes to its own content — descriptions run from one line to several.
+                  Heights are measured automatically with a ResizeObserver and survive reordering,
+                  so drag stays accurate.
+                </p>
                 <button
                   type="button"
                   class="tm-note-x"
@@ -59,7 +58,7 @@
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
                 </button>
-              </div>
+              </aside>
             }
 
             <!-- Category filters -->
@@ -80,7 +79,16 @@
 
           <ng-container *vdndVirtualFor="let task of filteredTasks(); trackBy: trackById">
             <div class="task" [class.is-done]="task.done" [vdndDraggable]="task.id">
-              <ion-icon name="reorder-three" class="task-handle"></ion-icon>
+              <span class="task-handle" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="9" cy="6" r="1.6" />
+                  <circle cx="15" cy="6" r="1.6" />
+                  <circle cx="9" cy="12" r="1.6" />
+                  <circle cx="15" cy="12" r="1.6" />
+                  <circle cx="9" cy="18" r="1.6" />
+                  <circle cx="15" cy="18" r="1.6" />
+                </svg>
+              </span>
               <ion-checkbox
                 class="task-check"
                 [checked]="task.done"
@@ -112,20 +120,6 @@
 </ion-content>
 
 <!-- Drag preview portal -->
-<vdnd-drag-preview>
-  <ng-template let-item>
-    <div class="task" style="width: 340px">
-      <ion-icon name="reorder-three" class="task-handle"></ion-icon>
-      <div class="task-main">
-        <div class="task-row1">
-          <span class="task-title" data-testid="task-title">{{ item.title }}</span>
-          <span class="tag tag--{{ item.category }}" data-testid="task-category">
-            {{ item.category }}
-          </span>
-        </div>
-      </div>
-    </div>
-  </ng-template>
-</vdnd-drag-preview>
+<vdnd-drag-preview />
 
 <app-drag-state-debug />

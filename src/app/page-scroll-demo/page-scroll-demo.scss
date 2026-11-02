@@ -89,21 +89,3 @@ ion-content::part(scroll) {
   height: 72px;
   align-items: center;
 }
-
-/* Ionic checkbox as the Night checkbox (Field): 18px, line-strong edge, accent fill. */
-ion-checkbox.task-check {
-  --size: 18px;
-  --border-radius: 5px;
-  --border-width: 1px;
-  --border-color: var(--line-strong);
-  --checkbox-background: var(--surface);
-  --border-color-checked: var(--accent);
-  --checkbox-background-checked: var(--accent);
-  --checkmark-color: var(--on-accent);
-  --checkmark-width: 2px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-:host-context([data-theme='dark']) ion-checkbox.task-check {
-  --checkbox-background: var(--surface-raised);
-}

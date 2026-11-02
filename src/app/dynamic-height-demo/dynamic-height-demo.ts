@@ -1,8 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { IonCheckbox, IonContent, IonHeader, IonIcon, IonToolbar } from '@ionic/angular/standalone';
-import { addIcons } from 'ionicons';
-import { reorderThree } from 'ionicons/icons';
+import { IonCheckbox, IonContent, IonHeader, IonToolbar } from '@ionic/angular/standalone';
 import {
   ContentHeaderDirective,
   DraggableDirective,
@@ -46,7 +44,6 @@ function listSize(param: string | null): number {
     IonHeader,
     IonToolbar,
     IonCheckbox,
-    IonIcon,
     ScrollableDirective,
     VirtualForDirective,
     DraggableDirective,
@@ -101,10 +98,6 @@ export class DynamicHeightDemoComponent {
     }
     return c;
   });
-
-  constructor() {
-    addIcons({ reorderThree });
-  }
 
   trackById = (_index: number, task: DynamicTask): string => task.id;
 

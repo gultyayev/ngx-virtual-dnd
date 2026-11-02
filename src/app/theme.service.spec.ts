@@ -56,6 +56,44 @@ describe('ThemeService', () => {
     expect(root.getAttribute('data-theme')).toBe('dark');
   });
 
+  describe('browser bar colour (theme-color)', () => {
+    let metas: HTMLMetaElement[];
+
+    beforeEach(() => {
+      // index.html: a theme-color per OS colour scheme, each naming its theme
+      metas = (['light', 'dark'] as const).map((theme) => {
+        const meta = document.createElement('meta');
+        meta.name = 'theme-color';
+        meta.dataset['theme'] = theme;
+        meta.media = `(prefers-color-scheme: ${theme})`;
+        document.head.appendChild(meta);
+        return meta;
+      });
+    });
+
+    afterEach(() => {
+      metas.forEach((meta) => meta.remove());
+    });
+
+    it('takes the colour of the chosen theme, not the OS scheme', () => {
+      localStorage.setItem(STORAGE_KEY, 'dark');
+
+      createService();
+
+      expect(metas.map((meta) => meta.media)).toEqual(['not all', 'all']);
+    });
+
+    it('follows a theme switch', () => {
+      localStorage.setItem(STORAGE_KEY, 'light');
+      const service = createService();
+      expect(metas.map((meta) => meta.media)).toEqual(['all', 'not all']);
+
+      service.cycle();
+
+      expect(metas.map((meta) => meta.media)).toEqual(['not all', 'all']);
+    });
+  });
+
   describe('embedded (docs live examples)', () => {
     it('applies ?theme=dark without persisting it', () => {
       localStorage.setItem(STORAGE_KEY, 'light');
