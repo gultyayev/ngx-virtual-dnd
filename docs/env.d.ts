@@ -7,3 +7,12 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// react-dom ships no types in this repo (no @types/react-dom); the theme only needs createPortal
+// (theme/components/NavHamburger.tsx portals the phone menu, as Rspress does).
+declare module 'react-dom' {
+  export function createPortal(
+    children: import('react').ReactNode,
+    container: Element | DocumentFragment,
+  ): import('react').ReactPortal;
+}
