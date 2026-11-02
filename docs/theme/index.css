@@ -445,6 +445,20 @@ html:root.rp-dark {
   --shiki-token-link: var(--code-accent);
 }
 
+/* ══════════ FOCUS ══════════ */
+/* Night's focus: a 2px --accent outline at 2px offset (--code-accent on code panels, below).
+   Unlayered, so it also beats Rspress's layered `button:focus-visible { outline: none }`. */
+html :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A focused code block (Shiki's <pre tabindex="0">) scrolls inside the panel, which clips a ring
+   drawn outside it: its ring is drawn inside its edge. */
+html .rp-codeblock pre:focus-visible {
+  outline-offset: -2px;
+}
+
 /* ══════════ TOP BAR ══════════ */
 /* BEM overrides are prefixed with `html` so they outrank Rspress's equal-specificity
    rules regardless of stylesheet order. */
@@ -654,6 +668,11 @@ html .rp-search-panel__input {
   font: 400 16px/1 var(--font-sans);
 }
 
+/* The field shows focus (its edge and ring); the input inside it draws none. */
+html .rp-search-panel__input:focus-visible {
+  outline: none;
+}
+
 html .rp-search-panel__input::placeholder {
   color: var(--ink-faint);
 }
@@ -785,13 +804,22 @@ html .rp-no-search-result__icon {
   color: var(--ink-faint);
 }
 
-/* Rspress places the hamburger's dropdown at 80% of the nav's height and flush with its right
-   edge. The nav box now includes the bleed and the side insets, so anchor it to the button. */
-html .rp-nav-hamburger__md {
+/* The tablet menu (769–1280px; components/NavHamburger.tsx): the button and its dropdown side by
+   side in a wrapper, shown at the widths Rspress shows its tablet hamburger. Rspress places the
+   dropdown at 80% of the nav's height; the nav box includes the bleed and the side insets, so it
+   is anchored to the wrapper instead. */
+html .vdnd-nav-more {
+  display: none;
   position: relative;
 }
 
-html .rp-nav-hamburger__md > .rp-hover-group {
+@media (width <= 1280px) and (width >= 769px) {
+  html .vdnd-nav-more {
+    display: block;
+  }
+}
+
+html .vdnd-nav-more > .rp-hover-group {
   top: calc(100% + 8px);
 }
 
@@ -922,6 +950,15 @@ html .rp-nav-menu__divider {
   margin: 0 16px 0 4px;
   background: var(--line-strong);
   opacity: 0.45;
+}
+
+/* The theme switch is a button (components/SwitchAppearance.tsx); it draws no button chrome. */
+html .rp-switch-appearance {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
 }
 
 /* Theme switch and GitHub: quiet icon buttons. */

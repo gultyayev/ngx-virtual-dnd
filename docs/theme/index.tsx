@@ -7,7 +7,9 @@ export * from '@rspress/core/theme-original';
 export { Callout } from './components/Callout';
 export { CodeBlock } from './components/CodeBlock';
 export { HomeLayout } from './components/HomeLayout';
+export { NavHamburger } from './components/NavHamburger';
 export { NotFoundLayout } from './components/NotFoundLayout';
+export { SwitchAppearance } from './components/SwitchAppearance';
 // Rspress's built-in icons, replaced with Night's stroke set wherever Rspress draws them.
 export {
   NightIconChevronDown as IconArrowDown,
