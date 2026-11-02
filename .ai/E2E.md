@@ -327,7 +327,11 @@ const drift = Math.abs(previewY - placeholderY);
 
 Firefox and WebKit round `borderBoxSize.blockSize` (via `ResizeObserver`) and
 `translateY` sub-pixel values differently than Chromium. This produces ~6-8px
-of additional drift during continuous autoscroll.
+of additional drift during continuous autoscroll. The page scroll demo measures its header that
+way for `[contentOffset]`; a `vdndContentHeader` offset is measured from rects instead (where the
+rows start, from inside the scroll container's border), so `data-content-offset` matches the first
+row's `getBoundingClientRect().top - container.getBoundingClientRect().top - container.clientTop +
+container.scrollTop` there.
 
 For drift tolerance in alignment tests:
 

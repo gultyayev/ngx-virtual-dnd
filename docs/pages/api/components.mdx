@@ -100,11 +100,11 @@ Self-scrolling container for `*vdndVirtualFor`. Positions all rows with one GPU-
 
 Virtual rows inside an external scroll container, for [page-level scrolling](/guide/features/page-scroll). Must be inside a `vdndScrollable` element. Projects an optional `[vdndContentHeader]` above the rows.
 
-| Input               | Type      | Default      | Description                                                                |
-| ------------------- | --------- | ------------ | -------------------------------------------------------------------------- |
-| `itemHeight`        | `number`  | **required** | Row height in px                                                           |
-| `dynamicItemHeight` | `boolean` | `false`      | Measure rows                                                               |
-| `contentOffset`     | `number`  | `0`          | Offset above the rows; replaced by the measured `vdndContentHeader` height |
+| Input               | Type      | Default      | Description                                                                                 |
+| ------------------- | --------- | ------------ | ------------------------------------------------------------------------------------------- |
+| `itemHeight`        | `number`  | **required** | Row height in px                                                                            |
+| `dynamicItemHeight` | `boolean` | `false`      | Measure rows                                                                                |
+| `contentOffset`     | `number`  | `0`          | Offset above the rows; with a `vdndContentHeader`, where the rows start is measured instead |
 
 ## DragPreviewComponent
 

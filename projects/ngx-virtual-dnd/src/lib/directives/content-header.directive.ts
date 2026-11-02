@@ -4,8 +4,10 @@ import { Directive, ElementRef, inject } from '@angular/core';
  * Marks an element as the header content for a `vdnd-virtual-content` component.
  *
  * Place this directive on a projected element inside `<vdnd-virtual-content>`.
- * The component will automatically measure the header's height via ResizeObserver
- * and use it as the content offset for virtual scroll calculations.
+ * The component measures where its rows start below the header (the header's margins and
+ * anything above it in the scroll container count, such as its padding) and uses that as the
+ * content offset for virtual scroll calculations, again whenever the header or the container
+ * resizes.
  *
  * This eliminates the need for manual ResizeObserver boilerplate that was
  * previously required with the `[contentOffset]` input.

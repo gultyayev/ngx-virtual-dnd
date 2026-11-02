@@ -24,7 +24,7 @@ The element marked `vdndScrollable` must be the one that scrolls, so give it a h
 
 - `<vdnd-virtual-content>` must be inside the `vdndScrollable` element.
 - Inside `<vdnd-virtual-content>`, `*vdndVirtualFor` inherits `itemHeight` and `dynamicItemHeight` from it, and the droppable ID from the enclosing `vdndDroppable`. Only `trackBy` is required.
-- `vdndContentHeader` marks a header inside the component. Its height is measured and used as the list's top offset. If the header lives outside the component, pass its height with `[contentOffset]` instead.
+- `vdndContentHeader` marks a header inside the component. Where the rows start below it is measured and used as the list's top offset, so the header's margins and anything above it in the scroll container (its padding, the component's border) count too. It is measured again when the header or the scroll container resizes; put content that changes height on its own in the header. If the header lives outside the component, pass the space above the rows (measured from inside the scroll container's border) with `[contentOffset]` instead.
 - Auto-scroll uses the `vdndScrollable` element, so dragging near the top or bottom of the page scrolls it.
 
 ## Sticky headers and footers
