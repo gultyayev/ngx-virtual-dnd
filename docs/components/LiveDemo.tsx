@@ -83,15 +83,14 @@ export default function LiveDemo({ example, title, height = 380 }: LiveDemoProps
     <figure className="vdnd-live-demo">
       <figcaption className="vdnd-live-demo__bar">
         <span className="vdnd-live-demo__caption">
-          <span className="vdnd-live-demo__label">Live example</span>
-          <span className="vdnd-live-demo__dot" aria-hidden="true" />
+          <span className="vdnd-live-demo__label">Live</span>
           <span className="vdnd-live-demo__title">{title}</span>
         </span>
         <a className="vdnd-live-demo__open" href={exampleUrl} target="_blank" rel="noreferrer">
           Open in new tab
           <svg
-            width="14"
-            height="14"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -100,7 +99,7 @@ export default function LiveDemo({ example, title, height = 380 }: LiveDemoProps
             strokeLinejoin="round"
             aria-hidden="true"
           >
-            <path d="M7 17L17 7M8 7h9v9" />
+            <path d="M7 17L17 7M9 7h8v8" />
           </svg>
         </a>
       </figcaption>
