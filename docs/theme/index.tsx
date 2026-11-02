@@ -7,6 +7,31 @@ export * from '@rspress/core/theme-original';
 export { Callout } from './components/Callout';
 export { CodeBlock } from './components/CodeBlock';
 export { HomeLayout } from './components/HomeLayout';
+export { NotFoundLayout } from './components/NotFoundLayout';
+// Rspress's built-in icons, replaced with Night's stroke set wherever Rspress draws them.
+export {
+  NightIconChevronDown as IconArrowDown,
+  NightIconChevronRight as IconArrowRight,
+  NightIconClose as IconClose,
+  NightIconCopy as IconCopy,
+  NightIconChevronDown as IconDown,
+  NightIconPencil as IconEdit,
+  NightIconExternal as IconExternalLink,
+  NightIconFileText as IconFile,
+  NightIconGithub as IconGithub,
+  NightIconHash as IconHeader,
+  NightIconEnter as IconJump,
+  NightIconMenu as IconMenu,
+  NightIconMoon as IconMoon,
+  NightIconMessage as IconOpenInChat,
+  NightIconSearch as IconSearch,
+  NightIconMenu as IconSmallMenu,
+  NightIconCheck as IconSuccess,
+  NightIconSun as IconSun,
+  NightIconFile as IconTitle,
+  NightIconWrap as IconWrap,
+  NightIconWrapped as IconWrapped,
+} from './components/icons';
 
 declare const process: { env: { VDND_VERSION: string } };
 

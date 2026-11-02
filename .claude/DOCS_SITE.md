@@ -4,22 +4,22 @@ Human-facing documentation, built with Rspress 2 (`@rspress/core`) and published
 
 ## Layout
 
-| Path                                                 | What                                                                                                       |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `docs/rspress.config.ts`                             | Site config (base `/ngx-virtual-dnd/`, `llms`, globals, defines)                                           |
-| `docs/pages/`                                        | Content root (`root`). `_nav.json` = top nav, `_meta.json` per folder = sidebar order                      |
-| `docs/pages/guide/{start,essentials,features,more}/` | Guide sections                                                                                             |
-| `docs/pages/api/`                                    | API reference (hand-written tables)                                                                        |
-| `docs/pages/changelog.mdx`                           | Renders the repo's `CHANGELOG.md` via MDX import                                                           |
-| `docs/pages/public/`                                 | Favicon (Night's `favicon-v2.svg`; the nav draws its mark inline), `og-image.png`                          |
-| `docs/theme/`                                        | `index.tsx` (Layout slots: nav lockup, version badge), `index.css` (Night tokens, `--rp-*` map, overrides) |
-| `docs/theme/components/`                             | Replaced Rspress components: `HomeLayout`, `CodeBlock` (title bar), `Callout` (icons)                      |
-| `docs/components/LiveDemo.tsx`                       | Global MDX component that embeds a demo example in an iframe                                               |
-| `docs/components/CodeTabs.tsx`                       | Code blocks as tabs, labelled by their `title` (home page)                                                 |
-| `docs/plugins/rehype-api-details.ts`                 | API pages: `**Selector:**` line and "Added in x.y.z" table badges                                          |
-| `src/app/examples/<slug>/<slug>.ts`                  | Live examples (Angular), served at `/examples/<slug>`                                                      |
-| `scripts/assemble-site.js`                           | Copies the demo into `dist/site/demo/` and writes per-route `index.html` entry points                      |
-| `scripts/og-image.mjs`                               | Renders `og-image.png`, the social card: the home hero in Night's dark theme (1280×640)                    |
+| Path                                                 | What                                                                                                                                          |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/rspress.config.ts`                             | Site config (base `/ngx-virtual-dnd/`, `llms`, globals, defines)                                                                              |
+| `docs/pages/`                                        | Content root (`root`). `_nav.json` = top nav, `_meta.json` per folder = sidebar order                                                         |
+| `docs/pages/guide/{start,essentials,features,more}/` | Guide sections                                                                                                                                |
+| `docs/pages/api/`                                    | API reference (hand-written tables)                                                                                                           |
+| `docs/pages/changelog.mdx`                           | Renders the repo's `CHANGELOG.md` via MDX import                                                                                              |
+| `docs/pages/public/`                                 | Favicon (Night's `favicon-v2.svg`; the nav draws its mark inline), `og-image.png`                                                             |
+| `docs/theme/`                                        | `index.tsx` (Layout slots: nav lockup, version badge; Night icon overrides), `index.css` (Night tokens, `--rp-*` map, overrides)              |
+| `docs/theme/components/`                             | Replaced Rspress components: `HomeLayout`, `CodeBlock` (title bar), `Callout` (icons), `NotFoundLayout` (404); `icons.tsx` (Night's icon set) |
+| `docs/components/LiveDemo.tsx`                       | Global MDX component that embeds a demo example in an iframe                                                                                  |
+| `docs/components/CodeTabs.tsx`                       | Code blocks as tabs, labelled by their `title` (home page)                                                                                    |
+| `docs/plugins/rehype-api-details.ts`                 | API pages: `**Selector:**` line and "Added in x.y.z" table badges                                                                             |
+| `src/app/examples/<slug>/<slug>.ts`                  | Live examples (Angular), served at `/examples/<slug>`                                                                                         |
+| `scripts/assemble-site.js`                           | Copies the demo into `dist/site/demo/` and writes per-route `index.html` entry points                                                         |
+| `scripts/og-image.mjs`                               | Renders `og-image.png`, the social card: the home hero in Night's dark theme (1280×640)                                                       |
 
 ## Commands
 
@@ -33,9 +33,9 @@ npm run site:build    # lib → demo (base href /ngx-virtual-dnd/demo/) → docs
 
 - One folder per example: `src/app/examples/<slug>/<slug>.ts`, plus a route in `src/app/examples/examples.routes.ts`. `assemble-site.js` reads that routes file to create the GitHub Pages entry points.
 - Docs show the source verbatim with ` ```ts file="<root>/src/app/examples/<slug>/<slug>.ts" ` and embed it with `<LiveDemo example="<slug>" title="…" height={…} />`. Keep examples minimal and self-contained, since they are the code users copy.
-- Shared example styling lives in `examples-shell.scss`, not in the example components.
+- Shared example styling lives in `examples-shell.scss`, not in the example components. It pads the example like Night's LiveDemoFrame body (40px 24px 44px) and centers a single list in a 392px column; the two-column board keeps the full width.
 - Theme sync: the iframe URL carries `?theme=light|dark` (read from `html.dark`). The example posts `{ type: 'vdnd-theme-ready' }` when it boots, and `LiveDemo` replies with the current theme. Later toggles are posted as `{ type: 'vdnd-theme', theme }`. `ThemeService` only listens when framed and never persists these. Iframe URLs end in `/` (`examples/<slug>/`) to avoid a GitHub Pages redirect.
-- Sizing: `ExamplesShellComponent` posts `{ type: 'vdnd-example-size', height }` to the parent whenever its height changes, and `LiveDemo` sizes the iframe to it. The `height` prop is only the initial size (use the desktop height to avoid a layout shift).
+- Sizing: `ExamplesShellComponent` posts `{ type: 'vdnd-example-size', height }` to the parent whenever its height changes, and `LiveDemo` sizes the iframe to it. The `height` prop is only the initial size (use the desktop height, the shell's height at a 718px wide frame, to avoid a layout shift).
 - E2E: `e2e/docs-examples.spec.ts`.
 
 ## Home page
@@ -47,9 +47,10 @@ The hero's Backlog art plays one scripted drag (`useBacklogScript` in `HomeLayou
 ## Writing conventions the theme styles
 
 - **API selector:** a paragraph that is exactly `` **Selector:** `vdnd-x` `` renders as a label and chip. **Version notes:** a table cell ending in `Added in 3.3.0` shows the version as a badge. Both come from `docs/plugins/rehype-api-details.ts`, so the source and the Markdown output stay plain text.
-- `**required**` alone in a table cell renders as an outlined badge; inline code alone in a first-column cell renders as a plain identifier (no chip).
+- **Tables** follow Night's ApiTable: code in a cell is mono text without a chip (names in `--ink`, the cells of a "Type" column in `--accent-text`, of a "Default" column in `--ink`, a lone "—" faint). `**required**` alone in a table cell renders as an outlined badge. Code wraps after `<` and `.`, and long names between their words. All of it comes from `rehype-api-details.ts` (column classes, `vdnd-required`, `<wbr>`), so bold text such as a concept name stays bold.
+- **Long names in headings** (a class name of 20+ characters) wrap between their words on narrow screens and in the outline (`rehype-api-details.ts` wraps them in a `span.vdnd-name` with `<wbr>`s; the outline renders a heading's HTML only when it holds an element pair).
 - **Ordered lists** render as numbered steps (mono numbers in rings, joined by a rule).
-- **Callouts:** `:::tip`, `:::warning` and `:::danger` get an icon (`Callout.tsx`). Warning uses the `--warning-*` tokens.
+- **Callouts:** `:::tip`, `:::warning` and `:::danger` get an icon (`Callout.tsx`: Night's bulb, alert and octagon). Warning uses the `--warning-*` tokens. **Quotes** (`>`) render as a quiet panel, like an info callout without the title.
 - **Code blocks:** ` ```ts file="<root>/path" ` gets the path as its title automatically; `title="…"` overrides it. `{3,5}` in the meta highlights lines. Untitled blocks show their language in the corner.
 
 ## Gotchas
@@ -65,7 +66,8 @@ The hero's Backlog art plays one scripted drag (`useBacklogScript` in `HomeLayou
 - **Theme CSS specificity:** Rspress's own CSS loads after ours, so BEM overrides are prefixed with `html` (for example `html .rp-nav`), and variables are set on `html:root`. Some Rspress rules are more specific still (the nav's `:first-child`, `:last-child` and `:hover` rules), so the nav pill overrides use `:is(…)` to outrank them. After changing nav styles, hover every item and check that nothing changes size.
 - **Angular template snippets use ` ```angular-html `**, not `html`. It highlights Angular syntax, and Prettier leaves it alone (Prettier's HTML formatter breaks `@for` / `@if` blocks).
 - **` ```ts ` is highlighted as `angular-ts`** (`markdown.shiki.langAlias` in the config): TypeScript plus Angular template highlighting inside a component's `template:` string. Plain `ts` shows the whole template as one string.
-- **Theme components replace Rspress's by name** (`export { CodeBlock } from …` in `docs/theme/index.tsx`). The replaced component's stylesheet is no longer imported, so `CodeBlock.tsx` imports Rspress's `CodeBlock/index.css` itself.
+- **Theme components replace Rspress's by name** (`export { CodeBlock } from …` in `docs/theme/index.tsx`). The replaced component's stylesheet is no longer imported, so `CodeBlock.tsx` imports Rspress's `CodeBlock/index.css` itself. Rspress's built-in icons are replaced the same way (`export { NightIconMoon as IconMoon … }`), so the nav, search, outline actions and code buttons draw Night's stroke icons. Social links are the exception: Rspress draws them from its own SVG strings, so the config passes Night's GitHub icon as `socialLinks[].icon.svg` (with `role="img"` and an `aria-label`: the link has no name of its own).
+- **Rspress layout overrides need `html`-prefixed selectors that outrank its own:** its doc flow sets bottom margins (paragraphs, headings) and `ol li:not(:first-child)` spacing at `.rp-doc` specificity; `index.css` replaces them with Night's margin-top-only flow.
 - **Examples inherit the demo's app-wide providers** (`src/app/app.config.ts`), including `provideDemoAnimationConfig()` (shift duration 0 unless `?shiftAnimation=`). An example that depends on a provider must declare it in its own `providers` so the shown source is complete.
 - **Links** are root-relative to the docs root (`/guide/...`); Rspress adds the base and checks them. Links to the demo must be absolute URLs, because the demo is not part of the Rspress build.
 - **Public assets** live in `docs/pages/public/` (inside the content root), not `docs/public/`.

@@ -61,7 +61,7 @@
 
 /* ══════════ NIGHT TOKENS ══════════ */
 /* Copied from the Night design system's tokens.css (generated from its tokens.json; version
-   1793530998-548a). Copy new values from there; don't retype them. Light on :root, dark on
+   1793545871-6923). Copy new values from there; don't retype them. Light on :root, dark on
    html.rp-dark (Rspress's theme class). */
 :root {
   --page: #ffffff;
@@ -414,6 +414,21 @@ html:root {
   }
 }
 
+/* Night icons drawn by CSS (masks take the text color): external, right, left and pencil, on a
+   24px grid with a 1.75px stroke and round caps, like the inline ones. */
+html:root {
+  --vdnd-icon-external: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17L17 7M9 7h8v8'/%3E%3C/svg%3E");
+  --vdnd-icon-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E");
+  --vdnd-icon-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 12H5M11 6l-6 6 6 6'/%3E%3C/svg%3E");
+  --vdnd-icon-pencil: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z'/%3E%3Cpath d='M13.5 6.5l4 4'/%3E%3C/svg%3E");
+  /* The scrim behind the search panel: ink-dark in both themes. */
+  --vdnd-scrim: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+html.rp-dark:root {
+  --vdnd-scrim: color-mix(in srgb, var(--page) 72%, transparent);
+}
+
 /* Shiki (css-variables theme): one palette, since code blocks are dark in both themes. */
 html:root:not(.rp-dark),
 html:root.rp-dark {
@@ -433,9 +448,41 @@ html:root.rp-dark {
 /* ══════════ TOP BAR ══════════ */
 /* BEM overrides are prefixed with `html` so they outrank Rspress's equal-specificity
    rules regardless of stylesheet order. */
-/* NavBar: a 64px glass bar (--nav-glass, blurred) with a --line bottom edge. */
+/* NavBar: a 64px glass bar (--nav-glass, blurred) with a --line bottom edge, 28px from the
+   edges. From 1280px Rspress centers the bar over the three columns; it keeps the 28px inside
+   that. Phones keep Rspress's 20px. */
 html .rp-nav {
+  --rp-nav-padding-x: 28px;
   border-bottom: 1px solid var(--line);
+}
+
+@media (width >= 1280px) {
+  html .rp-nav {
+    --vdnd-columns-width: calc(
+      var(--rp-sidebar-width) + var(--rp-content-max-width) + var(--rp-outline-width)
+    );
+    --rp-nav-padding-x: calc(max((100vw - var(--vdnd-columns-width)) / 2, 0px) + 28px);
+  }
+}
+
+@media (width <= 768px) {
+  html .rp-nav {
+    --rp-nav-padding-x: 20px;
+  }
+}
+
+/* Night's rhythm on the right: search, 20px, the links (2px apart), 18px, the rule, 18px, the
+   icon buttons (2px apart). */
+html .rp-nav__right {
+  gap: 14px;
+}
+
+html .rp-nav-menu--right {
+  margin-left: 6px;
+}
+
+html .rp-nav__others {
+  gap: 2px;
 }
 
 /* The translucent, blurred background is drawn by ::before, not the nav itself. Safari 26+
@@ -538,6 +585,204 @@ html .rp-doc-layout__outline {
   html .rp-search-button--mobile {
     display: flex;
   }
+}
+
+/* The phone menu (hamburger): links in --ink-muted; the current section is --ink on a
+   --surface-hover fill, as in the bar. */
+html .rp-nav-screen-menu-item {
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+html .rp-nav-screen-menu-item:hover {
+  background-color: var(--surface-hover);
+  color: var(--ink);
+}
+
+html .rp-nav-screen-menu-item--active {
+  background-color: var(--surface-hover);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ══════════ SEARCH PANEL ══════════ */
+/* A --surface panel with a --line edge and --shadow-popover over an ink scrim; the field is
+   Night's input (--line-strong edge; --accent edge and a 3px ring while focused). Results are
+   rows like the sidebar's: --surface-hover on hover, the current one on --accent-tint with an
+   --accent-hairline ring, matches in --accent-text. */
+html .rp-search-panel__mask {
+  background: var(--vdnd-scrim);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+html .rp-search-panel__modal {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface);
+  box-shadow: var(--shadow-popover);
+}
+
+html .rp-search-panel__input-form {
+  height: 46px;
+  padding: 0 8px 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  transition:
+    border-color var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
+}
+
+html.rp-dark .rp-search-panel__input-form {
+  background-color: var(--surface-raised);
+}
+
+html .rp-search-panel__input-form:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+html .rp-search-panel__input {
+  padding-left: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: 400 16px/1 var(--font-sans);
+}
+
+html .rp-search-panel__input::placeholder {
+  color: var(--ink-faint);
+}
+
+html .rp-search-panel__search-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--ink-faint);
+}
+
+html .rp-search-panel__close {
+  width: 18px;
+  height: 18px;
+  color: var(--ink-faint);
+}
+
+html .rp-search-panel__close:hover {
+  color: var(--ink);
+}
+
+html .rp-search-panel__cancel {
+  color: var(--accent-text);
+  font: 500 14px/1 var(--font-sans);
+}
+
+html .rp-search-panel__results {
+  margin-top: 8px;
+  padding-right: 0;
+  overflow: auto;
+}
+
+html .rp-search-panel__tabs {
+  background-color: var(--surface);
+}
+
+html .rp-suggest-item {
+  margin: 1px 0;
+}
+
+html .rp-suggest-item .rp-suggest-item__link {
+  padding-left: 10px;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--ink);
+  transition: background-color var(--dur-quick) var(--ease-out);
+}
+
+html .rp-suggest-item .rp-suggest-item__link:hover {
+  background-color: var(--surface-hover);
+}
+
+html .rp-suggest-item.rp-suggest-item--current .rp-suggest-item__link,
+html .rp-suggest-item.rp-suggest-item--current .rp-suggest-item__link:hover {
+  background-color: var(--accent-tint);
+  box-shadow: inset 0 0 0 1px var(--accent-hairline);
+  color: var(--ink);
+}
+
+html .rp-suggest-item__container {
+  min-height: 48px;
+  padding-right: 10px;
+}
+
+html .rp-suggest-item__icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-faint);
+}
+
+html .rp-suggest-item__content {
+  padding: 8px 10px;
+  color: var(--ink);
+  font: 500 14px/1.45 var(--font-sans);
+}
+
+html .rp-suggest-item__statement {
+  font-size: 14px;
+}
+
+html .rp-suggest-item__mark {
+  color: var(--accent-text);
+}
+
+html .rp-suggest-item__title {
+  margin-top: 2px;
+  color: var(--ink-faint);
+  font: 400 12.5px/1.4 var(--font-sans);
+}
+
+html .rp-suggest-item__action-icon {
+  color: var(--accent-text);
+}
+
+/* Rspress paints the current result's text white on the brand fill; it sits on the tint here. */
+html
+  .rp-suggest-item--current
+  .rp-suggest-item__container
+  :is(.rp-suggest-item__icon, .rp-suggest-item__content .rp-suggest-item__statement) {
+  color: var(--accent-text);
+}
+
+html
+  .rp-suggest-item--current
+  .rp-suggest-item__container
+  .rp-suggest-item__content
+  .rp-suggest-item__title {
+  color: var(--ink-faint);
+}
+
+html
+  .rp-suggest-item--current
+  .rp-suggest-item__container
+  .rp-suggest-item__content
+  .rp-suggest-item__mark {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+html .rp-no-search-result {
+  color: var(--ink-muted);
+  font: 400 14px/1.5 var(--font-sans);
+}
+
+html .rp-no-search-result__icon {
+  color: var(--ink-faint);
 }
 
 /* Rspress places the hamburger's dropdown at 80% of the nav's height and flush with its right
@@ -651,6 +896,18 @@ html .rp-nav-menu__item:is(:hover, :focus-within) > .rp-nav-menu__item__containe
   color: var(--ink);
 }
 
+/* A link that leaves the docs (Demo) ends with Night's external icon, in the link's color. */
+html .rp-nav-menu a[target='_blank']::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  background: currentColor;
+  color: inherit;
+  -webkit-mask: var(--vdnd-icon-external) center / contain no-repeat;
+  mask: var(--vdnd-icon-external) center / contain no-repeat;
+}
+
 html
   .rp-nav-menu__item--active:is(*, :first-child, :last-child, :hover)
   > .rp-nav-menu__item__container {
@@ -662,7 +919,7 @@ html
 html .rp-nav-menu__divider {
   width: 1px;
   height: 20px;
-  margin: 0 4px 0 6px;
+  margin: 0 16px 0 4px;
   background: var(--line-strong);
   opacity: 0.45;
 }
@@ -830,6 +1087,23 @@ html .rp-outline {
   }
 }
 
+/* Below 1280px the outline opens from the "On this page" bar as a menu: --surface with a --line
+   edge and --shadow-popover, 8px under the bar and 12px from the edge. */
+@media (width <= 1279px) {
+  html .rp-doc-layout__outline {
+    inset-inline-end: calc(12px + env(safe-area-inset-right, 0px));
+    max-width: calc(100% - 24px);
+    margin-top: calc(var(--rp-sidebar-menu-height) + 8px);
+    padding: 18px 0 16px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: var(--shadow-popover);
+  }
+}
+
 html .rp-outline__title {
   height: auto;
   margin-bottom: 12px;
@@ -942,6 +1216,46 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(p, li) {
   max-width: var(--prose-max);
 }
 
+/* Night's flow: each block sets the space above it and none below. Paragraphs and lists sit 16px
+   apart, list items 6px; code, callouts, live demos, tables and steps 24px (20px under an H2). */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(p):not(:where(li p)) {
+  margin: 16px 0 0;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ul, ol) {
+  margin: 16px 0 0;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ul li):not(:first-child) {
+  margin-top: 6px;
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(li > :is(ul, ol)) {
+  margin-top: 6px;
+}
+
+html
+  .rp-doc
+  :is(
+    .rp-codeblock,
+    .rp-tabs,
+    .rp-callout,
+    .rp-table-scroll-container,
+    .vdnd-live-demo,
+    blockquote
+  ):not(:where(.rp-not-doc, .rp-not-doc *, .rp-tabs *, .vdnd-code-tabs *)) {
+  margin: 24px 0 0;
+}
+
+html .rp-doc :is(h2 + .rp-codeblock, h2 + .vdnd-live-demo, h2 + .rp-tabs) {
+  margin-top: 20px;
+}
+
+/* A callout's first block sits on its padding (no block has a bottom margin). */
+html .rp-doc .rp-callout__content > :first-child {
+  margin-top: 0;
+}
+
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h1) {
   margin-bottom: 0;
   font: 620 42px/1.08 var(--font-sans);
@@ -957,11 +1271,12 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h1 + p) {
   line-height: 1.6;
   letter-spacing: -0.01em;
   color: var(--ink-muted);
+  text-wrap: pretty;
 }
 
 /* Sections are separated by space, not rules. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2) {
-  margin-top: 56px;
+  margin: 56px 0 0;
   padding-top: 0;
   border-top: 0;
   font: 600 25px/1.25 var(--font-sans);
@@ -975,7 +1290,7 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h2)::before {
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(h3) {
-  margin-top: 36px;
+  margin: 36px 0 0;
   font: 600 17px/1.4 var(--font-sans);
   letter-spacing: -0.02em;
   color: var(--ink);
@@ -1003,8 +1318,61 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(p, li, td) > a.rp-li
   text-decoration-color: currentColor;
 }
 
-/* Numbered steps: mono numbers in 28px rings, joined by a --line rule. */
+/* A link that leaves the site ends with Night's external icon (Rspress draws a ↗ glyph). The
+   icon is an inline box (padding only, the mask on its right), not an inline-block: an
+   inline-block would be a break opportunity, and the icon could wrap onto a line of its own. */
+html
+  .rp-doc
+  :not(:where(.rp-not-doc, .rp-not-doc *)):where(a.rp-link):not(
+    :where(.rp-header-anchor)
+  )[target='_blank']::after {
+  content: '';
+  display: inline;
+  margin: 0 0.05em 0 0.15em;
+  padding-left: 0.8em;
+  background: currentColor;
+  font-size: inherit;
+  font-weight: inherit;
+  transform: none;
+  -webkit-mask: var(--vdnd-icon-external) right 55% / 0.8em 0.8em no-repeat;
+  mask: var(--vdnd-icon-external) right 55% / 0.8em 0.8em no-repeat;
+}
+
+html
+  .rp-doc
+  :not(:where(.rp-not-doc, .rp-not-doc *)):where(a.rp-link):not(
+    :where(.rp-header-anchor)
+  )[target='_blank']:hover::after {
+  transform: none;
+}
+
+/* Quotes (an example prompt) read as a quiet panel: --surface-raised with a --line edge, no
+   side stripe. */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(blockquote) {
+  padding: 16px 18px 17px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(blockquote p) {
+  margin: 0;
+  color: var(--ink-body);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+html .rp-doc blockquote :not(pre) > code {
+  background: var(--surface);
+}
+
+html.rp-dark .rp-doc blockquote :not(pre) > code {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Numbered steps: mono numbers in 28px rings, 18px apart, joined by a --line rule. */
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol) {
+  margin-top: 24px;
   padding-left: 0;
   list-style: none;
   counter-reset: vdnd-step;
@@ -1012,9 +1380,14 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol) {
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li) {
   position: relative;
-  margin-top: 18px;
+  margin-top: 0;
   padding-left: 42px;
   counter-increment: vdnd-step;
+}
+
+/* Outranks Rspress's `ol li:not(:first-child)` (8px). */
+html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li):not(:first-child) {
+  margin-top: 18px;
 }
 
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(ol > li)::before {
@@ -1101,12 +1474,12 @@ html .rp-doc .vdnd-api-selector__colon {
 }
 
 html .rp-doc .vdnd-api-selector code {
-  padding: 4px 8px;
+  padding: 3px 8px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-xs);
-  background: var(--surface-raised);
+  border-radius: var(--radius-sm);
+  background: var(--page);
   color: var(--ink);
-  font-size: 12.5px;
+  font: 500 12.5px/1 var(--font-mono);
 }
 
 /* Badges: mono on a 22px chip. "Added in x.y.z" (rehype-api-details.ts) is the accent tone. */
@@ -1253,6 +1626,12 @@ html.rp-dark .rp-callout kbd {
 /* ══════════ TABLES ══════════ */
 /* The ApiTable: a --surface panel with a --line edge; headers on --page-sunk. Rspress draws
    tables with the code-block border and title colors, which are dark here. */
+/* Rspress reserves a scrollbar gutter on the table's scroll box, which leaves the table 10px
+   narrower than the column. A wide table still scrolls inside it. */
+html .rp-doc .rp-table-scroll-container {
+  scrollbar-gutter: auto;
+}
+
 html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(table) {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -1290,20 +1669,40 @@ html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(tbody tr:hover) {
   background: var(--page-sunk);
 }
 
+/* Code in tables is mono text without a chip (Night's ApiTable): names in --ink, types in
+   --accent-text, defaults in --ink. It wraps at spaces, after `<` or `.` and between the words of
+   a long name (rehype-api-details.ts adds those break opportunities), and mid-word only when a
+   single word is wider than its column. Names in the first column never wrap. */
 html .rp-doc td code {
-  font-size: 12.5px;
-}
-
-/* Names in the first column read as identifiers, without a chip. */
-html .rp-doc td:first-child > code:only-child {
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: none;
+  color: inherit;
+  font: 500 12.5px/1.4 var(--font-mono);
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+html .rp-doc td:first-child code {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+html .rp-doc td:first-child a > code {
+  color: inherit;
+}
+
+html .rp-doc td.vdnd-api-type code {
+  color: var(--accent-text);
+}
+
+html .rp-doc td.vdnd-api-default code {
   color: var(--ink);
 }
 
 /* **required** in a table cell becomes an outlined badge. */
-html .rp-doc td > strong:only-child {
+html .rp-doc td > strong.vdnd-required {
   display: inline-flex;
   align-items: center;
   height: 22px;
@@ -1315,24 +1714,14 @@ html .rp-doc td > strong:only-child {
   white-space: nowrap;
 }
 
-/* Code in tables wraps at spaces. In the 4-column API tables (name, type, default,
-   description) long types may also break mid-word, so the description keeps its width and
-   the table fits the page. Names in the first column never break. */
-html .rp-doc td code {
-  white-space: normal;
-}
-
-html .rp-doc table:has(td:nth-child(4)) td code {
-  overflow-wrap: anywhere;
-}
-
-html .rp-doc td:first-child code {
-  white-space: nowrap;
+/* A cell with no value ("—"): a faint dash. */
+html .rp-doc td.vdnd-api-none {
+  color: var(--ink-faint);
 }
 
 /* Phones: let columns shrink to their content instead of Rspress's 8rem minimum, so most
    tables fit without sideways scrolling. */
-@media (width < 768px) {
+@media (width <= 768px) {
   html .rp-doc :not(:where(.rp-not-doc, .rp-not-doc *)):where(th, td) {
     min-width: 0;
     padding: 10px 12px;
@@ -1341,7 +1730,7 @@ html .rp-doc td:first-child code {
 
 /* Phones: the 4-column API tables (name | type | default | description) become one card per
    row, with the type and default labelled, instead of four squeezed columns. */
-@media (width < 768px) {
+@media (width <= 768px) {
   html .rp-doc table:has(td:nth-child(4)) {
     display: block;
     border: 0;
@@ -1397,6 +1786,31 @@ html .rp-doc td:first-child code {
   html .rp-doc table:has(td:nth-child(4)) td:last-child {
     padding-top: 6px;
   }
+}
+
+/* Below 1280px (no outline column), the footer's "Edit this page" is the outline action: a quiet
+   --ink-faint link after Night's pencil. */
+html .rp-doc-footer .rp-edit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  color: var(--ink-faint);
+  font: 400 13px/1 var(--font-sans);
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+html .rp-doc-footer .rp-edit-link::before {
+  content: '';
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  -webkit-mask: var(--vdnd-icon-pencil) center / contain no-repeat;
+  mask: var(--vdnd-icon-pencil) center / contain no-repeat;
+}
+
+html .rp-doc-footer .rp-edit-link:hover {
+  color: var(--ink);
 }
 
 /* With the outline column visible, its "Edit this page" makes the footer one redundant. */
@@ -1471,16 +1885,6 @@ html .rp-codeblock__title .rp-code-button-group__button:hover {
   background: rgba(255, 255, 255, 0.06);
 }
 
-html .rp-codeblock__title .rp-code-button-group__icon {
-  width: 16px;
-  height: 16px;
-  color: var(--code-punct);
-}
-
-html .rp-codeblock__title .rp-code-button-group__button:hover .rp-code-button-group__icon {
-  color: var(--code-ink);
-}
-
 html .rp-codeblock :focus-visible {
   outline-color: var(--code-accent);
 }
@@ -1497,7 +1901,7 @@ html .rp-codeblock__content :where(code) .line {
 /* Untitled blocks: the language in the corner, hidden while the hover buttons show. */
 .vdnd-codeblock__lang {
   position: absolute;
-  top: 12px;
+  top: 24px;
   right: 16px;
   z-index: 2;
   color: var(--code-punct);
@@ -1510,9 +1914,32 @@ html .rp-codeblock:hover .vdnd-codeblock__lang {
   opacity: 0;
 }
 
+/* Phones: a long first line runs under the corner label, so it steps aside. */
+@media (width < 640px) {
+  .vdnd-codeblock__lang {
+    display: none;
+  }
+}
+
+/* An untitled block's hover buttons (and the copy in package-manager tabs): 28px targets,
+   centered on the first line, like the corner label they replace. */
 html .rp-code-button-group {
-  top: 10px;
+  top: 16px;
   right: 10px;
+  gap: 4px;
+}
+
+html .rp-codeblock__content .rp-code-button-group__button {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  transition:
+    opacity 0.2s ease-out,
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+html .rp-codeblock__content .rp-code-button-group__button:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 html .rp-code-button-group__icon {
@@ -1521,13 +1948,112 @@ html .rp-code-button-group__icon {
   color: var(--code-punct);
 }
 
-html .rp-code-button-group__icon:hover {
+/* The hovered button's icon brightens; the confirmations below keep their green. */
+html .rp-code-button-group__button:hover .rp-code-copy-button__icon--copy,
+html .rp-code-button-group__button:hover .rp-code-button-group__icon--wrap {
   color: var(--code-ink);
 }
 
 /* Keyboard users see the hover buttons too. */
 html .rp-codeblock__content:focus-within .rp-code-button-group__button {
   opacity: 1;
+}
+
+/* Copied and wrapped confirmations: Night's success green on the code panel (also hovered:
+   this outranks Rspress's icon hover colour). */
+html .rp-code-button-group__button .rp-code-copy-button__icon--success,
+html .rp-code-button-group__button .rp-code-button-group__icon--wrapped {
+  color: #3ddc84;
+}
+
+/* Package manager tabs (<PackageManagerTabs>): Night's CodeBlock with tabs. The tab bar is the
+   title bar, in mono --code-punct with a 2px --code-accent underline on the current tab; the
+   package managers' brand logos give way to the names. */
+html .rp-doc .rp-tabs {
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--code-bg);
+  box-shadow:
+    var(--shadow-1),
+    0 12px 28px -18px rgba(16, 24, 40, 0.35);
+  color-scheme: dark;
+  contain: none;
+}
+
+html.rp-dark .rp-doc .rp-tabs {
+  box-shadow:
+    0 0 0 1px var(--code-line),
+    var(--shadow-1);
+}
+
+html .rp-doc .rp-tabs__label {
+  align-items: stretch;
+  gap: 2px;
+  height: 46px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--code-line);
+  background: var(--code-bar);
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+html .rp-doc .rp-tabs__label__item {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 13px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--code-punct);
+  font: 500 12.5px/1 var(--font-mono);
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+html .rp-doc .rp-tabs__label__item:hover,
+html .rp-doc .rp-tabs__label__item--selected,
+html.rp-dark .rp-doc .rp-tabs__label__item--selected {
+  background: transparent;
+  box-shadow: none;
+  color: var(--code-ink);
+}
+
+html .rp-doc .rp-tabs__label__item--selected::after {
+  content: '';
+  position: absolute;
+  right: 13px;
+  bottom: 0;
+  left: 13px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--code-accent);
+}
+
+/* The label's wrapper and name carry inline sizes (15px, a 6px gap for the logo). */
+html .rp-doc .rp-tabs__label__item > div {
+  font-size: inherit !important;
+}
+
+html .rp-doc .rp-tabs__label__item svg {
+  display: none;
+}
+
+html .rp-doc .rp-tabs__label__item span {
+  margin: 0 !important;
+}
+
+html .rp-doc .rp-tabs .vdnd-codeblock__lang {
+  display: none;
+}
+
+/* A one-line command: copy stays in view; wrapping has nothing to do. */
+html .rp-doc .rp-tabs .rp-code-copy-button {
+  opacity: 1;
+}
+
+html .rp-doc .rp-tabs .rp-code-wrap-button {
+  display: none;
 }
 
 /* Highlighted lines ({3} in the fence meta): --code-line-hl with a 2px --code-accent edge. */
@@ -1590,11 +2116,11 @@ html .rp-prev-next-page__next .rp-prev-next-page__item__desc::after {
 }
 
 html .rp-prev-next-page__prev {
-  --vdnd-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 12H5M11 6l-6 6 6 6'/%3E%3C/svg%3E");
+  --vdnd-arrow: var(--vdnd-icon-left);
 }
 
 html .rp-prev-next-page__next {
-  --vdnd-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E");
+  --vdnd-arrow: var(--vdnd-icon-right);
 }
 
 html .rp-prev-next-page__prev:hover .rp-prev-next-page__item__desc::before {
@@ -1620,7 +2146,65 @@ html .rp-prev-next-page__next {
   text-align: right;
 }
 
-/* ══════════ BUTTONS (404 page) ══════════ */
+/* ══════════ 404 (docs/theme/components/NotFoundLayout.tsx) ══════════ */
+/* A mono kicker, the title (type-title-1), a lead in --ink-muted, then the primary and the
+   secondary button at their default 40px. */
+.vdnd-not-found {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 128px 24px 144px;
+  text-align: center;
+}
+
+.vdnd-not-found__code {
+  margin: 0;
+  color: var(--accent-text);
+  font: 500 12px/1.2 var(--font-mono);
+  letter-spacing: 0.09em;
+}
+
+.vdnd-not-found__title {
+  margin: 16px 0 0;
+  color: var(--ink);
+  font: 620 42px/1.08 var(--font-sans);
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+.vdnd-not-found__lead {
+  max-width: 480px;
+  margin: 14px auto 0;
+  color: var(--ink-muted);
+  font: 400 18px/1.6 var(--font-sans);
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+
+.vdnd-not-found__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.vdnd-not-found__actions .vdnd-home-button {
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+@media (width <= 640px) {
+  .vdnd-not-found {
+    padding: 72px 20px 96px;
+  }
+
+  .vdnd-not-found__title {
+    font-size: 34px;
+  }
+}
+
+/* ══════════ BUTTONS (Rspress's <Button>) ══════════ */
 html .rp-button {
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -1809,6 +2393,7 @@ html.rp-dark .vdnd-home-announce {
   color: var(--ink-muted);
   font: 400 18px/1.6 var(--font-sans);
   letter-spacing: -0.005em;
+  text-wrap: pretty;
 }
 
 .vdnd-home-hero__actions {
@@ -2300,19 +2885,40 @@ html.rp-dark .vdnd-home-feature {
   white-space: nowrap;
 }
 
+/* Night's vd-more: a 15px line 30px under the steps (the paragraph's own line height would push
+   it down). */
 .vdnd-quick-look p:has(> a:only-child) {
   margin-top: 30px;
+  line-height: 15px;
 }
 
+/* "Read the quick start", ending with Night's `right` arrow icon. */
 .vdnd-quick-look p > a:only-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--accent-text);
   font: 560 15px/1 var(--font-sans);
+}
+
+.vdnd-quick-look p > a:only-child::after {
+  content: '';
+  width: 15px;
+  height: 15px;
+  background: currentColor;
+  -webkit-mask: var(--vdnd-icon-right) center / contain no-repeat;
+  mask: var(--vdnd-icon-right) center / contain no-repeat;
+  transition: transform var(--dur-quick) var(--ease-out);
 }
 
 .vdnd-quick-look p > a:only-child:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
+}
+
+.vdnd-quick-look p > a:only-child:hover::after {
+  transform: translateX(2px);
 }
 
 /* CodeBlock tabs (docs/components/CodeTabs.tsx), the hero variant (--shadow-code). */
@@ -2327,12 +2933,57 @@ html.rp-dark .vdnd-home-feature {
 
 .vdnd-code-tabs__bar {
   display: flex;
-  align-items: stretch;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
   height: 46px;
   padding: 0 8px;
   border-bottom: 1px solid var(--code-line);
   background: var(--code-bar);
+}
+
+.vdnd-code-tabs__list {
+  display: flex;
+  flex: 1;
+  align-self: stretch;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Copy (Night's vd-code__copy): quiet, --code-punct; a check in success once copied. */
+.vdnd-code-tabs__copy {
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--code-punct);
+  cursor: pointer;
+  transition:
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+.vdnd-code-tabs__copy:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--code-ink);
+}
+
+.vdnd-code-tabs__copy--done,
+.vdnd-code-tabs__copy--done:hover {
+  color: #3ddc84;
+}
+
+.vdnd-code-tabs__copy:focus-visible {
+  outline: 2px solid var(--code-accent);
+  outline-offset: 2px;
+}
+
+/* The tab bar holds the copy button, so the code's own hover buttons step aside. */
+.vdnd-code-tabs .rp-code-button-group {
+  display: none;
 }
 
 .vdnd-code-tabs__tab {
@@ -2521,11 +3172,6 @@ html .rp-home-footer__message a:hover {
   border-radius: 50%;
   background: currentColor;
   box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
-}
-
-/* The separator dot between label and title; the label's own dot replaces it. */
-.vdnd-live-demo__dot {
-  display: none;
 }
 
 .vdnd-live-demo__title {

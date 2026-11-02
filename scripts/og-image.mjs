@@ -52,8 +52,8 @@ const font = (family, file) => {
 };
 
 const grip = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-  <circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/>
-  <circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/>
+  <circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/>
+  <circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>
 </svg>`;
 const virtualRow = (n) =>
   `<div class="art__virtual">Task ${n}<span class="art__tag">virtual</span></div>`;

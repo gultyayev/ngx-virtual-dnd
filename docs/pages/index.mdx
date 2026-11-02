@@ -21,22 +21,22 @@ hero:
   install: npm i ngx-virtual-dnd
 features:
   - title: Built for virtual lists
-    glyph: virtual-list
+    glyph: viewport
     details: Hit-testing and drop positions are computed from geometry, not from sibling DOM nodes, so drops land correctly on rows that are not rendered.
   - title: Dynamic item heights
     glyph: heights
     details: Rows are measured with ResizeObserver and cached by ID. Lookups use prefix sums and binary search.
   - title: Multiple lists
-    glyph: lists
+    glyph: columns
     details: Move items between any lists in the same group, with edge auto-scroll while dragging.
   - title: Keyboard and touch
     glyph: keyboard
     details: Space to pick up, arrow keys to move, Escape to cancel. Touch drags support a hold delay so lists still scroll.
   - title: Signals first
-    glyph: signals
+    glyph: signal
     details: Standalone components and directives for Angular 21 and 22. Drop events plus small helpers update your signal-based state.
   - title: Guides for AI assistants
-    glyph: document
+    glyph: book
     details: An installable agent skill and llms.txt give coding assistants the same guidance as these docs.
 ---
 
@@ -55,7 +55,7 @@ Only the rows on screen are in the DOM. Drops arrive as events, and a helper app
 2. **Put rows and lists in a group** Declare the row template inside a `vdndGroup` element so every draggable finds its group.
 3. **Apply the drop** The library never changes your data. `reorderItems()` applies the move to your signal.
 
-[Read the quick start →](/guide/start/quick-start)
+[Read the quick start](/guide/start/quick-start)
 
 </div>
 
