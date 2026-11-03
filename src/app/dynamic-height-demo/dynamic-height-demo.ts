@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { IonCheckbox, IonContent, IonHeader, IonToolbar } from '@ionic/angular/standalone';
+import { IonCheckbox, IonContent, IonHeader, IonToolbar } from '@ionic/angular';
 import {
   ContentHeaderDirective,
   DraggableDirective,

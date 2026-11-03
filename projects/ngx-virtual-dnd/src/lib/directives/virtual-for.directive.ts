@@ -870,10 +870,14 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   /**
    * Static method for Angular's structural directive microsyntax.
    */
+  // Angular's template type checker reads the signature only: the parameters exist for the type
+  // predicate.
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   static ngTemplateContextGuard<T>(
     _dir: VirtualForDirective<T>,
     _ctx: unknown,
   ): _ctx is VirtualForContext<T> {
     return true;
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 }

@@ -13,6 +13,10 @@ import { createCjsPreset } from 'jest-preset-angular/presets/index.js';
 export default {
   ...createCjsPreset(),
   setupFilesAfterEnv: ['<rootDir>/setup-jest.ts'],
+  // See jest-domino-shim.cjs: platform-server's default import of its server DOM.
+  moduleNameMapper: {
+    '^\\.\\./third_party/domino/bundled-domino\\.mjs$': '<rootDir>/jest-domino-shim.cjs',
+  },
   // `perf/` is tooling run under Node's own test runner (`npm run perf:test`),
   // not the Angular/jest environment — keep jest from picking up its specs.
   testPathIgnorePatterns: ['<rootDir>/e2e/', '<rootDir>/perf/', '<rootDir>/.claude/worktrees/'],
