@@ -1754,6 +1754,26 @@ describe('VirtualForDirective (standalone in vdndScrollable)', () => {
     });
   });
 
+  describe('spacer', () => {
+    // An app paints the look of an empty row on it (vdnd-virtual-spacer): it spans the rows
+    it('spans the scroll container from the first row, behind the rows', () => {
+      render();
+
+      const element = spacer();
+      expect(element.classList.contains('vdnd-virtual-spacer')).toBe(true);
+      expect(element.style.top).toBe('0px');
+      expect(element.style.left).toBe('0px');
+      expect(element.style.right).toBe('0px');
+      expect(element.style.width).toBe('');
+      expect(element.style.visibility).toBe('');
+      // Rows come after it, so they paint over it
+      const firstRow = fixture.nativeElement.querySelector('[data-id="k0"]') as HTMLElement;
+      expect(element.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    });
+  });
+
   describe('scroll container position', () => {
     it('positions a static scroll container so the rows scroll with it', () => {
       render();

@@ -579,11 +579,12 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
    * Set up spacer element for scroll height.
    */
   #updateSpacers(): void {
-    // Create single spacer that maintains total scroll height
+    // Create single spacer that maintains total scroll height. As wide as the list and painted
+    // under the rows (inserted before them), for an app's placeholder rows (vdnd-virtual-spacer):
+    // the frames a fast scroll shows before its rows render show it.
     const spacer = document.createElement('div');
-    spacer.className = 'vdnd-virtual-for-spacer';
-    spacer.style.cssText =
-      'position: absolute; top: 0; left: 0; width: 1px; visibility: hidden; pointer-events: none;';
+    spacer.className = 'vdnd-virtual-for-spacer vdnd-virtual-spacer';
+    spacer.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; pointer-events: none;';
 
     // Insert spacer before the directive's anchor comment
     const comment = this.#elementRef.nativeElement;

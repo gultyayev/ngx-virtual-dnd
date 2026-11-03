@@ -10,6 +10,7 @@
  * DO NOT import Ionic's structure.css — it sets body { position: fixed; overflow: hidden }.
  */
 @use 'styles/tokens';
+@use 'styles/placeholder-rows';
 @import '@ionic/angular/css/core.css';
 
 /* Geist and Geist Mono, self-hosted from @fontsource-variable/geist and /geist-mono (Latin and
@@ -688,6 +689,14 @@ select.input {
   overflow-y: auto;
   overflow-x: hidden;
   background: transparent;
+}
+/* Placeholder rows (styles/_placeholder-rows.scss): the frames a fast scroll shows before its
+   rows render show the row cards there, without their text. The rows' box covers them. */
+.listcard .vdnd-virtual-spacer {
+  @include placeholder-rows.cards(50px, 10px);
+}
+.listcard .vdnd-virtual-rows {
+  background: var(--surface);
 }
 .empty {
   min-height: 120px;

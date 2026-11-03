@@ -112,11 +112,11 @@ const BOTTOM_EDGE_TOLERANCE_PX = 0.5;
   // No bindings: the effects render the rows, the placeholder, the spacer height and the content
   // offset (see #render). A signal read here would re-render every row whenever it changes.
   template: `
-    <!-- Single spacer maintains scroll height -->
-    <div #spacer class="vdnd-virtual-scroll-spacer"></div>
+    <!-- Single spacer maintains scroll height, behind the rows (vdnd-virtual-spacer) -->
+    <div #spacer class="vdnd-virtual-scroll-spacer vdnd-virtual-spacer"></div>
 
     <!-- Content wrapper positioned via GPU-accelerated transform -->
-    <div #contentWrapper class="vdnd-virtual-scroll-content-wrapper">
+    <div #contentWrapper class="vdnd-virtual-scroll-content-wrapper vdnd-virtual-rows">
       <ng-container #rows />
     </div>
   `,
@@ -132,12 +132,13 @@ const BOTTOM_EDGE_TOLERANCE_PX = 0.5;
     }
 
     .vdnd-virtual-scroll-spacer {
-      /* Invisible spacer that maintains scroll height */
+      /* Maintains the scroll height: from the first row's top (the effect sets it) to the end.
+         As wide as the list and painted under the rows, for an app's placeholder rows: the
+         frames a fast scroll shows before its rows render show the spacer there. */
       position: absolute;
       top: 0;
       left: 0;
-      width: 1px;
-      visibility: hidden;
+      right: 0;
       pointer-events: none;
     }
 
@@ -699,10 +700,14 @@ export class VirtualScrollContainerComponent<T>
       }
     });
 
+    // The spacer starts at the first row's top (below the top inset), so a pattern an app paints
+    // on it lines up with the rows, and reaches the end of the scroll content
     effect(() => {
       const spacer = this.spacer()?.nativeElement;
       if (spacer) {
-        spacer.style.height = `${this.totalHeight()}px`;
+        const rowsTop = this.rowsTop();
+        spacer.style.top = `${rowsTop}px`;
+        spacer.style.height = `${this.totalHeight() - rowsTop}px`;
       }
     });
 

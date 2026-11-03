@@ -1,4 +1,5 @@
 import { Page } from '@playwright/test';
+import { waitForFrames } from './drag-sync';
 
 /** What changes the part of a virtual list its scroll container shows */
 export type ViewChange =
@@ -133,4 +134,128 @@ export async function blankPxPerFrame(
     },
     { droppableId, start, change },
   );
+}
+
+/**
+ * The longest run of pixel rows (px) in a virtual list's viewport that show nothing but the
+ * list's background, in a frame the page has not rendered: the list scrolled to `scrollTop` with
+ * its scroll event held back. A browser that scrolls on its own thread shows such frames during a
+ * fast scroll (Safari and Firefox always, Chrome when the page misses the frame) until the page
+ * renders the rows of the new position: a whole viewport of them when a dragged scrollbar thumb
+ * jumps across hundreds of rows.
+ *
+ * Measured on a screenshot: a run is a stretch of pixel rows whose pixels (between 10% and 90%
+ * of the width) all have the background color of the first element at or around the list's scroll
+ * container that paints one. Rows drawn as inset cards leave runs as tall as the gap between two
+ * cards. The list's scroll event is dispatched afterwards, so it renders that position again.
+ */
+export async function longestBlankRunBeforeRender(
+  page: Page,
+  droppableId: string,
+  scrollTop: number,
+): Promise<number> {
+  const viewport = await page.evaluate(
+    ({ droppableId, scrollTop }) => {
+      const droppable = document.querySelector<HTMLElement>(`[data-droppable-id="${droppableId}"]`);
+      if (!droppable) throw new Error(`No droppable ${droppableId}`);
+      const scrolls = (element: Element): boolean => {
+        const overflow = getComputedStyle(element).overflowY;
+        return (
+          (overflow === 'auto' || overflow === 'scroll') &&
+          element.scrollHeight > element.clientHeight
+        );
+      };
+      let scroller: HTMLElement | null = null;
+      for (let element: HTMLElement | null = droppable; element; element = element.parentElement) {
+        if (scrolls(element)) {
+          scroller = element;
+          break;
+        }
+      }
+      scroller ??= Array.from(droppable.querySelectorAll<HTMLElement>('*')).find(scrolls) ?? null;
+      if (!scroller) throw new Error(`No scroll container for ${droppableId}`);
+      const list = scroller;
+      // The screenshot shows only what is in the window
+      list.scrollIntoView({ block: 'nearest' });
+
+      // Scroll events reach the list through the window's capture phase
+      const holdBack = (event: Event): void => {
+        if (event.target === list) event.stopImmediatePropagation();
+      };
+      window.addEventListener('scroll', holdBack, { capture: true });
+      (window as unknown as { releaseHeldScroll: () => void }).releaseHeldScroll = () => {
+        window.removeEventListener('scroll', holdBack, { capture: true });
+        list.dispatchEvent(new Event('scroll'));
+      };
+      list.scrollTop = scrollTop;
+
+      let background: number[] | null = null;
+      for (
+        let element: HTMLElement | null = list;
+        element && !background;
+        element = element.parentElement
+      ) {
+        const [r, g, b, a = 1] = (
+          getComputedStyle(element).backgroundColor.match(/[\d.]+/g) ?? []
+        ).map(Number);
+        if (a === 1 && r !== undefined) background = [r, g, b];
+      }
+      if (!background) throw new Error(`No background around ${droppableId}`);
+
+      const rect = list.getBoundingClientRect();
+      return {
+        clip: {
+          x: rect.left + list.clientLeft,
+          y: rect.top + list.clientTop,
+          width: list.clientWidth,
+          height: list.clientHeight,
+        },
+        background,
+      };
+    },
+    { droppableId, scrollTop },
+  );
+
+  // The browser shows the new position; the page renders nothing for it
+  await waitForFrames(page, 2);
+  const screenshot = await page.screenshot({ clip: viewport.clip });
+
+  const longestRun = await page.evaluate(
+    async ({ data, background, width }) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${data}`;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('No 2D canvas context');
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const isBackground = (i: number): boolean =>
+        [0, 1, 2].every((channel) => Math.abs(pixels[i + channel] - background[channel]) <= 3);
+
+      let longest = 0;
+      let run = 0;
+      for (let y = 0; y < canvas.height; y++) {
+        let blank = true;
+        for (let x = Math.floor(canvas.width * 0.1); x < canvas.width * 0.9 && blank; x += 2) {
+          blank = isBackground((y * canvas.width + x) * 4);
+        }
+        run = blank ? run + 1 : 0;
+        longest = Math.max(longest, run);
+      }
+      return Math.round(longest / (canvas.width / width));
+    },
+    {
+      data: screenshot.toString('base64'),
+      background: viewport.background,
+      width: viewport.clip.width,
+    },
+  );
+
+  await page.evaluate(() =>
+    (window as unknown as { releaseHeldScroll: () => void }).releaseHeldScroll(),
+  );
+  return longestRun;
 }

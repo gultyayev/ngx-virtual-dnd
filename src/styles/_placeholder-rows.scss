@@ -1,0 +1,64 @@
+// Placeholder rows: Night's rendered row card (a row-bg card with a row-line edge, radius-md,
+// inset inside a row box exactly itemHeight tall) without its content, every itemHeight px down
+// a virtual list's spacer (`.vdnd-virtual-spacer`, as wide as the list, behind its rows from the
+// first one to the end).
+//
+// A browser that scrolls on its own thread can show a fast scroll's new position before the
+// page renders its rows (Safari and Firefox always; Chrome when the page misses the frame):
+// there it shows these cards instead of the list's blank background, and the text follows a
+// frame later. The rows' box (`.vdnd-virtual-rows`) covers them where rows have rendered: give
+// it the list's background, so they never show through the gaps between rendered cards, under
+// a translucent placeholder or behind rows that slide.
+//
+// Two masked layers on the spacer's pseudo-elements, so the colours stay tokens (a mask image
+// cannot read custom properties): the card, and its 1px edge drawn on top. The masks repeat
+// down the spacer from its top, the first row's top.
+@use 'sass:math';
+
+/// A unitless number for an SVG attribute
+@function strip-unit($value) {
+  @return math.div($value, $value * 0 + 1);
+}
+
+/// A data URI of an SVG image holding `$content` (percent-encoded where a URL needs it)
+@function svg-url($content) {
+  @return url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg"%3E#{$content}%3C/svg%3E');
+}
+
+/// The card, as wide as the mask tile, `$inset-y` from the top of its row
+@function card-rect($row-height, $inset-y, $radius, $attributes: '') {
+  $y: strip-unit($inset-y);
+  $height: strip-unit($row-height) - 2 * $y;
+
+  @return '%3Crect y="#{$y}" width="100%25" height="#{$height}" rx="#{strip-unit($radius)}"#{$attributes}/%3E';
+}
+
+/// Placeholder rows on the spacer this is included in: cards `$inset-x` from the list's sides
+/// and `$inset-y` from the top and bottom of their `$row-height` rows, with `$radius` corners
+/// (radius-md: 11px). Rows of dynamic heights repeat every `itemHeight`, the list's estimate.
+@mixin cards($row-height, $inset-x, $inset-y: 3px, $radius: 11px) {
+  $card: card-rect($row-height, $inset-y, $radius);
+  // The edge: a 2px stroke on the card's outline, clipped to the card, leaves its inner 1px
+  $stroke: ' fill="none" stroke="black" stroke-width="2" clip-path="url(%23c)"';
+  $edge: '%3CclipPath id="c"%3E#{$card}%3C/clipPath%3E#{card-rect($row-height, $inset-y, $radius, $stroke)}';
+
+  &::before,
+  &::after {
+    position: absolute;
+    inset: 0;
+    content: '';
+    mask-position: $inset-x 0;
+    mask-repeat: repeat-y;
+    mask-size: calc(100% - #{2 * $inset-x}) $row-height;
+  }
+
+  &::before {
+    background: var(--row-bg);
+    mask-image: svg-url($card);
+  }
+
+  &::after {
+    background: var(--row-line);
+    mask-image: svg-url($edge);
+  }
+}

@@ -6,6 +6,7 @@ Specialized topics for ngx-virtual-dnd. The setup rules and everyday options are
 
 - [Sticky headers and scroll insets](#sticky-headers-and-scroll-insets): content pinned over a scroll container or a list
 - [Row recycling](#row-recycling): what `recycleRows` (and `*vdndVirtualFor`) means for row components
+- [Fast scrolling and placeholder rows](#fast-scrolling-and-placeholder-rows): what a fast scroll shows before its rows render
 - [Rows with animate.leave or animate.enter](#rows-with-animateleave-or-animateenter): an Angular limitation for rows that move
 - [Screen reader announcements](#screen-reader-announcements): a complete live-region example
 - [Shadow DOM](#shadow-dom)
@@ -103,6 +104,29 @@ export class TaskRow {
 ```
 
 A host binding that shows nothing but an input's value can read it with `untracked()` instead, as `vdndDraggable` does.
+
+## Fast scrolling and placeholder rows
+
+Each scroll renders the rows of its new position in its scroll event, but browsers scroll on a thread of their own: a fast flick, or a dragged scrollbar thumb that jumps across hundreds of rows, can show a position before the page has rendered its rows (Safari and Firefox never wait for the page; Chrome waits only when the page renders in time). For a frame or two the list shows its background there: blank space, a whole viewport of it after a jump. No setting removes those frames; `overscan` only covers small steps.
+
+Paint the look of an empty row on the spacer behind the rows, `.vdnd-virtual-spacer` (as wide as the list, from its first row to its end; the browser draws it in those frames too), every `itemHeight` px, and give the box of the rendered rows, `.vdnd-virtual-rows`, the list's background so the rows cover it. Global stylesheet:
+
+```css
+/* Placeholder rows: each row's background and bottom border, every 48px (itemHeight) */
+.vdnd-virtual-spacer {
+  background: linear-gradient(#fff 47px, #e6e9ee 47px) 0 0 / 100% 48px repeat-y;
+}
+
+/* The rendered rows cover them */
+.vdnd-virtual-rows {
+  background: #fff;
+}
+```
+
+- Paint the row's look at rest (background, edges, corners) in the same place, so a lagging frame only lacks the content. Rounded cards can be drawn with a `mask-image` (an SVG of the card) on the spacer's `::before` and `::after`, with `background-color` from your tokens.
+- Dynamic heights: space the placeholder rows by `itemHeight`, the estimate for unmeasured rows.
+- `*vdndVirtualFor` directly in a `vdndScrollable` element positions each row and has no `.vdnd-virtual-rows` box: give the rows a background that fills their height instead.
+- It adds no work to a scroll: nothing renders for the spacer.
 
 ## Rows with animate.leave or animate.enter
 

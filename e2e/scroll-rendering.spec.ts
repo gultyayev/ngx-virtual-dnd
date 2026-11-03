@@ -1,6 +1,10 @@
 import { expect, Page, test } from '@playwright/test';
 import { collectPageErrors } from './fixtures/page-errors';
-import { blankPxPerFrame, ViewChange } from './fixtures/scroll-coverage';
+import {
+  blankPxPerFrame,
+  longestBlankRunBeforeRender,
+  ViewChange,
+} from './fixtures/scroll-coverage';
 
 /**
  * The rows for a new scroll position or size must be in the frame that first shows it: rows
@@ -147,4 +151,51 @@ test.describe('Showing and resizing', () => {
     expect(blank, 'blank px in the two frames after the header grows').toEqual([0, 0]);
     expect(errors).toEqual([]);
   });
+});
+
+test.describe('Frames the page has not rendered yet', () => {
+  // A browser that scrolls on its own thread shows a fast scroll's new position before the page
+  // renders its rows (Safari and Firefox always, Chrome when the page misses the frame). The demo
+  // and the docs examples paint placeholder rows, the row cards without their text, on the spacer
+  // behind the rows: such a frame shows cards, never more blank space than between two of them.
+  /** Two cards apart: each is inset 3px inside its row */
+  const CARD_GAP = 6;
+  /** The main demo: 50px rows, vdnd-sortable-list or vdnd-virtual-scroll in a droppable */
+  const MAIN_DEMO: List = {
+    name: 'vdnd-virtual-scroll in the main demo',
+    path: '/?itemCount=1000',
+    droppableId: 'list-1',
+    start: 0,
+  };
+
+  for (const [list, scrollTop] of [
+    // 100 rows down in one frame, as a dragged scrollbar thumb jumps
+    [SORTABLE_LIST, 4800],
+    [
+      {
+        ...SORTABLE_LIST,
+        name: 'vdnd-sortable-list, dark theme',
+        path: '/examples/quick-start?theme=dark',
+      },
+      4800,
+    ],
+    // Past the 3 rows of overscan below the viewport, not past the viewport
+    [SORTABLE_LIST, 400],
+    [PAGE, 2000],
+    [DYNAMIC_LIST, 3000],
+    [MAIN_DEMO, 20000],
+  ] as const) {
+    test(`${list.name} shows placeholder rows scrolled to ${scrollTop}px`, async ({ page }) => {
+      const errors = collectPageErrors(page);
+      await page.goto(list.path);
+      await expect(
+        page.locator(`[data-droppable-id="${list.droppableId}"] [data-draggable-id]`).first(),
+      ).toBeVisible();
+
+      const blankRun = await longestBlankRunBeforeRender(page, list.droppableId, scrollTop);
+
+      expect(blankRun, 'longest run of blank pixel rows (px)').toBeLessThanOrEqual(CARD_GAP);
+      expect(errors.unexpected()).toEqual([]);
+    });
+  }
 });

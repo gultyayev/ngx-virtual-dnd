@@ -11,21 +11,25 @@ Put the rules below in a global stylesheet (`styles.css`, or a component with `V
 
 ## Classes
 
-| Class                                                    | On                                  | When                                                 |
-| -------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------- |
-| `vdnd-draggable`                                         | Draggables                          | Always                                               |
-| `vdnd-draggable-dragging`                                | Draggables                          | While being dragged (the element is `display: none`) |
-| `vdnd-draggable-disabled`                                | Draggables                          | `disabled` is true                                   |
-| `vdnd-drag-pending`                                      | Draggables                          | `dragDelay` has passed, drag not started yet         |
-| `vdnd-droppable`                                         | Droppables                          | Always                                               |
-| `vdnd-droppable-active`                                  | Droppables                          | The pointer or keyboard target is this droppable     |
-| `vdnd-droppable-disabled`                                | Droppables                          | `disabled` is true                                   |
-| `vdnd-drag-placeholder`, `vdnd-drag-placeholder-visible` | Drop-position placeholder           | During a drag, in the target list                    |
-| `vdnd-drag-preview`                                      | Preview box                         | During a drag                                        |
-| `vdnd-drag-preview-dropping`                             | Preview box                         | While it plays the drop animation                    |
-| `vdnd-overlay-container`                                 | Body-level container of the preview | After `<vdnd-drag-preview>` renders                  |
-| `vdnd-dragging`                                          | `<body>`                            | While any drag is in progress                        |
-| `vdnd-dragging-touch`                                    | `<body>`                            | While a touch drag is in progress                    |
+| Class                                                    | On                                                                                   | When                                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `vdnd-draggable`                                         | Draggables                                                                           | Always                                                                       |
+| `vdnd-draggable-dragging`                                | Draggables                                                                           | While being dragged (the element is `display: none`)                         |
+| `vdnd-draggable-disabled`                                | Draggables                                                                           | `disabled` is true                                                           |
+| `vdnd-drag-pending`                                      | Draggables                                                                           | `dragDelay` has passed, drag not started yet                                 |
+| `vdnd-droppable`                                         | Droppables                                                                           | Always                                                                       |
+| `vdnd-droppable-active`                                  | Droppables                                                                           | The pointer or keyboard target is this droppable                             |
+| `vdnd-droppable-disabled`                                | Droppables                                                                           | `disabled` is true                                                           |
+| `vdnd-drag-placeholder`, `vdnd-drag-placeholder-visible` | Drop-position placeholder                                                            | During a drag, in the target list                                            |
+| `vdnd-drag-preview`                                      | Preview box                                                                          | During a drag                                                                |
+| `vdnd-drag-preview-dropping`                             | Preview box                                                                          | While it plays the drop animation                                            |
+| `vdnd-overlay-container`                                 | Body-level container of the preview                                                  | After `<vdnd-drag-preview>` renders                                          |
+| `vdnd-dragging`                                          | `<body>`                                                                             | While any drag is in progress                                                |
+| `vdnd-dragging-touch`                                    | `<body>`                                                                             | While a touch drag is in progress                                            |
+| `vdnd-virtual-spacer`                                    | Box behind a virtual list's rows, as wide as the list, from its first row to its end | Always                                                                       |
+| `vdnd-virtual-rows`                                      | Box of the rows a virtual list has rendered, and of its placeholder                  | Always, except with `*vdndVirtualFor` directly in a `vdndScrollable` element |
+
+Paint placeholder rows on `vdnd-virtual-spacer` for the frames a fast scroll shows before its rows render, and give `vdnd-virtual-rows` the list's background: see [Fast scrolling](/guide/features/performance#fast-scrolling).
 
 `<vdnd-sortable-list>`, `<vdnd-virtual-scroll>`, `<vdnd-virtual-viewport>`, `<vdnd-virtual-content>`, `vdndScrollable` and `<vdnd-placeholder>` also carry their own name as a class (for example `vdnd-sortable-list`).
 

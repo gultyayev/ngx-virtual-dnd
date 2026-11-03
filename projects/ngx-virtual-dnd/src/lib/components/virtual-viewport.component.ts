@@ -87,11 +87,12 @@ import { createHeightStrategy } from '../strategies/strategy-binding';
       overflow-anchor: none;
     }
 
+    /* As wide as the list and painted under the rows, for an app's placeholder rows
+       (vdnd-virtual-spacer): the frames a fast scroll shows before its rows render show it */
     .vdnd-viewport-spacer {
       position: absolute;
       left: 0;
-      width: 1px;
-      visibility: hidden;
+      right: 0;
       pointer-events: none;
     }
 
@@ -103,9 +104,9 @@ import { createHeightStrategy } from '../strategies/strategy-binding';
     }
   `,
   template: `
-    <!-- Spacer maintains total scroll height -->
+    <!-- Spacer maintains total scroll height, from the first row (vdnd-virtual-spacer) -->
     <div
-      class="vdnd-viewport-spacer"
+      class="vdnd-viewport-spacer vdnd-virtual-spacer"
       [style.top.px]="rowsOffset()"
       [style.height.px]="totalHeight() + rowsBottomSpace()"
     ></div>
@@ -116,7 +117,7 @@ import { createHeightStrategy } from '../strategies/strategy-binding';
          renders in the scroll event (see setRenderStartIndex). -->
     <div
       #content
-      class="vdnd-viewport-content"
+      class="vdnd-viewport-content vdnd-virtual-rows"
       [style.top.px]="rowsOffset()"
       [style.padding-bottom.px]="rowsBottomSpace()"
     >

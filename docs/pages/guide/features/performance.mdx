@@ -1,6 +1,6 @@
 ---
 title: Performance
-description: Row recycling, overscan, the drag preview and the other settings that affect speed with large lists.
+description: Row recycling, overscan, fast scrolling, the drag preview and the other settings that affect speed with large lists.
 ---
 
 # Performance
@@ -29,7 +29,7 @@ Turn it on for rows that are costly to create (several components, many elements
 
 `overscan` is the number of rows rendered beyond the visible area, above and below. The default is `3`.
 
-Each scroll renders the rows for its new position in its scroll event, before the browser paints the frame that shows it, so a fast flick or a dragged scrollbar thumb shows rows in every frame. Overscan covers the frames a browser draws before the page has rendered: Firefox scrolls on its compositor without waiting for the page, and every browser does when rendering a frame takes too long. Raise it if fast scrolling still shows empty space at the edge the list scrolls toward: in Firefox, or with rows that take long to render. Lower it when rows are costly to render and fast scrolling shows none.
+The rows beyond the visible area are what a flick shows in the frames the browser draws before the page renders the rows of its new position (see [Fast scrolling](#fast-scrolling)). Raise it if a flick shows placeholder rows or empty space at the edge the list scrolls toward. Lower it when rows are costly to render: each scroll step renders the rows that come into range.
 
 ```angular-html
 <vdnd-sortable-list [overscan]="5" ... />
@@ -40,6 +40,30 @@ Each scroll renders the rows for its new position in its scroll event, before th
 ```
 
 `<vdnd-sortable-list>`, `<vdnd-virtual-scroll>` and `*vdndVirtualFor` accept it.
+
+## Fast scrolling
+
+Each scroll renders the rows of its new position in its scroll event, before the page paints. But browsers scroll on a thread of their own, and not every frame waits for the page: a fast flick, or a dragged scrollbar thumb that jumps across hundreds of rows, can show a position before the page has rendered its rows. Chrome waits for the page when it renders in time; Safari and Firefox do not wait. Where its rows have not rendered yet, the list shows its background for a frame or two: blank space, a whole viewport of it after a jump.
+
+No setting removes those frames, but you choose what they show. Every virtual list renders a spacer behind its rows, `vdnd-virtual-spacer`, as wide as the list and from its first row to its end, and the browser draws it in those frames too. Paint the look of an empty row on it, every `itemHeight` px, and give the box of the rendered rows, `vdnd-virtual-rows`, the list's background, so the rows cover it:
+
+```css
+/* Placeholder rows: each row's background and bottom border, every 48px (itemHeight) */
+.vdnd-virtual-spacer {
+  background: linear-gradient(#fff 47px, #e6e9ee 47px) 0 0 / 100% 48px repeat-y;
+}
+
+/* The rendered rows cover them */
+.vdnd-virtual-rows {
+  background: #fff;
+}
+```
+
+A fast scroll then shows empty rows where the page has not rendered yet, and their content a frame later. It adds no work to a scroll: nothing renders for the spacer, and the browser draws it like the rest of the list.
+
+- Paint the row's look at rest: its background, edges and corners, in the same place. The live examples on these pages draw their row cards this way.
+- With dynamic heights, space the placeholder rows by `itemHeight`, the estimate the list uses for rows it has not measured.
+- `*vdndVirtualFor` directly in a `vdndScrollable` element positions each row, so it has no `vdnd-virtual-rows` box: give the rows themselves a background that fills their height.
 
 ## Fixed or dynamic heights
 

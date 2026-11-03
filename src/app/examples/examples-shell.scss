@@ -1,3 +1,5 @@
+@use '../../styles/placeholder-rows';
+
 // Shared look for the docs live examples, on the Night design system (its ListItem and
 // LiveDemoFrame cards). Scoped to the shell host (unencapsulated), except where marked: the
 // page ground, and the drag preview, which renders in a body-level overlay outside the shell.
@@ -50,6 +52,23 @@ app-examples-shell {
     transition:
       border-color var(--dur-quick) var(--ease-out),
       box-shadow var(--dur-quick) var(--ease-out);
+  }
+
+  // Placeholder rows (styles/_placeholder-rows.scss): the frames a fast scroll shows before its
+  // rows render show the row cards there, without their text. The rows' box covers them.
+  .list .vdnd-virtual-spacer,
+  .page .vdnd-virtual-spacer {
+    @include placeholder-rows.cards(48px, 6px);
+  }
+
+  .list .vdnd-virtual-rows,
+  .page .vdnd-virtual-rows {
+    background: var(--surface);
+  }
+
+  // Dynamic heights: every itemHeight, the estimate for rows not measured yet
+  .list [data-droppable-id='notes'] .vdnd-virtual-spacer {
+    @include placeholder-rows.cards(72px, 6px);
   }
 
   // Drop target: the panel's edge turns accent-line with a 3px accent-tint halo; the fill stays.

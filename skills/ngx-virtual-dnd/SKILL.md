@@ -389,6 +389,7 @@ These inputs exist on `vdndDroppable` and on `vdnd-sortable-list`:
 List rendering options:
 
 - **`overscan`** (default `3`) — extra items rendered above and below the viewport. On `vdnd-sortable-list`, `vdnd-virtual-scroll` and `*vdndVirtualFor` (`overscan: 5` in the microsyntax).
+- **Placeholder rows** — a fast flick or a dragged scrollbar thumb can show a position before its rows render (browsers scroll on their own thread: Safari and Firefox always, Chrome when the page misses the frame), showing the list's background for a frame or two. Paint the look of an empty row every `itemHeight` px on `.vdnd-virtual-spacer` (behind the rows, full width, from the first row) and give `.vdnd-virtual-rows` the list's background. Recipe: [guides](references/guides.md#fast-scrolling-and-placeholder-rows).
 - **`stickyItemIds`** (`vdnd-virtual-scroll` only) — IDs of items that stay rendered at any scroll position. The dragged item is kept rendered automatically (`autoStickyDraggedItem`, default `true`).
 - **`recycleRows`** (default `false`; `vdnd-sortable-list` and `vdnd-virtual-scroll`; `*vdndVirtualFor` always recycles) — rows that scroll in reuse the views of rows that scroll out, so scrolling creates few components and elements. Enable it only for rows that render purely from their item: a recycled row's components are not created again (`ngOnInit` runs once), and state no binding sets (component fields, unbound input values, classes set from code) carries over to the next item. Read item-dependent signal inputs in a row component's template, not its host bindings. Details: [guides](references/guides.md#row-recycling).
 
@@ -522,6 +523,8 @@ On release, `(dragEnd)` fires first, then `(drop)` on the destination, both befo
 | `vdnd-overlay-container` | Body-level container for the preview | Once `<vdnd-drag-preview>` has rendered |
 | `vdnd-dragging` | `<body>` | While any drag is in progress |
 | `vdnd-dragging-touch` | `<body>` | While a touch drag is in progress |
+| `vdnd-virtual-spacer` | Box behind a virtual list's rows: full width, from the first row to the end | Always ([placeholder rows](references/guides.md#fast-scrolling-and-placeholder-rows) go on it) |
+| `vdnd-virtual-rows` | Box of the rendered rows and the placeholder | Always, except `*vdndVirtualFor` directly in `vdndScrollable` |
 | `vdnd-sortable-list`, `vdnd-virtual-scroll`, `vdnd-virtual-viewport`, `vdnd-virtual-content`, `vdnd-scrollable`, `vdnd-placeholder` | Their host elements | Always |
 
 - Put these rules in a global stylesheet: the library renders the preview, the placeholder and the lists' inner elements, so component-scoped styles don't reach them. With `vdnd-sortable-list` the droppable is an inner element: target it as `.vdnd-sortable-list .vdnd-droppable-active`.

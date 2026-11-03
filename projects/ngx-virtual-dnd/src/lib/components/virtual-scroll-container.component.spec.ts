@@ -360,6 +360,20 @@ describe('VirtualScrollContainerComponent', () => {
   });
 
   describe('total height calculation', () => {
+    // An app paints the look of an empty row on the spacer, behind the rows, for the frames a
+    // browser that scrolls on its own thread shows before the rows of a position render
+    it('should render a spacer behind the rows from the first row, and the rows in their own box', () => {
+      const spacer = virtualScrollEl.querySelector<HTMLElement>('.vdnd-virtual-spacer');
+      const rows = virtualScrollEl.querySelector<HTMLElement>('.vdnd-virtual-rows');
+
+      expect(spacer).not.toBeNull();
+      expect(rows?.querySelectorAll('[data-draggable-id]').length).toBeGreaterThan(0);
+      // Before the rows' box, so it paints under it
+      expect(spacer?.nextElementSibling).toBe(rows);
+      expect(spacer?.style.top).toBe('0px');
+      expect(spacer?.style.height).toBe('5000px');
+    });
+
     it('should size the single spacer to the total height', () => {
       const spacer = fixture.debugElement.query(By.css('.vdnd-virtual-scroll-spacer'));
       // 100 items * 50px
@@ -1021,7 +1035,9 @@ describe('VirtualScrollContainerComponent', () => {
       const wrapper = virtualScrollEl.querySelector<HTMLElement>(
         '.vdnd-virtual-scroll-content-wrapper',
       )!;
-      expect(spacer.style.height).toBe(`${40 + 5000 + 30}px`);
+      // From the first row's top, so a placeholder-row pattern on it lines up with the rows
+      expect(spacer.style.top).toBe('40px');
+      expect(spacer.style.height).toBe(`${5000 + 30}px`);
       expect(virtualScrollComponent.getScrollHeight()).toBe(40 + 5000 + 30);
       // The first row starts below the top inset; the bottom one follows the last rendered row
       expect(wrapper.style.transform).toBe('translateY(40px)');

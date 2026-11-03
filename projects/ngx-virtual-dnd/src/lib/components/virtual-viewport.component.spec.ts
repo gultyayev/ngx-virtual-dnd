@@ -175,6 +175,13 @@ describe('VirtualViewportComponent', () => {
       };
     };
 
+    it('should render its spacer behind the rows and the rows in their own box', () => {
+      const { spacer, content } = parts();
+      expect(spacer.classList.contains('vdnd-virtual-spacer')).toBe(true);
+      expect(content.classList.contains('vdnd-virtual-rows')).toBe(true);
+      expect(spacer.nextElementSibling).toBe(content);
+    });
+
     it('should start the rows below the top inset when it covers more than the content offset', () => {
       hostComponent.contentOffset.set(24);
       hostComponent.scrollInsetTop.set(64);

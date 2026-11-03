@@ -496,11 +496,10 @@ export class DragIndexCalculatorService {
 
       let totalHeight: number;
       if (spacer) {
-        // Get the spacer's explicit height, without the space reserved around the rows
+        // The spacer's explicit height, without the space reserved below the rows (it starts at
+        // the first row, below the space reserved above them)
         totalHeight =
-          (parseFloat(spacer.style.height) || 0) -
-          readScrollInset(virtualScroll, 'top') -
-          readScrollInset(virtualScroll, 'bottom');
+          (parseFloat(spacer.style.height) || 0) - readScrollInset(virtualScroll, 'bottom');
       } else {
         // Fallback: use scrollHeight if spacer not found
         totalHeight = (virtualScroll as HTMLElement).scrollHeight;

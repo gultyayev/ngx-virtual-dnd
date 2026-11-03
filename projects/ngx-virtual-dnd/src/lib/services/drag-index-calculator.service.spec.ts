@@ -1379,8 +1379,9 @@ describe('DragIndexCalculatorService', () => {
       ).toBe(3);
     });
 
-    it('counts the rows of a vdnd-virtual-scroll from its spacer without its insets', () => {
-      // No item count to read: 40 + 20 rows of 50px + 30
+    it('counts the rows of a vdnd-virtual-scroll from its spacer without its bottom inset', () => {
+      // No item count to read: the spacer starts below the top inset (40), at the first of
+      // 20 rows of 50px, and ends with the bottom inset (30)
       const droppable = createDroppable('spacer-list', 0);
       const scroller = document.createElement('vdnd-virtual-scroll');
       scroller.setAttribute('data-item-height', '50');
@@ -1388,7 +1389,8 @@ describe('DragIndexCalculatorService', () => {
       scroller.setAttribute('data-scroll-inset-bottom', '30');
       const spacer = document.createElement('div');
       spacer.className = 'vdnd-virtual-scroll-spacer';
-      spacer.style.height = '1070px';
+      spacer.style.top = '40px';
+      spacer.style.height = '1030px';
       scroller.appendChild(spacer);
       droppable.appendChild(scroller);
 

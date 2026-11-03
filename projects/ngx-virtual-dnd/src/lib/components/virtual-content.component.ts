@@ -86,12 +86,13 @@ import { hasViewportChanges, ViewportChangeListeners } from '../utils/viewport-c
       position: relative;
     }
 
+    /* As wide as the list and painted under the rows, for an app's placeholder rows
+       (vdnd-virtual-spacer): the frames a fast scroll shows before its rows render show it */
     .vdnd-content-spacer {
       position: absolute;
       top: 0;
       left: 0;
-      width: 1px;
-      visibility: hidden;
+      right: 0;
       pointer-events: none;
     }
 
@@ -110,11 +111,11 @@ import { hasViewportChanges, ViewportChangeListeners } from '../utils/viewport-c
     <!-- Virtual area — sized to totalHeight, contains absolute-positioned spacer + wrapper -->
     <div #virtualArea class="vdnd-virtual-area" [style.height.px]="totalHeight()">
       <!-- Spacer maintains scroll height for the virtual list portion -->
-      <div class="vdnd-content-spacer" [style.height.px]="totalHeight()"></div>
+      <div class="vdnd-content-spacer vdnd-virtual-spacer" [style.height.px]="totalHeight()"></div>
 
       <!-- Content wrapper with GPU-accelerated transform. Written, not bound: it moves with the
            rows, which *vdndVirtualFor renders in the scroll event (see setRenderStartIndex). -->
-      <div #contentWrapper class="vdnd-content-wrapper">
+      <div #contentWrapper class="vdnd-content-wrapper vdnd-virtual-rows">
         <ng-content />
       </div>
     </div>

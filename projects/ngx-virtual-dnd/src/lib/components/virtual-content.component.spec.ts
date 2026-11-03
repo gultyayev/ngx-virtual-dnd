@@ -209,6 +209,17 @@ describe('VirtualContentComponent', () => {
       fixture.destroy();
     });
 
+    it('should render its spacer behind the rows and the rows in their own box', () => {
+      const virtualContent = fixture.debugElement.query(By.directive(VirtualContentComponent))
+        .nativeElement as HTMLElement;
+      const spacer = virtualContent.querySelector('.vdnd-content-spacer');
+      const rows = virtualContent.querySelector('.vdnd-content-wrapper');
+
+      expect(spacer?.classList.contains('vdnd-virtual-spacer')).toBe(true);
+      expect(rows?.classList.contains('vdnd-virtual-rows')).toBe(true);
+      expect(spacer?.nextElementSibling).toBe(rows);
+    });
+
     it('should project header before virtual area', () => {
       const virtualContent = fixture.debugElement.query(By.directive(VirtualContentComponent))
         .nativeElement as HTMLElement;
