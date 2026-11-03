@@ -30,10 +30,7 @@ import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
 import { DragPlaceholderComponent } from './drag-placeholder.component';
-import {
-  bindRafThrottledScrollTopSignal,
-  bindResizeObserverHeightSignal,
-} from '../utils/dom-signal-bindings';
+import { bindResizeObserverHeightSignal, bindScrollTopSignal } from '../utils/dom-signal-bindings';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { bindListStrategy, createHeightStrategy } from '../strategies/strategy-binding';
@@ -743,13 +740,14 @@ export class VirtualScrollContainerComponent<T>
       scrollTop: this.#scrollTop,
     });
 
-    // Scroll listener outside Angular zone with RAF throttling.
-    // This avoids template event binding which would mark the component dirty 60x/sec.
-    this.#scrollCleanup = bindRafThrottledScrollTopSignal({
+    // Scroll listener outside Angular zone: a template event binding would mark the component
+    // dirty on every scroll event.
+    this.#scrollCleanup = bindScrollTopSignal({
       element,
       ngZone: this.#ngZone,
       scrollTop: this.#scrollTop,
       thresholdPx: 5,
+      onCommit: () => this.#renderScroll(),
     });
 
     // Observe rendered items for dynamic height measurement
@@ -860,6 +858,17 @@ export class VirtualScrollContainerComponent<T>
       },
       { injector: this.#injector },
     );
+  }
+
+  /**
+   * Render the rows of a committed scroll position in its scroll event: before the browser lays
+   * out and paints the frame that first shows it. Rendered later (the effect runs in the change
+   * detection the scroll schedules, after that frame), a fast scroll would paint blank space
+   * wherever it moved past the overscan. Run in Angular's zone, as change detection is: the
+   * listeners of the rows it creates run there. The effect then finds nothing left to render.
+   */
+  #renderScroll(): void {
+    this.#ngZone.run(() => this.#render());
   }
 
   /**
@@ -1191,8 +1200,8 @@ export class VirtualScrollContainerComponent<T>
    * Get the current scroll position.
    */
   getScrollTop(): number {
-    // Read the element: the scroll signal is the rendered position, committed once per animation
-    // frame and only after a 5px move. Server rendering has no layout, so fall back to it there.
+    // Read the element: the scroll signal is the rendered position, committed in the scroll event
+    // and only after a 5px move. Server rendering has no layout, so fall back to it there.
     const scrollTop = this.#elementRef.nativeElement.scrollTop;
     return Number.isFinite(scrollTop) ? scrollTop : this.#scrollTop();
   }

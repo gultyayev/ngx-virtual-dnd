@@ -36,6 +36,8 @@ While an item is dragged within its own list it is hidden with `display: none` a
 
 Pointer moves are coalesced into a single `requestAnimationFrame` loop that reads layout, computes the new state and then writes styles, in that order. Drag state lives in signals, so only the parts of the page that depend on it update. The loop and all high-frequency listeners run outside Angular's zone. The `dragStart`, `dragEnd` and `drop` outputs are emitted inside it, so handlers that change plain fields still render in zone.js apps.
 
+A scroll renders its rows in the scroll event, which the browser dispatches in the frame that first shows the new position, before it lays out and paints that frame. Rendered any later, a fast scroll would paint that frame with the rows of the previous position, blank wherever it moved past the overscan. Only the rows that came into range are created or checked.
+
 ## Row recycling
 
 `<vdnd-sortable-list>` and `<vdnd-virtual-scroll>` can reuse the view of a row that scrolls out to render a row that scrolls in, and `*vdndVirtualFor` always does. See [Row recycling](/guide/features/performance#row-recycling) for what that means for your row components.

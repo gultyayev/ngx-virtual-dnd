@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   ElementRef,
   inject,
   input,
@@ -9,6 +10,8 @@ import {
   OnDestroy,
   OnInit,
   signal,
+  untracked,
+  viewChild,
 } from '@angular/core';
 import {
   VDND_OFFSET_ROWS_VIEWPORT,
@@ -17,13 +20,11 @@ import {
 } from '../tokens/virtual-viewport.token';
 import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-container.token';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
-import {
-  bindRafThrottledScrollTopSignal,
-  bindResizeObserverHeightSignal,
-} from '../utils/dom-signal-bindings';
+import { bindResizeObserverHeightSignal, bindScrollTopSignal } from '../utils/dom-signal-bindings';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
 import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
 import { validScrollInset } from '../utils/scroll-insets';
+import { ScrollCommitListeners } from '../utils/scroll-commits';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { createHeightStrategy } from '../strategies/strategy-binding';
 
@@ -110,12 +111,14 @@ import { createHeightStrategy } from '../strategies/strategy-binding';
     ></div>
 
     <!-- Content wrapper with GPU-accelerated transform. The space reserved below the rows follows
-         the last one rendered, the placeholder after it too (it renders past the spacer's end). -->
+         the last one rendered, the placeholder after it too (it renders past the spacer's end).
+         Its transform is written, not bound: it moves with the rows, which *vdndVirtualFor
+         renders in the scroll event (see setRenderStartIndex). -->
     <div
+      #content
       class="vdnd-viewport-content"
       [style.top.px]="rowsOffset()"
       [style.padding-bottom.px]="rowsBottomSpace()"
-      [style.transform]="contentTransform()"
     >
       <ng-content></ng-content>
     </div>
@@ -133,6 +136,15 @@ export class VirtualViewportComponent
 
   /** Measured container height (reactive) */
   readonly #containerHeight = signal(0);
+
+  /** The lists that render each committed scroll position in its scroll event */
+  readonly #scrollCommits = new ScrollCommitListeners();
+
+  /** The content wrapper (cannot use ES private with viewChild) */
+  private readonly content = viewChild<ElementRef<HTMLElement>>('content');
+
+  /** Content transform last written to the content wrapper */
+  #contentTransformSet: string | null = null;
 
   /** Cleanup function for scroll listener */
   #scrollCleanup: (() => void) | null = null;
@@ -245,9 +257,14 @@ export class VirtualViewportComponent
   /**
    * Called by VirtualForDirective to inform this viewport of the actual
    * first rendered item index. Used for wrapper positioning.
+   *
+   * The wrapper moves right away: the directive renders the rows of a scroll in its scroll event,
+   * and they must show at their offset in the frame that first shows the scroll.
    */
   setRenderStartIndex(index: number): void {
     this.#renderStartIndex.set(index);
+    // Untracked: the directive calls this from its effect, which must not depend on it
+    untracked(() => this.#writeContentTransform());
   }
 
   getOffsetForIndex(index: number): number {
@@ -265,13 +282,23 @@ export class VirtualViewportComponent
       0,
       Math.min(
         // The element's position, not scrollTop(): that signal is the rendered position, committed
-        // once per animation frame and only after a 5px move, so calls in one frame (or after a
+        // in the scroll event and only after a 5px move, so calls in one frame (or after a
         // scrollTo()) would overwrite each other and small steps would never add up.
         this.nativeElement.scrollTop + delta,
         this.nativeElement.scrollHeight - this.nativeElement.clientHeight,
       ),
     );
     this.scrollTo({ top: newPosition });
+  }
+
+  /**
+   * Call `listener` after each scroll position this viewport commits, in its scroll event
+   * (`*vdndVirtualFor` renders its rows there). Returns the unsubscribe.
+   *
+   * @internal
+   */
+  onScrollCommit(listener: () => void): () => void {
+    return this.#scrollCommits.onScrollCommit(listener);
   }
 
   // ========== Lifecycle ==========
@@ -285,6 +312,9 @@ export class VirtualViewportComponent
       config: () => this.autoScrollConfig(),
     });
     refreshDragOnScrollInsetChange(this.scrollInsetTop, this.scrollInsetBottom);
+
+    // The offset also follows the strategy's offsets: measured heights, a dragged item's slot
+    effect(() => this.#writeContentTransform());
   }
 
   ngOnInit(): void {
@@ -303,12 +333,22 @@ export class VirtualViewportComponent
   readonly #scrollThreshold = 5;
 
   #setupScrollListener(): void {
-    this.#scrollCleanup = bindRafThrottledScrollTopSignal({
+    this.#scrollCleanup = bindScrollTopSignal({
       element: this.nativeElement,
       ngZone: this.#ngZone,
       scrollTop: this.#scrollTop,
       thresholdPx: this.#scrollThreshold,
+      onCommit: () => this.#scrollCommits.notify(),
     });
+  }
+
+  /** Move the content wrapper to the first rendered row's offset, unless it is there already. */
+  #writeContentTransform(): void {
+    const transform = this.contentTransform();
+    const content = this.content()?.nativeElement;
+    if (!content || transform === this.#contentTransformSet) return;
+    content.style.transform = transform;
+    this.#contentTransformSet = transform;
   }
 
   #setupResizeObserver(): void {

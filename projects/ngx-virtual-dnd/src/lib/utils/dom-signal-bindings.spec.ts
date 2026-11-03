@@ -1,8 +1,5 @@
 import { NgZone, signal } from '@angular/core';
-import {
-  bindRafThrottledScrollTopSignal,
-  bindResizeObserverHeightSignal,
-} from './dom-signal-bindings';
+import { bindScrollTopSignal, bindResizeObserverHeightSignal } from './dom-signal-bindings';
 
 // Mock ResizeObserver for JSDOM — captures callback so tests can simulate resize events
 let lastResizeCallback: ResizeObserverCallback | null = null;
@@ -22,7 +19,6 @@ describe('DOM signal bindings', () => {
   let originalResizeObserver: typeof ResizeObserver;
   let element: HTMLElement;
   let offset: number;
-  let frameCallbacks: FrameRequestCallback[];
 
   beforeAll(() => {
     originalResizeObserver = globalThis.ResizeObserver;
@@ -39,10 +35,6 @@ describe('DOM signal bindings', () => {
     element = document.createElement('div');
     // jsdom has no layout: scrollTop reads whatever the test last scrolled to
     Object.defineProperty(element, 'scrollTop', { get: () => offset, configurable: true });
-    frameCallbacks = [];
-    jest
-      .spyOn(window, 'requestAnimationFrame')
-      .mockImplementation((callback: FrameRequestCallback) => frameCallbacks.push(callback));
   });
 
   afterEach(() => {
@@ -57,13 +49,10 @@ describe('DOM signal bindings', () => {
     );
   }
 
-  /** Scroll the element and run the animation frame that follows. */
+  /** Scroll the element as a browser does: move it, then dispatch its scroll event. */
   function scrollTo(top: number): void {
     offset = top;
     element.dispatchEvent(new Event('scroll'));
-    const callbacks = frameCallbacks;
-    frameCallbacks = [];
-    callbacks.forEach((callback) => callback(0));
   }
 
   describe('bindResizeObserverHeightSignal', () => {
@@ -106,28 +95,64 @@ describe('DOM signal bindings', () => {
     });
   });
 
-  describe('bindRafThrottledScrollTopSignal', () => {
-    it('should commit a scroll of at least the threshold', () => {
+  describe('bindScrollTopSignal', () => {
+    it('should commit a scroll of at least the threshold in its scroll event', () => {
+      // The frame that dispatches the event paints the position: rows rendered for it any later
+      // leave that frame blank where the scroll moved past them
+      const requestFrame = jest.spyOn(window, 'requestAnimationFrame');
       const scrollTop = signal(-1);
-      bindRafThrottledScrollTopSignal({ element, ngZone, scrollTop });
+      const onCommit = jest.fn();
+      bindScrollTopSignal({ element, ngZone, scrollTop, onCommit });
 
       scrollTo(400);
 
       expect(scrollTop()).toBe(400);
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit).toHaveBeenCalledWith(400);
+      expect(requestFrame).not.toHaveBeenCalled();
+    });
+
+    it('should hand onCommit the committed position, already in the signal', () => {
+      const scrollTop = signal(-1);
+      let committed: number | null = null;
+      bindScrollTopSignal({
+        element,
+        ngZone,
+        scrollTop,
+        onCommit: () => (committed = scrollTop()),
+      });
+
+      scrollTo(400);
+
+      expect(committed).toBe(400);
     });
 
     it('should not commit a scroll below the threshold', () => {
       const scrollTop = signal(-1);
-      bindRafThrottledScrollTopSignal({ element, ngZone, scrollTop });
+      const onCommit = jest.fn();
+      bindScrollTopSignal({ element, ngZone, scrollTop, onCommit });
 
       scrollTo(3);
 
       expect(scrollTop()).toBe(0);
+      expect(onCommit).not.toHaveBeenCalled();
+    });
+
+    it('should stop committing once cleaned up', () => {
+      const scrollTop = signal(-1);
+      const onCommit = jest.fn();
+      const cleanup = bindScrollTopSignal({ element, ngZone, scrollTop, onCommit });
+
+      cleanup();
+      scrollTo(400);
+
+      expect(scrollTop()).toBe(0);
+      expect(onCommit).not.toHaveBeenCalled();
     });
 
     it('should measure the threshold from the signal when it was set elsewhere', () => {
       const scrollTop = signal(-1);
-      bindRafThrottledScrollTopSignal({ element, ngZone, scrollTop });
+      bindScrollTopSignal({ element, ngZone, scrollTop });
       scrollTo(1000);
 
       // A resize re-read the offset of a re-attached element (back at the top)
