@@ -9,7 +9,9 @@ export type ViewChange =
   /** Make the scroll container `px` tall (a resized pane, a maximized window) */
   | { kind: 'resize'; px: number }
   /** Pad the top of the list's `vdndContentHeader` by `px` (its text wraps, content loads in it) */
-  | { kind: 'grow-header'; px: number };
+  | { kind: 'grow-header'; px: number }
+  /** Click the element with this `data-testid` (a control of the page that changes the items) */
+  | { kind: 'click'; testId: string };
 
 /**
  * How much of a virtual list's viewport (px) its rendered rows leave blank in the frames after a
@@ -112,6 +114,10 @@ export async function blankPxPerFrame(
           holder.style.display = '';
         } else if (change.kind === 'resize') {
           list.style.height = `${change.px}px`;
+        } else if (change.kind === 'click') {
+          const control = document.querySelector<HTMLElement>(`[data-testid="${change.testId}"]`);
+          if (!control) throw new Error(`No element with data-testid ${change.testId}`);
+          control.click();
         } else {
           const header = droppable.querySelector<HTMLElement>('[vdndContentHeader]');
           if (!header) throw new Error(`No vdndContentHeader in ${droppableId}`);

@@ -114,6 +114,27 @@ test.describe('Showing and resizing', () => {
     });
   }
 
+  test('vdnd-virtual-scroll paints the rows its items end with, in the frame they shrink', async ({
+    page,
+  }) => {
+    // Scrolled to 40,000px of 1,000 items, the main demo regenerates 50: they end far above the
+    // scroll position, which the browser clamps when it lays them out
+    const errors = collectPageErrors(page);
+    await page.goto('/?itemCount=2000');
+    await expect(
+      page.locator('[data-droppable-id="list-1"] [data-draggable-id]').first(),
+    ).toBeVisible();
+    await page.getByLabel('Item count').fill('100');
+
+    const blank = await blankPxPerFrame(page, 'list-1', 40000, {
+      kind: 'click',
+      testId: 'regenerate-items',
+    });
+
+    expect(blank, 'blank px in the two frames after the items shrink').toEqual([0, 0]);
+    expect(errors.unexpected()).toEqual([]);
+  });
+
   test('vdnd-virtual-content paints the rows a taller header moves into view, in that frame', async ({
     page,
   }) => {

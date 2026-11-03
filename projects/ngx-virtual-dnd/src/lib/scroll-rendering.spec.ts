@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { VirtualScrollContainerComponent } from './components/virtual-scroll-container.component';
 import { VirtualViewportComponent } from './components/virtual-viewport.component';
@@ -82,7 +82,7 @@ let viewportHeight = 300;
       <div class="row" [attr.data-id]="row.id">{{ row.id }}</div>
     </ng-template>
     <vdnd-virtual-scroll
-      [items]="rows"
+      [items]="rows()"
       [itemHeight]="50"
       [containerHeight]="300"
       [itemIdFn]="rowId"
@@ -92,7 +92,7 @@ let viewportHeight = 300;
   imports: [VirtualScrollContainerComponent],
 })
 class VirtualScrollHostComponent {
-  readonly rows = ROWS;
+  readonly rows = signal(ROWS);
   readonly rowId = (row: Row): string => row.id;
 }
 
@@ -412,6 +412,42 @@ describe('rendering a resize in its resize observer callback', () => {
     resized(header, headerHeight);
 
     expect(renderedIds(fixture)).toEqual(rowIds(89, 101));
+    fixture.destroy();
+  });
+});
+
+describe('rendering items that end above the scroll position', () => {
+  // Scrolled to 5,000px, the items shrink to 50 (2,500px, a filter): the browser clamps the
+  // scroll position to 2,200px when it lays the shorter list out, and the scroll event of that
+  // arrives a frame later. Rows 44-49 are in view there: rows 41 to 49 render
+  for (const [name, host, scrollerSelector] of [
+    ['vdnd-virtual-scroll', VirtualScrollHostComponent, 'vdnd-virtual-scroll'],
+    ['*vdndVirtualFor in vdnd-virtual-viewport', ViewportHostComponent, 'vdnd-virtual-viewport'],
+    ['*vdndVirtualFor in vdndScrollable', ScrollableHostComponent, '.scroller'],
+    ['vdnd-virtual-content in vdndScrollable', VirtualContentHostComponent, '.scroller'],
+  ] as const) {
+    it(`renders the rows the browser clamps the scroll position to (${name})`, () => {
+      const fixture = setUp<{ rows: WritableSignal<Row[]> }>(host);
+      scroll(query(fixture, scrollerSelector), 5000);
+      expect(renderedIds(fixture)).toEqual(rowIds(97, 109));
+
+      fixture.componentInstance.rows.set(ROWS.slice(0, 50));
+      fixture.detectChanges();
+
+      expect(renderedIds(fixture)).toEqual(rowIds(41, 49));
+      fixture.destroy();
+    });
+  }
+
+  it('renders the rows of the scroll position when the items still reach past it', () => {
+    const fixture = setUp(VirtualScrollHostComponent);
+    scroll(query(fixture, 'vdnd-virtual-scroll'), 5000);
+
+    // 200 items (10,000px) still reach past 5,300px: nothing to clamp
+    fixture.componentInstance.rows.set(ROWS.slice(0, 200));
+    fixture.detectChanges();
+
+    expect(renderedIds(fixture)).toEqual(rowIds(97, 109));
     fixture.destroy();
   });
 });

@@ -287,14 +287,25 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
    * How far the rows are scrolled. A vdnd-virtual-viewport's rows start rowsOffset() px down its
    * scroll area (its content offset or top scroll inset), but its scrollTop() is the raw position,
    * so subtract the offset here. vdnd-virtual-content's scrollTop() already excludes its offset.
+   *
+   * Never so far that the rows end above the bottom of the scroll container. Items that shrink to
+   * end above the scroll position (a filter) leave it past the end until the browser lays the
+   * shorter list out and clamps it, and the scroll event of that clamp comes a frame later:
+   * rendered for the old position, that frame shows no row. Scrolled into content after the rows
+   * (a footer, a placeholder after the last row), the rows in view are the last ones either way.
    */
   #rowsScrollTop(): number {
     const scrollTop = this.#scrollContainer.scrollTop();
     const viewport = this.#offsetRowsViewport;
-    if (viewport === null || viewport !== this.#viewport) {
-      return scrollTop;
-    }
-    return Math.max(0, scrollTop - viewport.rowsOffset());
+    const rowsScrollTop =
+      viewport === null || viewport !== this.#viewport
+        ? scrollTop
+        : Math.max(0, scrollTop - viewport.rowsOffset());
+    const rowsHeight = this.#strategy().getTotalHeight(this.vdndVirtualForOf().length);
+    return Math.min(
+      rowsScrollTop,
+      Math.max(0, rowsHeight - this.#scrollContainer.containerHeight()),
+    );
   }
 
   /**

@@ -381,8 +381,16 @@ export class VirtualScrollContainerComponent<T>
     return this.rowsTop() + strategy.getTotalHeight(count) + this.rowsBottomSpace();
   });
 
-  /** Scroll offset into the rows (0 while the space above them is in view) */
-  readonly #rowsScrollTop = computed(() => Math.max(0, this.#scrollTop() - this.rowsTop()));
+  /**
+   * Scroll offset into the rows (0 while the space above them is in view), never past where the
+   * scroll range now ends. Items that shrink to end above the scroll position (a filter) leave it
+   * past the end until the browser lays the shorter list out and clamps it, and the scroll event
+   * of that clamp comes a frame later: rendered for the old position, that frame shows no row.
+   */
+  readonly #rowsScrollTop = computed(() => {
+    const maxScrollTop = Math.max(0, this.totalHeight() - this.effectiveHeight());
+    return Math.max(0, Math.min(this.#scrollTop(), maxScrollTop) - this.rowsTop());
+  });
 
   /** First visible item index */
   readonly #firstVisibleIndex = computed(() => {
