@@ -3,8 +3,6 @@
  * llms.txt) stay plain Markdown:
  *
  * - `**Selector:** \`vdnd-x\`` paragraphs get the `vdnd-api-selector` class (label + chip);
- * - a table cell ending in "Added in 3.3.0" shows the version as a `vdnd-since` badge
- *   (screen readers still read "Added in 3.3.0");
  * - `**required**` alone in a table cell gets the `vdnd-required` class (an outlined badge),
  *   and a cell that is only "—" gets `vdnd-api-none` (a faint dash);
  * - the cells of a table's "Type" and "Default" columns get `vdnd-api-type` and
@@ -29,8 +27,6 @@ interface HastOther {
 }
 
 type HastNode = HastText | HastElement | HastOther;
-
-const ADDED_IN = /\s*Added in (\d+\.\d+\.\d+)\.?\s*$/;
 
 /** Break opportunities in code: after `<` before a name (`TemplateRef<VirtualScroll…`) and
  * after `.` before a name (`DropEvent.destination`). */
@@ -82,20 +78,6 @@ function textOf(node: HastNode): string {
 /** `parts` joined by `<wbr>` elements. */
 function withBreaks(parts: string[]): HastNode[] {
   return parts.flatMap((part, index) => (index === 0 ? [text(part)] : [wbr(), text(part)]));
-}
-
-function sinceBadge(cell: HastElement): void {
-  const last = cell.children.at(-1);
-  if (!isText(last)) return;
-  const match = ADDED_IN.exec(last.value);
-  if (!match) return;
-  last.value = last.value.slice(0, match.index);
-  cell.children.push(
-    element('span', 'vdnd-since', [
-      element('span', 'vdnd-sr-only', [text('Added in ')]),
-      text(match[1]),
-    ]),
-  );
 }
 
 /** A cell that is only a dash ("no default") gets `vdnd-api-none`. */
@@ -187,7 +169,6 @@ function selectorLine(paragraph: HastElement): void {
 function visit(node: HastNode): void {
   if (isElement(node, 'table')) apiColumns(node);
   if (isElement(node, 'td')) {
-    sinceBadge(node);
     requiredBadge(node);
     emptyCell(node);
     codeBreaks(node);

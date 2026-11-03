@@ -35,6 +35,8 @@ Lists, items and the drag preview work inside an open shadow root, for example i
 
 ## Animations on rows that move
 
+Rows with an `animate.leave` or `animate.enter` animation replay it when they move, and can disappear. Turn the animations off during a drag, as shown below.
+
 This is a limitation of Angular. The lists move a row's view with `ViewContainerRef.move()`, as `*ngFor` does, and Angular animates a view that moves as if it left and came back: it plays the row's leave animation (`animate.leave`) and its enter animation (`animate.enter`). Only `@for` avoids that. Rows move when the items change order, for example after a drop or a sort. A row in `stickyItemIds` also moves each time it scrolls past the edge of the rendered rows.
 
 What happens to a row with `animate.leave` then depends on the Angular version:
@@ -79,6 +81,8 @@ Before Angular 21.2.1 this is not enough, because Angular removes a row that mov
 This only covers drags. Turn the animations off the same way around a sort of your own, and keep `animate.leave` off rows in `stickyItemIds`: they move while the list scrolls. A bound `[animate.leave]` also keeps a row from being recycled, even while its value is empty (see [Row recycling](/guide/features/performance#row-recycling)).
 
 ## Signals in the host bindings of recycled rows
+
+With [row recycling](/guide/features/performance#row-recycling), a row component that reads its item in a host binding makes each scroll step check every rendered row. Read the item in the component's template instead.
 
 This is a limitation of Angular. A list that [recycles rows](/guide/features/performance#row-recycling) hands the view of a row that scrolls out to a row that scrolls in, and the components and directives in that view get the new item through their inputs. Angular tracks the signals a row's host bindings read with the component view the row is in: the list's own view, or with `*vdndVirtualFor` your component's. When one of them changes, Angular checks that whole view again. A component or directive in the row whose host bindings read one of its signal inputs, or a value computed from one, makes each scroll step that reuses a view check every rendered row, not only the rows that came in. With `*vdndVirtualFor` your component's template runs again too. The same goes for an input bound to `first` or `last` of `*vdndVirtualFor`, which change for rows that stay rendered.
 

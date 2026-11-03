@@ -5,7 +5,7 @@ description: Edge scrolling while dragging, and how to tune or disable it.
 
 # Auto-scroll
 
-While an item is dragged near the edge of a scrollable list, the list scrolls toward that edge. The closer the pointer is to the edge, the faster it scrolls. Auto-scroll is on by default.
+While an item is dragged near the edge of a scrollable list, the list scrolls toward that edge. The closer the pointer is to the edge, the faster it scrolls. Auto-scroll is on by default, and works on both axes: a container that scrolls sideways scrolls left and right the same way.
 
 ```angular-html
 <vdnd-sortable-list [autoScrollConfig]="{ threshold: 80, maxSpeed: 20 }" ... />

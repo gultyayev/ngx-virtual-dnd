@@ -165,12 +165,12 @@ export interface DragEndEvent {
   /** ID of the droppable container the item originated from */
   droppableId: string;
   /**
-   * Whether the drag was cancelled: Escape, Tab during a keyboard drag, or, during a pointer
-   * drag, the window losing focus, the page being hidden or the system cancelling the touch
-   * (`touchcancel`). Releasing over no valid
-   * target (outside any droppable, or over a disabled droppable) is NOT a cancel —
-   * it reports `cancelled: false` with `destinationIndex: null`. Branch on
-   * `destinationIndex === null` to detect "no drop occurred".
+   * Whether the drag was cancelled: Escape, Tab during a keyboard drag, the dragged draggable
+   * being destroyed (its item removed mid-drag, for example), or, during a pointer drag, the
+   * window losing focus, the page being hidden or the system cancelling the touch
+   * (`touchcancel`). Releasing over no valid target (outside any droppable, or over a disabled
+   * droppable) is NOT a cancel — it reports `cancelled: false` with `destinationIndex: null`.
+   * Branch on `destinationIndex === null` to detect "no drop occurred".
    */
   cancelled: boolean;
   /** Optional user-provided data associated with the item */
@@ -179,8 +179,9 @@ export interface DragEndEvent {
   sourceIndex: number;
   /**
    * Final 0-indexed insertion position, or `null` when there is no valid drop target —
-   * a cancelled drag, a release outside every droppable, or a release over a disabled
-   * droppable. A non-null value pairs with the `DropEvent` the destination emits right after.
+   * a cancelled drag, a release outside every droppable, a release over a disabled
+   * droppable, or a keyboard drop into a droppable disabled or hidden after the drag moved
+   * into it. A non-null value pairs with the `DropEvent` the destination emits right after.
    */
   destinationIndex: number | null;
 }

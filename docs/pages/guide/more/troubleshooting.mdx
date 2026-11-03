@@ -21,5 +21,6 @@ Most problems come from one of the [rules that fail silently](/guide/essentials/
 | A custom control inside a row starts a drag instead of responding                | Native buttons and inputs are already excluded. For other controls, add the `no-drag` class to the control (it covers everything inside it), or use `dragHandle`. |
 | The preview loses its styling                                                    | The styles rely on ancestor selectors, and the preview is rendered under `<body>`. Target the preview's own classes.                                              |
 | Drops land in the wrong list where two lists overlap                             | Hit-testing is geometric. See [Known limitations](/guide/more/limitations#hit-testing).                                                                           |
+| A row replays its enter or leave animation after a drop, or disappears           | Angular animates rows that move. See [Animations on rows that move](/guide/more/limitations#animations-on-rows-that-move).                                        |
 
 Still stuck? Check the [FAQ](/guide/more/faq) and the [Known limitations](/guide/more/limitations), or [open an issue](https://github.com/gultyayev/ngx-virtual-dnd/issues) with a minimal reproduction.

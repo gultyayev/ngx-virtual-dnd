@@ -43,10 +43,19 @@ Marks an element as a drop target.
 | `autoScrollConfig`     | `Partial<AutoScrollConfig>` | `{}`         | Auto-scroll tuning                                                                               |
 | `constrainToContainer` | `boolean`                   | `false`      | Keep the preview and drop position inside the nearest `vdndScrollable` ancestor, or this element |
 
-| Output            | Type                   | Description                                                                          |
-| ----------------- | ---------------------- | ------------------------------------------------------------------------------------ |
-| `drop`            | `DropEvent`            | An item was dropped here (destination only; at release, right after `dragEnd`)       |
-| `placeholderMove` | `PlaceholderMoveEvent` | The placeholder moved within this droppable (every row displacement). Added in 3.2.0 |
+| Output            | Type                   | Description                                                                    |
+| ----------------- | ---------------------- | ------------------------------------------------------------------------------ |
+| `drop`            | `DropEvent`            | An item was dropped here (destination only; at release, right after `dragEnd`) |
+| `placeholderMove` | `PlaceholderMoveEvent` | The placeholder moved within this droppable (every row displacement)           |
+
+For a droppable that is its own scroll container, these methods scroll and measure its element. Get the instance with `viewChild(DroppableDirective)`.
+
+| Method            | Signature                 | Description                      |
+| ----------------- | ------------------------- | -------------------------------- |
+| `scrollBy`        | `(delta: number) => void` | Scroll the element by `delta` px |
+| `getScrollTop`    | `() => number`            | The element's `scrollTop`        |
+| `getScrollHeight` | `() => number`            | The element's `scrollHeight`     |
+| `getElement`      | `() => HTMLElement`       | The droppable's element          |
 
 ## DroppableGroupDirective
 

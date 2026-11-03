@@ -5,29 +5,38 @@ description: Keyboard dragging, focus handling, screen reader instructions and a
 
 # Accessibility
 
-Every draggable can be moved with the keyboard, with nothing to enable. The exception is an item that is itself a text field, a `select`, a checkbox or an editable element, which needs a focusable drag handle (see below).
+Every draggable can be moved with the keyboard, with nothing to enable. The exception is an item that is itself a text field, a `select`, a checkbox or an editable element, which needs a focusable drag handle (see [Controls in items](#controls-in-items)).
 
 ## Keyboard
 
-| Key                       | Not dragging                                                                                                       | During a keyboard drag                                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| <kbd>Tab</kbd>            | Moves focus between draggables                                                                                     | Cancels the drag                                                                                                |
-| <kbd>Space</kbd>          | Picks up the focused item (except in an item that is itself a text field, `select` or editable element; see below) | Drops                                                                                                           |
-| <kbd>Enter</kbd>          | —                                                                                                                  | Drops                                                                                                           |
-| <kbd>↑</kbd> <kbd>↓</kbd> | —                                                                                                                  | Moves the target position                                                                                       |
-| <kbd>←</kbd> <kbd>→</kbd> | —                                                                                                                  | Moves to the neighbouring list in the same group, by on-screen position (disabled and hidden lists are skipped) |
-| <kbd>Escape</kbd>         | —                                                                                                                  | Cancels. Also cancels pointer drags.                                                                            |
+| Key                       | Not dragging                   | During a keyboard drag                                                                                      |
+| ------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| <kbd>Tab</kbd>            | Moves focus between draggables | Cancels the drag                                                                                            |
+| <kbd>Space</kbd>          | Picks up the focused item      | Drops                                                                                                       |
+| <kbd>Enter</kbd>          | —                              | Drops                                                                                                       |
+| <kbd>↑</kbd> <kbd>↓</kbd> | —                              | Moves the target position                                                                                   |
+| <kbd>←</kbd> <kbd>→</kbd> | —                              | Moves to the neighbouring list in the same group, by on-screen position, skipping disabled and hidden lists |
+| <kbd>Escape</kbd>         | —                              | Cancels. Also cancels pointer drags.                                                                        |
 
-A hidden list is one that is still in the page but not shown: `display: none` on it or an ancestor (an inactive tab, a column hidden by a media query), `visibility: hidden`, or a size of zero. Pointer drags skip hidden lists too: the drag falls through to the list underneath, if any, as it does for a disabled list. A list disabled or hidden (`display: none` or `visibility: hidden`) after a keyboard drag moved into it takes no drop: <kbd>Space</kbd> or <kbd>Enter</kbd> ends the drag with no destination, and focus returns to the item in its own list.
+Each arrow key scrolls the list, and the scroll containers around it, to show where the item will land. So the keyboard reaches every item in a virtual list, not just the rendered ones.
 
-Pressing <kbd>Space</kbd> in a control inside an item, such as a text field or a button, types into or clicks that control and does not pick the item up, unless the control is the drag handle. The same goes for an item that is itself a text field, `textarea`, `select`, checkbox or editable element: <kbd>Space</kbd> types into it, toggles it or opens it, and only <kbd>Space</kbd> on a focusable drag handle inside it picks it up (see [Interactive children](/guide/features/drag-behavior#interactive-children)). So such an item needs one:
+### Hidden lists
 
-- An `input`, `textarea` or `select` can't hold a handle. Make a row element the draggable instead and put the control inside it.
-- A `[contenteditable]` draggable without a focusable handle can't be moved with the keyboard. Give it a handle such as `<span class="grip" contenteditable="false" tabindex="0" role="button" aria-label="Drag block">`.
+A hidden list is still in the page but not shown: `display: none` on it or an ancestor (an inactive tab, a column hidden by a media query), `visibility: hidden`, or a size of zero.
 
-After a keyboard drop or cancel, focus returns to the draggable element itself. For an editable block that puts the caret in the block; press <kbd>Tab</kbd> to reach a grip inside it again.
+- The arrow keys skip it, and a pointer drag falls through it to the list underneath, if any, as it does for a disabled list.
+- A list disabled or hidden (`display: none` or `visibility: hidden`) after a keyboard drag moved into it takes no drop: <kbd>Space</kbd> or <kbd>Enter</kbd> ends the drag with no destination, and focus returns to the item in its own list.
 
-Moving past the edge of the visible area scrolls the list to show where the item will land, so the keyboard reaches every item, not just the rendered ones. A list of plain `@for` rows scrolls the containers around it, nearest first.
+### Controls in items
+
+Pressing <kbd>Space</kbd> in a control inside an item, such as a text field or a button, types into or clicks the control instead of picking the item up, unless the control is the drag handle.
+
+An item that is itself a text field, `textarea`, `select`, checkbox or editable element keeps <kbd>Space</kbd> too, so only <kbd>Space</kbd> on a focusable drag handle inside it picks it up:
+
+- An `input`, `textarea` or `select` can't hold a handle. Make a row element the draggable and put the control inside it.
+- A `[contenteditable]` block needs a grip such as `<span class="grip" contenteditable="false" tabindex="0" role="button" aria-label="Drag block">`. See [Editable content](/guide/features/drag-behavior#editable-content).
+
+After a keyboard drop or cancel, focus returns to the draggable element itself. For an editable block that puts the caret in the block; press <kbd>Tab</kbd> to reach its grip again.
 
 ## Managed for you
 

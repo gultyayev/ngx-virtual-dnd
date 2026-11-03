@@ -10,9 +10,9 @@ Angular drag and drop for virtual scrolling. Sortable lists and boards that stay
 - Drag between multiple lists, with edge auto-scroll
 - Page-level scrolling, including Ionic `ion-content`
 - Drag handles, delays, axis locking, container constraints, custom previews
-- Opt-in shift animations, plus a per-step event for haptics
+- Opt-in shift and drop animations, plus a per-step event for haptics
 - Keyboard dragging and touch support
-- Angular 21+: standalone components and signals
+- Angular 21 and 22: standalone components and signals
 
 ## Installation
 

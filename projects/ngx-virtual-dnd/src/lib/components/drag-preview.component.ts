@@ -64,11 +64,14 @@ interface SettlingPreview {
  *
  * @example
  * ```html
- * <vdnd-drag-preview>
- *   <ng-template let-data let-id="draggableId">
- *     <div class="drag-preview">{{ data.name }}</div>
- *   </ng-template>
- * </vdnd-drag-preview>
+ * <!-- Default preview: a clone of the dragged element -->
+ * <vdnd-drag-preview />
+ *
+ * <!-- Custom preview: $implicit is the draggable's vdndDraggableData -->
+ * <ng-template #preview let-data let-id="draggableId">
+ *   <div class="drag-preview">{{ data.name }}</div>
+ * </ng-template>
+ * <vdnd-drag-preview [previewTemplate]="preview" />
  * ```
  */
 @Component({
