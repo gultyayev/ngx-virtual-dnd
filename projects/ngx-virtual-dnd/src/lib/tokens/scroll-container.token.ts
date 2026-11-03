@@ -17,10 +17,10 @@ export interface VdndScrollContainer {
 
   /**
    * The rendered scroll position from top in pixels (reactive). The built-in containers commit it
-   * once per animation frame, after a move of 5px or more, so it can lag the scrolling element:
-   * read that element's scrollTop for a position to compute from. vdnd-virtual-content's is
-   * relative to where its list starts: its parent scroll container's element scrollTop minus its
-   * content offset, clamped at 0.
+   * in the scroll event, after a move of 5px or more, so it can lag the scrolling element: read
+   * that element's scrollTop for a position to compute from. vdnd-virtual-content's is relative
+   * to where its list starts: its parent scroll container's element scrollTop minus its content
+   * offset, clamped at 0.
    */
   scrollTop(): number;
 

@@ -30,10 +30,7 @@ import { DragStateService } from '../services/drag-state.service';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
 import { KeyboardDragService } from '../services/keyboard-drag.service';
 import { DragPlaceholderComponent } from './drag-placeholder.component';
-import {
-  bindRafThrottledScrollTopSignal,
-  bindResizeObserverHeightSignal,
-} from '../utils/dom-signal-bindings';
+import { bindResizeObserverHeightSignal, bindScrollTopSignal } from '../utils/dom-signal-bindings';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { bindListStrategy, createHeightStrategy } from '../strategies/strategy-binding';
@@ -384,8 +381,16 @@ export class VirtualScrollContainerComponent<T>
     return this.rowsTop() + strategy.getTotalHeight(count) + this.rowsBottomSpace();
   });
 
-  /** Scroll offset into the rows (0 while the space above them is in view) */
-  readonly #rowsScrollTop = computed(() => Math.max(0, this.#scrollTop() - this.rowsTop()));
+  /**
+   * Scroll offset into the rows (0 while the space above them is in view), never past where the
+   * scroll range now ends. Items that shrink to end above the scroll position (a filter) leave it
+   * past the end until the browser lays the shorter list out and clamps it, and the scroll event
+   * of that clamp comes a frame later: rendered for the old position, that frame shows no row.
+   */
+  readonly #rowsScrollTop = computed(() => {
+    const maxScrollTop = Math.max(0, this.totalHeight() - this.effectiveHeight());
+    return Math.max(0, Math.min(this.#scrollTop(), maxScrollTop) - this.rowsTop());
+  });
 
   /** First visible item index */
   readonly #firstVisibleIndex = computed(() => {
@@ -741,15 +746,17 @@ export class VirtualScrollContainerComponent<T>
       height: this.#measuredHeight,
       minDeltaPx: 1,
       scrollTop: this.#scrollTop,
+      onCommit: () => this.#renderNow(),
     });
 
-    // Scroll listener outside Angular zone with RAF throttling.
-    // This avoids template event binding which would mark the component dirty 60x/sec.
-    this.#scrollCleanup = bindRafThrottledScrollTopSignal({
+    // Scroll listener outside Angular zone: a template event binding would mark the component
+    // dirty on every scroll event.
+    this.#scrollCleanup = bindScrollTopSignal({
       element,
       ngZone: this.#ngZone,
       scrollTop: this.#scrollTop,
       thresholdPx: 5,
+      onCommit: () => this.#renderNow(),
     });
 
     // Observe rendered items for dynamic height measurement
@@ -863,6 +870,18 @@ export class VirtualScrollContainerComponent<T>
   }
 
   /**
+   * Render the rows of a scroll position or size committed in the scroll event or the resize
+   * observer callback: before the browser paints the frame that first shows it. Rendered later
+   * (the effect runs in the change detection the commit schedules, after that frame), a fast
+   * scroll would paint blank space wherever it moved past the overscan, and a list shown again or
+   * grown taller would paint where it has no rows. Run in Angular's zone, as change detection is:
+   * the listeners of the rows it creates run there. The effect then finds nothing left to render.
+   */
+  #renderNow(): void {
+    this.#ngZone.run(() => this.#render());
+  }
+
+  /**
    * Render the content offset, the rows and the placeholder. From an effect, not the template:
    * Angular checks every row view in this component's view each time a signal its template reads
    * changes, so reading the placeholder there re-rendered every row on each placeholder move.
@@ -911,6 +930,7 @@ export class VirtualScrollContainerComponent<T>
         recycle,
         this.#viewCheckPending,
       );
+      this.#unobserveRemovedRows();
       this.#renderPlaceholder(outlet, slot, placeholderHeight);
     });
   }
@@ -1106,6 +1126,24 @@ export class VirtualScrollContainerComponent<T>
   }
 
   /**
+   * Stop measuring the rows a render took out of the DOM (destroyed, or pooled with recycleRows),
+   * right away rather than with the observation of the rows that came in (#observeRenderedItems,
+   * after the next change detection). A detached row reports a size of 0 at a shallow depth: when
+   * the render runs in a ResizeObserver callback (a resize, see #renderNow), the browser can't
+   * deliver that in the same frame and raises a ResizeObserver loop error.
+   */
+  #unobserveRemovedRows(): void {
+    const observer = this.#itemResizeObserver();
+    if (!observer) return;
+    for (const [key, element] of this.#observedElementByKey) {
+      if (!element.isConnected) {
+        observer.unobserve(element);
+        this.#observedElementByKey.delete(key);
+      }
+    }
+  }
+
+  /**
    * Observe currently rendered items' DOM elements for height changes.
    * Called after view init; re-observes after each render in dynamic mode, and every rendered
    * item when a new observer is created.
@@ -1191,8 +1229,8 @@ export class VirtualScrollContainerComponent<T>
    * Get the current scroll position.
    */
   getScrollTop(): number {
-    // Read the element: the scroll signal is the rendered position, committed once per animation
-    // frame and only after a 5px move. Server rendering has no layout, so fall back to it there.
+    // Read the element: the scroll signal is the rendered position, committed in the scroll event
+    // and only after a 5px move. Server rendering has no layout, so fall back to it there.
     const scrollTop = this.#elementRef.nativeElement.scrollTop;
     return Number.isFinite(scrollTop) ? scrollTop : this.#scrollTop();
   }

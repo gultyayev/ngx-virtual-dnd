@@ -19,3 +19,6 @@ Load this doc when debugging unexpected behavior.
 | Short item displaces tall item too early              | Probe enters tall item's range at ~20% overlap                     | Already fixed — midpoint refinement in `DragIndexCalculatorService`                     |
 | Autoscroll stops short of the end, pointer at rest    | List grew after autoscroll found no room left                      | Already fixed — `AutoScrollService` retries it when its geometry changes                |
 | Each recycling scroll step checks every row           | A row's host binding reads a signal input of the row               | Angular limitation (decision #10): read it in the row's template, or untracked          |
+| Blank space in a list while scrolling fast            | Rows rendered after the frame that shows the scroll                | Render in the scroll event (decision #13); `e2e/scroll-rendering.spec.ts` measures it   |
+| A list flashes empty when shown again or resized      | Rows rendered after the frame its ResizeObserver reported          | Render in the observer callback (decision #13)                                          |
+| A list flashes empty when its items shrink (a filter) | Range computed for a scroll position past the new end              | Clamp it to where the rows end (decision #13)                                           |

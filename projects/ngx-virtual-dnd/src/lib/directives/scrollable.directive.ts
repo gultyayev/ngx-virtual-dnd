@@ -11,13 +11,11 @@ import {
 } from '@angular/core';
 import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-container.token';
 import { AutoScrollConfig, AutoScrollService } from '../services/auto-scroll.service';
-import {
-  bindRafThrottledScrollTopSignal,
-  bindResizeObserverHeightSignal,
-} from '../utils/dom-signal-bindings';
+import { bindResizeObserverHeightSignal, bindScrollTopSignal } from '../utils/dom-signal-bindings';
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
 import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
 import { validScrollInset } from '../utils/scroll-insets';
+import { ViewportChangeListeners } from '../utils/viewport-changes';
 
 /**
  * Directive that marks an element as a scrollable container for virtual scrolling.
@@ -95,6 +93,9 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
   /** Measured container height (reactive) */
   readonly #containerHeight = signal(0);
 
+  /** The lists that render each scroll and resize before the browser paints it */
+  readonly #viewportChanges = new ViewportChangeListeners();
+
   /** Cleanup function for scroll listener */
   #scrollCleanup: (() => void) | null = null;
   #resizeCleanup: (() => void) | null = null;
@@ -160,6 +161,17 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
     this.nativeElement.scrollTo(options);
   }
 
+  /**
+   * Call `listener` after each scroll position this container commits in its scroll event, and
+   * each size or restored scroll position its ResizeObserver reports: before the browser paints
+   * them (`*vdndVirtualFor` renders its rows there). Returns the unsubscribe.
+   *
+   * @internal
+   */
+  onViewportChange(listener: () => void): () => void {
+    return this.#viewportChanges.onViewportChange(listener);
+  }
+
   // ========== Additional API ==========
 
   /** Get the measured container height */
@@ -173,7 +185,7 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
       0,
       Math.min(
         // The element's position, not scrollTop(): that signal is the rendered position, committed
-        // once per animation frame and only after a 5px move, so calls in one frame (or after a
+        // in the scroll event and only after a 5px move, so calls in one frame (or after a
         // scrollTo()) would overwrite each other and small steps would never add up.
         this.nativeElement.scrollTop + delta,
         this.nativeElement.scrollHeight - this.nativeElement.clientHeight,
@@ -200,11 +212,12 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
   readonly #scrollThreshold = 5;
 
   #setupScrollListener(): void {
-    this.#scrollCleanup = bindRafThrottledScrollTopSignal({
+    this.#scrollCleanup = bindScrollTopSignal({
       element: this.nativeElement,
       ngZone: this.#ngZone,
       scrollTop: this.#scrollTop,
       thresholdPx: this.#scrollThreshold,
+      onCommit: () => this.#viewportChanges.notify(),
     });
   }
 
@@ -215,6 +228,7 @@ export class ScrollableDirective implements VdndScrollContainer, OnInit, OnDestr
       height: this.#containerHeight,
       minDeltaPx: 1,
       scrollTop: this.#scrollTop,
+      onCommit: () => this.#viewportChanges.notify(),
     });
   }
 }

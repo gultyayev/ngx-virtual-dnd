@@ -4,10 +4,7 @@
 import { NgZone, signal } from '@angular/core';
 import { KeyboardDragDeps, KeyboardDragHandler } from './handlers/keyboard-drag.handler';
 import { PointerDragDeps, PointerDragHandler } from './handlers/pointer-drag.handler';
-import {
-  bindRafThrottledScrollTopSignal,
-  bindResizeObserverHeightSignal,
-} from './utils/dom-signal-bindings';
+import { bindScrollTopSignal, bindResizeObserverHeightSignal } from './utils/dom-signal-bindings';
 
 /**
  * Server rendering has no global `document` or `window` (Angular renders into its own DOCUMENT),
@@ -55,7 +52,7 @@ describe('Server rendering (no global document)', () => {
     it('should read a missing scroll position as 0', () => {
       const scrollTop = signal(-1);
 
-      const cleanup = bindRafThrottledScrollTopSignal({
+      const cleanup = bindScrollTopSignal({
         element: serverElement(),
         ngZone,
         scrollTop,

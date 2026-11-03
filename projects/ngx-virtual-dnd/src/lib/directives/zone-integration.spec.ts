@@ -12,6 +12,9 @@ import {
 import { ComponentFixtureAutoDetect, TestBed } from '@angular/core/testing';
 import { DraggableDirective } from './draggable.directive';
 import { DroppableDirective } from './droppable.directive';
+import { ScrollableDirective } from './scrollable.directive';
+import { VirtualForDirective } from './virtual-for.directive';
+import { VirtualScrollContainerComponent } from '../components/virtual-scroll-container.component';
 
 declare const Zone: { root: { run<T>(fn: () => T): T } };
 
@@ -57,6 +60,114 @@ class PressRecordingDraggableDirective extends DraggableDirective {
   imports: [PressRecordingDraggableDirective],
 })
 class PressRecordingHostComponent {}
+
+interface ClickRow {
+  id: string;
+}
+
+const CLICK_ROWS: ClickRow[] = Array.from({ length: 1000 }, (_, i) => ({ id: `row-${i}` }));
+
+@Component({
+  template: `
+    <ng-template #row let-row>
+      <button type="button" [attr.data-id]="row.id" (click)="clicks = clicks + 1">
+        {{ row.id }}
+      </button>
+    </ng-template>
+    <vdnd-virtual-scroll
+      [items]="rows"
+      [itemHeight]="50"
+      [containerHeight]="300"
+      [itemIdFn]="rowId"
+      [itemTemplate]="row"
+    />
+    <p data-testid="clicks">{{ clicks }}</p>
+  `,
+  imports: [VirtualScrollContainerComponent],
+})
+class ScrolledRowsHostComponent {
+  readonly rows = CLICK_ROWS;
+  readonly rowId = (row: ClickRow): string => row.id;
+  // A plain field, not a signal: with zone.js only a render triggered by the zone shows it
+  clicks = 0;
+}
+
+@Component({
+  template: `
+    <div class="scroller" vdndScrollable>
+      <ng-container *vdndVirtualFor="let row of rows; itemHeight: 50; trackBy: trackById">
+        <button type="button" [attr.data-id]="row.id" (click)="clicks = clicks + 1">
+          {{ row.id }}
+        </button>
+      </ng-container>
+    </div>
+    <p data-testid="clicks">{{ clicks }}</p>
+  `,
+  imports: [ScrollableDirective, VirtualForDirective],
+})
+class ScrolledVirtualForHostComponent {
+  readonly rows = CLICK_ROWS;
+  readonly trackById = (_index: number, row: ClickRow): string => row.id;
+  clicks = 0;
+}
+
+describe('rows rendered by a scroll in a zone.js app', () => {
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = class {
+      observe = jest.fn();
+      unobserve = jest.fn();
+      disconnect = jest.fn();
+    } as unknown as typeof ResizeObserver;
+    // jsdom has no layout: every scroll container is 300px tall
+    jest.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+    TestBed.configureTestingModule({
+      providers: [
+        provideZoneChangeDetection(),
+        { provide: ComponentFixtureAutoDetect, useValue: true },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  // The rows render in the scroll event, which reaches the library outside Angular's zone. A row
+  // created there would run its listeners outside the zone, and nothing would render what they do.
+  for (const [name, host, scrollerSelector] of [
+    ['vdnd-virtual-scroll', ScrolledRowsHostComponent, 'vdnd-virtual-scroll'],
+    ['*vdndVirtualFor', ScrolledVirtualForHostComponent, '.scroller'],
+  ] as const) {
+    it(`runs the listeners of the rows a scroll renders in the zone (${name})`, async () => {
+      const fixture = TestBed.createComponent<{ clicks: number }>(host);
+      await fixture.whenStable();
+      const element: HTMLElement = fixture.nativeElement;
+      const scroller = element.querySelector<HTMLElement>(scrollerSelector);
+      if (!scroller) {
+        throw new Error(`${scrollerSelector} not rendered`);
+      }
+
+      Zone.root.run(() => {
+        scroller.scrollTop = 5000;
+        scroller.dispatchEvent(new Event('scroll'));
+      });
+      await fixture.whenStable();
+      // The last row in range: *vdndVirtualFor reuses the views of the rows that left (created in
+      // the zone) for the first rows that come in, and creates this one in the scroll event
+      const row = element.querySelector<HTMLElement>('[data-id="row-109"]');
+      if (!row) {
+        throw new Error('row-109 not rendered by the scroll');
+      }
+      Zone.root.run(() => row.click());
+
+      expect(element.querySelector('[data-testid="clicks"]')?.textContent).toBe('1');
+      fixture.destroy();
+    });
+  }
+});
 
 describe('drag outputs in a zone.js app', () => {
   beforeEach(() => {

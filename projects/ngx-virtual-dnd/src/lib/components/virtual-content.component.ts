@@ -10,6 +10,7 @@ import {
   NgZone,
   PLATFORM_ID,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
@@ -18,6 +19,7 @@ import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-con
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { createHeightStrategy } from '../strategies/strategy-binding';
 import { ContentHeaderDirective } from '../directives/content-header.directive';
+import { hasViewportChanges, ViewportChangeListeners } from '../utils/viewport-changes';
 
 /**
  * A virtual content component that provides wrapper-based positioning
@@ -110,8 +112,9 @@ import { ContentHeaderDirective } from '../directives/content-header.directive';
       <!-- Spacer maintains scroll height for the virtual list portion -->
       <div class="vdnd-content-spacer" [style.height.px]="totalHeight()"></div>
 
-      <!-- Content wrapper with GPU-accelerated transform -->
-      <div class="vdnd-content-wrapper" [style.transform]="contentTransform()">
+      <!-- Content wrapper with GPU-accelerated transform. Written, not bound: it moves with the
+           rows, which *vdndVirtualFor renders in the scroll event (see setRenderStartIndex). -->
+      <div #contentWrapper class="vdnd-content-wrapper">
         <ng-content />
       </div>
     </div>
@@ -135,6 +138,9 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
 
   /** The rows' box, right below the header: where the list starts */
   private readonly virtualArea = viewChild<ElementRef<HTMLElement>>('virtualArea');
+
+  /** The content wrapper, which the transform moves to the first rendered row */
+  private readonly contentWrapper = viewChild<ElementRef<HTMLElement>>('contentWrapper');
 
   // ========== Inputs ==========
 
@@ -171,6 +177,12 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
    * this element's border and padding, content before it).
    */
   readonly #measuredRowsOffset = signal(0);
+
+  /** Content transform last written to the content wrapper */
+  #contentTransformSet: string | null = null;
+
+  /** The lists that render the rows a header resize moves into view, before it is painted */
+  readonly #headerChanges = new ViewportChangeListeners();
 
   // ========== Strategy ==========
 
@@ -228,6 +240,8 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
 
   constructor() {
     this.#setupHeaderMeasurement();
+    // The offset also follows the strategy's offsets: measured heights, a dragged item's slot
+    effect(() => this.#writeContentTransform());
   }
 
   // ========== VdndVirtualViewport Implementation ==========
@@ -248,9 +262,14 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
   /**
    * Called by VirtualForDirective to inform this viewport of the actual
    * first rendered item index. Used for wrapper positioning.
+   *
+   * The wrapper moves right away: the directive renders the rows of a scroll in its scroll event,
+   * and they must show at their offset in the frame that first shows the scroll.
    */
   setRenderStartIndex(index: number): void {
     this.#renderStartIndex.set(index);
+    // Untracked: the directive calls this from its effect, which must not depend on it
+    untracked(() => this.#writeContentTransform());
   }
 
   getOffsetForIndex(index: number): number {
@@ -271,12 +290,43 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
     this.#parentScrollContainer.scrollTo(adjustedOptions);
   }
 
+  /**
+   * Call `listener` after each change of what the parent scroll container shows (its scroll and
+   * resizes, when it tells about them: a custom scroll container doesn't), and after each header
+   * resize that moves the rows: before the browser paints them (`*vdndVirtualFor` renders its rows
+   * there). Returns the unsubscribe.
+   *
+   * @internal
+   */
+  onViewportChange(listener: () => void): () => void {
+    const parent = this.#parentScrollContainer;
+    const stopParent = hasViewportChanges(parent)
+      ? parent.onViewportChange(listener)
+      : () => undefined;
+    const stopHeader = this.#headerChanges.onViewportChange(listener);
+    return () => {
+      stopParent();
+      stopHeader();
+    };
+  }
+
   // ========== Private Methods ==========
+
+  /** Move the content wrapper to the first rendered row's offset, unless it is there already. */
+  #writeContentTransform(): void {
+    const transform = this.contentTransform();
+    const wrapper = this.contentWrapper()?.nativeElement;
+    if (!wrapper || transform === this.#contentTransformSet) return;
+    wrapper.style.transform = transform;
+    this.#contentTransformSet = transform;
+  }
 
   /**
    * Keeps `#measuredRowsOffset` in sync while a header is projected: measures now, and again
    * whenever a ResizeObserver reports the header or the parent scroll container resizing (the
-   * container's width can reflow what sits above the header).
+   * container's width can reflow what sits above the header). The observer reports after the
+   * frame's layout and before its paint: the lists render the rows a new offset moves into view
+   * right away, or that frame would show the rows where the old offset put them.
    */
   #setupHeaderMeasurement(): void {
     effect((onCleanup) => {
@@ -293,17 +343,25 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
 
       const header = dir.elementRef.nativeElement;
       const container = this.#parentScrollContainer.nativeElement;
-      const measure = (): void => {
+      /** Returns whether the offset changed */
+      const measure = (): boolean => {
         const offset = this.#measureRowsOffset(container);
-        if (offset !== null) {
-          this.#measuredRowsOffset.set(offset);
+        if (offset === null || offset === untracked(this.#measuredRowsOffset)) {
+          return false;
         }
+        this.#measuredRowsOffset.set(offset);
+        return true;
       };
+      // In change detection: the lists' effects render it in this pass
       measure();
 
       let observer: ResizeObserver | null = null;
       this.#ngZone.runOutsideAngular(() => {
-        observer = new ResizeObserver(measure);
+        observer = new ResizeObserver(() => {
+          if (measure()) {
+            this.#headerChanges.notify();
+          }
+        });
         observer.observe(header, { box: 'border-box' });
         observer.observe(container);
       });

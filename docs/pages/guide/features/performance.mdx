@@ -27,12 +27,16 @@ Turn it on for rows that are costly to create (several components, many elements
 
 ## Overscan
 
-`overscan` is the number of rows rendered beyond the visible area, above and below. The default is `3`. Raise it if fast scrolling shows empty space before rows appear. Lower it when rows are costly to render.
+`overscan` is the number of rows rendered beyond the visible area, above and below. The default is `3`.
+
+Each scroll renders the rows for its new position in its scroll event, before the browser paints the frame that shows it, so a fast flick or a dragged scrollbar thumb shows rows in every frame. Overscan covers the frames a browser draws before the page has rendered: Firefox scrolls on its compositor without waiting for the page, and every browser does when rendering a frame takes too long. Raise it if fast scrolling still shows empty space at the edge the list scrolls toward: in Firefox, or with rows that take long to render. Lower it when rows are costly to render and fast scrolling shows none.
 
 ```angular-html
 <vdnd-sortable-list [overscan]="5" ... />
 
-<ng-container *vdndVirtualFor="let task of tasks(); trackBy: trackById; overscan: 5">...</ng-container>
+<ng-container *vdndVirtualFor="let task of tasks(); trackBy: trackById; overscan: 5">
+  ...
+</ng-container>
 ```
 
 `<vdnd-sortable-list>`, `<vdnd-virtual-scroll>` and `*vdndVirtualFor` accept it.
