@@ -23,8 +23,6 @@ import {
 interface HomeHero extends Hero {
   /** Part of `text` drawn in the accent color. */
   highlight?: string;
-  /** Pill above the title, linking to the release it announces. */
-  announcement?: { badge: string; text: string; link: string };
   /** Install command with a copy button, under the actions. */
   install?: string;
 }
@@ -246,13 +244,6 @@ export function HomeLayout(props: HomeLayoutProps) {
       <section className="vdnd-home-hero">
         <div className="vdnd-home-hero__inner">
           <div className="vdnd-home-hero__text">
-            {hero.announcement && (
-              <Link className="vdnd-home-announce" href={hero.announcement.link}>
-                <span className="vdnd-home-announce__badge">{hero.announcement.badge}</span>
-                <span className="vdnd-home-announce__text">{hero.announcement.text}</span>
-                <IconArrowRight size={15} />
-              </Link>
-            )}
             {hero.name && <p className="vdnd-home-hero__name">{hero.name}</p>}
             {hero.text && <HeroTitle text={hero.text} highlight={hero.highlight} />}
             {hero.tagline && <p className="vdnd-home-hero__tagline">{hero.tagline}</p>}

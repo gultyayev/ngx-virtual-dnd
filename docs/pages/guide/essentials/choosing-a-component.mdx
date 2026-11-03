@@ -5,7 +5,7 @@ description: Pick between the sortable list, the low-level scroller, page-level 
 
 # Choosing a component
 
-The first three options support dynamic heights, pointer auto-scroll and moving items between lists. They differ in how much markup you control and in which element scrolls. Only `<vdnd-sortable-list>` and `<vdnd-virtual-scroll>` scroll to follow a keyboard drag.
+All four support dynamic heights, auto-scroll, keyboard dragging and moving items between lists. They differ in how much markup you control and in which element scrolls.
 
 | You want                                                         | Use                                                                |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -16,7 +16,7 @@ The first three options support dynamic heights, pointer auto-scroll and moving 
 
 ## Sortable list
 
-The default. One element combines the droppable, the virtual scroller and the placeholder. It also keeps the dragged item rendered while it is scrolled out of view. See the [Quick start](/guide/start/quick-start).
+The default. One element combines the droppable, the virtual scroller and the placeholder. See the [Quick start](/guide/start/quick-start).
 
 ```angular-html
 <vdnd-sortable-list

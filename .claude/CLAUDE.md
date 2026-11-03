@@ -26,7 +26,7 @@ These rules prevent common mistakes that cause hard-to-debug issues:
 
 10. **Never use `expect(true).toBe(true)` or similar no-op assertions:** Every test assertion must verify actual behavior. Tests that always pass regardless of code behavior provide false confidence and zero coverage. If you can't write a meaningful assertion, the test shouldn't exist.
 
-11. **Keep skills and docs in sync with public API:** Any change to the consumer-facing API (new/changed/removed component, directive, input, output, event, utility, token, CSS class, or keyboard shortcut) must update `skills/ngx-virtual-dnd/SKILL.md` and/or `skills/ngx-virtual-dnd/references/api-reference.md` **and** the docs site (`docs/pages/api/*.mdx` plus any guide page that covers it) in the same commit. Internal-only changes (bug fixes, refactoring, performance) do not require skill or docs updates unless they change observable consumer behavior.
+11. **Keep skills and docs in sync with public API:** Any change to the consumer-facing API (new/changed/removed component, directive, input, output, event, utility, token, CSS class, or keyboard shortcut) must update `skills/ngx-virtual-dnd/SKILL.md` and/or `skills/ngx-virtual-dnd/references/api-reference.md` **and** the docs site (`docs/pages/api/*.mdx` plus any guide page that covers it) in the same commit. Internal-only changes (bug fixes, refactoring, performance) do not require skill or docs updates unless they change observable consumer behavior. Describe the current version only: no "Added in x.y.z" notes, "new" badges, announcements or release highlights. Releases are a script (nobody edits the docs then), so the generated `CHANGELOG.md` is the record of what changed when.
 
 ## Project Structure
 

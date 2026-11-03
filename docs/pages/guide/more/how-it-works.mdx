@@ -15,9 +15,10 @@ When a drag starts, ngx-virtual-dnd records the drop targets in the active group
 
 The cache updates itself:
 
-- rectangles are re-read after scroll and resize, and when a target resizes (through `ResizeObserver`)
-- targets mounted or removed during the drag are added or dropped
-- each rectangle is clipped to its nearest `vdndScrollable` ancestor, so a list scrolled out of view inside a container cannot be hit
+- Rectangles are re-read after a scroll or resize, when a target resizes (through `ResizeObserver`), and when a target moves without resizing.
+- Targets mounted or removed during the drag are added or dropped.
+- Disabled and hidden targets are skipped.
+- Each rectangle is clipped to the `vdndScrollable` elements around it, minus the space their [scroll insets](/guide/features/page-scroll#sticky-headers-and-footers) cover, so a list scrolled out of view, or behind a sticky header, cannot be hit. A scroll container that is not marked `vdndScrollable` doesn't clip the lists in it.
 
 When rectangles overlap, the last one in document order wins.
 
