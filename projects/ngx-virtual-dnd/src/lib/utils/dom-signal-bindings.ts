@@ -54,6 +54,11 @@ export function bindScrollTopSignal(options: {
  * reads 0 while it has no layout box, so the scroll listener can miss or mis-read it. The
  * observer reports such an element at size 0 and again once it has a box, right after layout,
  * so the read forces no extra layout.
+ *
+ * The observer reports after the frame's layout and before its paint, so whatever `onCommit`
+ * renders for a changed height or scroll position shows in that frame. Left to the change
+ * detection the signal change schedules, a list shown again paints its first frame with the rows
+ * it had while hidden (none in view), and a taller one with no rows where it grew.
  */
 export function bindResizeObserverHeightSignal(options: {
   element: HTMLElement;
@@ -61,8 +66,9 @@ export function bindResizeObserverHeightSignal(options: {
   height: WritableSignal<number>;
   minDeltaPx?: number;
   scrollTop?: WritableSignal<number>;
+  onCommit?: () => void;
 }): () => void {
-  const { element, ngZone, height, minDeltaPx = 1, scrollTop } = options;
+  const { element, ngZone, height, minDeltaPx = 1, scrollTop, onCommit } = options;
 
   if (typeof ResizeObserver === 'undefined') {
     height.set(layoutValue(element.clientHeight));
@@ -73,13 +79,21 @@ export function bindResizeObserverHeightSignal(options: {
 
   ngZone.runOutsideAngular(() => {
     observer = new ResizeObserver((entries) => {
+      let changed = false;
       for (const entry of entries) {
         const nextHeight = entry.contentRect.height;
         if (Math.abs(nextHeight - height()) > minDeltaPx) {
           height.set(nextHeight);
+          changed = true;
         }
       }
-      scrollTop?.set(element.scrollTop);
+      if (scrollTop && element.scrollTop !== scrollTop()) {
+        scrollTop.set(element.scrollTop);
+        changed = true;
+      }
+      if (changed) {
+        onCommit?.();
+      }
     });
     observer.observe(element);
   });

@@ -738,6 +738,7 @@ export class VirtualScrollContainerComponent<T>
       height: this.#measuredHeight,
       minDeltaPx: 1,
       scrollTop: this.#scrollTop,
+      onCommit: () => this.#renderNow(),
     });
 
     // Scroll listener outside Angular zone: a template event binding would mark the component
@@ -747,7 +748,7 @@ export class VirtualScrollContainerComponent<T>
       ngZone: this.#ngZone,
       scrollTop: this.#scrollTop,
       thresholdPx: 5,
-      onCommit: () => this.#renderScroll(),
+      onCommit: () => this.#renderNow(),
     });
 
     // Observe rendered items for dynamic height measurement
@@ -861,13 +862,14 @@ export class VirtualScrollContainerComponent<T>
   }
 
   /**
-   * Render the rows of a committed scroll position in its scroll event: before the browser lays
-   * out and paints the frame that first shows it. Rendered later (the effect runs in the change
-   * detection the scroll schedules, after that frame), a fast scroll would paint blank space
-   * wherever it moved past the overscan. Run in Angular's zone, as change detection is: the
-   * listeners of the rows it creates run there. The effect then finds nothing left to render.
+   * Render the rows of a scroll position or size committed in the scroll event or the resize
+   * observer callback: before the browser paints the frame that first shows it. Rendered later
+   * (the effect runs in the change detection the commit schedules, after that frame), a fast
+   * scroll would paint blank space wherever it moved past the overscan, and a list shown again or
+   * grown taller would paint where it has no rows. Run in Angular's zone, as change detection is:
+   * the listeners of the rows it creates run there. The effect then finds nothing left to render.
    */
-  #renderScroll(): void {
+  #renderNow(): void {
     this.#ngZone.run(() => this.#render());
   }
 
@@ -920,6 +922,7 @@ export class VirtualScrollContainerComponent<T>
         recycle,
         this.#viewCheckPending,
       );
+      this.#unobserveRemovedRows();
       this.#renderPlaceholder(outlet, slot, placeholderHeight);
     });
   }
@@ -1112,6 +1115,24 @@ export class VirtualScrollContainerComponent<T>
           }
         }),
     );
+  }
+
+  /**
+   * Stop measuring the rows a render took out of the DOM (destroyed, or pooled with recycleRows),
+   * right away rather than with the observation of the rows that came in (#observeRenderedItems,
+   * after the next change detection). A detached row reports a size of 0 at a shallow depth: when
+   * the render runs in a ResizeObserver callback (a resize, see #renderNow), the browser can't
+   * deliver that in the same frame and raises a ResizeObserver loop error.
+   */
+  #unobserveRemovedRows(): void {
+    const observer = this.#itemResizeObserver();
+    if (!observer) return;
+    for (const [key, element] of this.#observedElementByKey) {
+      if (!element.isConnected) {
+        observer.unobserve(element);
+        this.#observedElementByKey.delete(key);
+      }
+    }
   }
 
   /**

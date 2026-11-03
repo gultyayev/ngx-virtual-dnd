@@ -29,7 +29,7 @@ import { bindListStrategy, createHeightStrategy } from '../strategies/strategy-b
 import { VDND_ANIMATION_CONFIG } from '../tokens/animation-config.token';
 import { ShiftAnimationEntry, ShiftAnimator } from '../utils/shift-animator';
 import { RenderEntry, VirtualForRowRenderer } from '../rendering/virtual-for-row-renderer';
-import { hasScrollCommits } from '../utils/scroll-commits';
+import { hasViewportChanges } from '../utils/viewport-changes';
 
 /**
  * Context provided to the template for each virtual item.
@@ -156,8 +156,8 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   /** Whether this directive counts as a user of the position it set on the scroll container */
   #usesScrollContainerPosition = false;
 
-  /** Stops rendering the scroll container's committed scroll positions in their scroll events */
-  #scrollCommitCleanup: (() => void) | null = null;
+  /** Stops rendering the scroll container's viewport changes before they are painted */
+  #viewportChangeCleanup: (() => void) | null = null;
 
   /** ResizeObserver for dynamic height measurement */
   #resizeObserver: ResizeObserver | null = null;
@@ -441,16 +441,16 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     // Create placeholder element for drag operations
     this.#createPlaceholder();
 
-    // Render the rows of each scroll position in its scroll event, before the browser paints it.
-    // A custom scroll container that doesn't tell about its commits leaves it to the effect.
+    // Render the rows of each scroll and resize before the browser paints it. A custom scroll
+    // container that doesn't tell about them leaves it to the effect.
     const scrollContainer = this.#scrollContainer;
-    if (hasScrollCommits(scrollContainer)) {
-      this.#scrollCommitCleanup = scrollContainer.onScrollCommit(() => this.#renderScroll());
+    if (hasViewportChanges(scrollContainer)) {
+      this.#viewportChangeCleanup = scrollContainer.onViewportChange(() => this.#renderNow());
     }
   }
 
   ngOnDestroy(): void {
-    this.#scrollCommitCleanup?.();
+    this.#viewportChangeCleanup?.();
     this.#rowRenderer.destroy();
 
     // Clean up spacer element (only if we created one)
@@ -673,14 +673,15 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   }
 
   /**
-   * Render the rows of a scroll position the scroll container committed, in its scroll event:
-   * before the browser lays out and paints the frame that first shows it. Rendered later (the
-   * effect runs in the change detection the scroll schedules, after that frame), a fast scroll
-   * would paint blank space wherever it moved past the overscan. Run in Angular's zone, as change
+   * Render the rows of a scroll position or size the scroll container committed (in its scroll
+   * event or resize observer callback): before the browser paints the frame that first shows it.
+   * Rendered later (the effect runs in the change detection the commit schedules, after that
+   * frame), a fast scroll would paint blank space wherever it moved past the overscan, and a list
+   * shown again or grown taller would paint where it has no rows. Run in Angular's zone, as change
    * detection is: the listeners of the rows it creates run there. The effect then finds nothing
    * left to render.
    */
-  #renderScroll(): void {
+  #renderNow(): void {
     this.#ngZone.run(() => this.#updateViews());
   }
 

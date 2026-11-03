@@ -82,6 +82,45 @@ describe('DOM signal bindings', () => {
       expect(height()).toBe(300);
     });
 
+    it('should commit a new height in the observer callback', () => {
+      // The observer reports after layout, before paint: what onCommit renders shows in that frame
+      const height = signal(0);
+      const onCommit = jest.fn(() => expect(height()).toBe(700));
+      offset = 0;
+      bindResizeObserverHeightSignal({ element, ngZone, height, onCommit });
+
+      resize(700);
+
+      expect(onCommit).toHaveBeenCalledTimes(1);
+    });
+
+    it('should commit a scroll offset restored without a scroll event', () => {
+      const height = signal(300);
+      const scrollTop = signal(0);
+      const onCommit = jest.fn(() => expect(scrollTop()).toBe(1200));
+      bindResizeObserverHeightSignal({ element, ngZone, height, scrollTop, onCommit });
+      height.set(300);
+
+      offset = 1200;
+      resize(300);
+
+      expect(onCommit).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not commit a resize that changes neither the height nor the scroll offset', () => {
+      const height = signal(0);
+      const scrollTop = signal(0);
+      const onCommit = jest.fn();
+      bindResizeObserverHeightSignal({ element, ngZone, height, scrollTop, onCommit });
+      resize(300);
+      onCommit.mockClear();
+
+      // A width change, or a height change within the tolerance
+      resize(300.5);
+
+      expect(onCommit).not.toHaveBeenCalled();
+    });
+
     it('should not touch a scroll offset it was not given', () => {
       const height = signal(0);
       const scrollTop = signal(500);

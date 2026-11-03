@@ -24,7 +24,7 @@ import { bindResizeObserverHeightSignal, bindScrollTopSignal } from '../utils/do
 import { createAutoScrollRegistration } from '../utils/auto-scroll-registration';
 import { refreshDragOnScrollInsetChange } from '../utils/scroll-insets-refresh';
 import { validScrollInset } from '../utils/scroll-insets';
-import { ScrollCommitListeners } from '../utils/scroll-commits';
+import { ViewportChangeListeners } from '../utils/viewport-changes';
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { createHeightStrategy } from '../strategies/strategy-binding';
 
@@ -137,8 +137,8 @@ export class VirtualViewportComponent
   /** Measured container height (reactive) */
   readonly #containerHeight = signal(0);
 
-  /** The lists that render each committed scroll position in its scroll event */
-  readonly #scrollCommits = new ScrollCommitListeners();
+  /** The lists that render each scroll and resize before the browser paints it */
+  readonly #viewportChanges = new ViewportChangeListeners();
 
   /** The content wrapper (cannot use ES private with viewChild) */
   private readonly content = viewChild<ElementRef<HTMLElement>>('content');
@@ -292,13 +292,14 @@ export class VirtualViewportComponent
   }
 
   /**
-   * Call `listener` after each scroll position this viewport commits, in its scroll event
-   * (`*vdndVirtualFor` renders its rows there). Returns the unsubscribe.
+   * Call `listener` after each scroll position this viewport commits in its scroll event, and
+   * each size or restored scroll position its ResizeObserver reports: before the browser paints
+   * them (`*vdndVirtualFor` renders its rows there). Returns the unsubscribe.
    *
    * @internal
    */
-  onScrollCommit(listener: () => void): () => void {
-    return this.#scrollCommits.onScrollCommit(listener);
+  onViewportChange(listener: () => void): () => void {
+    return this.#viewportChanges.onViewportChange(listener);
   }
 
   // ========== Lifecycle ==========
@@ -338,7 +339,7 @@ export class VirtualViewportComponent
       ngZone: this.#ngZone,
       scrollTop: this.#scrollTop,
       thresholdPx: this.#scrollThreshold,
-      onCommit: () => this.#scrollCommits.notify(),
+      onCommit: () => this.#viewportChanges.notify(),
     });
   }
 
@@ -358,6 +359,7 @@ export class VirtualViewportComponent
       height: this.#containerHeight,
       minDeltaPx: 1,
       scrollTop: this.#scrollTop,
+      onCommit: () => this.#viewportChanges.notify(),
     });
   }
 }

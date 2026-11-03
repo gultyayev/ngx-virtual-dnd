@@ -19,7 +19,7 @@ import { VDND_SCROLL_CONTAINER, VdndScrollContainer } from '../tokens/scroll-con
 import type { VirtualScrollStrategy } from '../models/virtual-scroll-strategy';
 import { createHeightStrategy } from '../strategies/strategy-binding';
 import { ContentHeaderDirective } from '../directives/content-header.directive';
-import { hasScrollCommits } from '../utils/scroll-commits';
+import { hasViewportChanges, ViewportChangeListeners } from '../utils/viewport-changes';
 
 /**
  * A virtual content component that provides wrapper-based positioning
@@ -181,6 +181,9 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
   /** Content transform last written to the content wrapper */
   #contentTransformSet: string | null = null;
 
+  /** The lists that render the rows a header resize moves into view, before it is painted */
+  readonly #headerChanges = new ViewportChangeListeners();
+
   // ========== Strategy ==========
 
   /** The virtual scroll strategy, created based on dynamicItemHeight input */
@@ -288,15 +291,23 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
   }
 
   /**
-   * Call `listener` after each scroll position the parent scroll container commits, in its scroll
-   * event (`*vdndVirtualFor` renders its rows there). A parent that doesn't tell about its commits
-   * (a custom scroll container) never calls it. Returns the unsubscribe.
+   * Call `listener` after each change of what the parent scroll container shows (its scroll and
+   * resizes, when it tells about them: a custom scroll container doesn't), and after each header
+   * resize that moves the rows: before the browser paints them (`*vdndVirtualFor` renders its rows
+   * there). Returns the unsubscribe.
    *
    * @internal
    */
-  onScrollCommit(listener: () => void): () => void {
+  onViewportChange(listener: () => void): () => void {
     const parent = this.#parentScrollContainer;
-    return hasScrollCommits(parent) ? parent.onScrollCommit(listener) : () => undefined;
+    const stopParent = hasViewportChanges(parent)
+      ? parent.onViewportChange(listener)
+      : () => undefined;
+    const stopHeader = this.#headerChanges.onViewportChange(listener);
+    return () => {
+      stopParent();
+      stopHeader();
+    };
   }
 
   // ========== Private Methods ==========
@@ -313,7 +324,9 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
   /**
    * Keeps `#measuredRowsOffset` in sync while a header is projected: measures now, and again
    * whenever a ResizeObserver reports the header or the parent scroll container resizing (the
-   * container's width can reflow what sits above the header).
+   * container's width can reflow what sits above the header). The observer reports after the
+   * frame's layout and before its paint: the lists render the rows a new offset moves into view
+   * right away, or that frame would show the rows where the old offset put them.
    */
   #setupHeaderMeasurement(): void {
     effect((onCleanup) => {
@@ -330,17 +343,25 @@ export class VirtualContentComponent implements VdndVirtualViewport, VdndScrollC
 
       const header = dir.elementRef.nativeElement;
       const container = this.#parentScrollContainer.nativeElement;
-      const measure = (): void => {
+      /** Returns whether the offset changed */
+      const measure = (): boolean => {
         const offset = this.#measureRowsOffset(container);
-        if (offset !== null) {
-          this.#measuredRowsOffset.set(offset);
+        if (offset === null || offset === untracked(this.#measuredRowsOffset)) {
+          return false;
         }
+        this.#measuredRowsOffset.set(offset);
+        return true;
       };
+      // In change detection: the lists' effects render it in this pass
       measure();
 
       let observer: ResizeObserver | null = null;
       this.#ngZone.runOutsideAngular(() => {
-        observer = new ResizeObserver(measure);
+        observer = new ResizeObserver(() => {
+          if (measure()) {
+            this.#headerChanges.notify();
+          }
+        });
         observer.observe(header, { box: 'border-box' });
         observer.observe(container);
       });
