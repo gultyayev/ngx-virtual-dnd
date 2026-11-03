@@ -26,7 +26,7 @@ These rules prevent common mistakes that cause hard-to-debug issues:
 
 10. **Never use `expect(true).toBe(true)` or similar no-op assertions:** Every test assertion must verify actual behavior. Tests that always pass regardless of code behavior provide false confidence and zero coverage. If you can't write a meaningful assertion, the test shouldn't exist.
 
-11. **Keep skills and docs in sync with public API:** Any change to the consumer-facing API (new/changed/removed component, directive, input, output, event, utility, token, CSS class, or keyboard shortcut) must update `skills/ngx-virtual-dnd/SKILL.md` and/or `skills/ngx-virtual-dnd/references/api-reference.md` **and** the docs site (`docs/pages/api/*.mdx` plus any guide page that covers it) in the same commit. Internal-only changes (bug fixes, refactoring, performance) do not require skill or docs updates unless they change observable consumer behavior. Describe the current version only: no "Added in x.y.z" notes, "new" badges, announcements or release highlights. Releases are a script (nobody edits the docs then), so the generated `CHANGELOG.md` is the record of what changed when.
+11. **Keep skills and docs in sync with public API:** Any change to the consumer-facing API (new/changed/removed component, directive, input, output, event, utility, token, CSS class, or keyboard shortcut) must update the skill (`skills/ngx-virtual-dnd/SKILL.md`, plus `references/api-reference.md` or `references/guides.md` where they cover it) **and** the docs site (`docs/pages/api/*.mdx` plus any guide page that covers it) in the same commit. Internal-only changes (bug fixes, refactoring, performance) do not require skill or docs updates unless they change observable consumer behavior. Describe the current version only: no "Added in x.y.z" notes, "new" badges, announcements or release highlights. Releases are a script (nobody edits the docs then), so the generated `CHANGELOG.md` is the record of what changed when.
 
 ## Project Structure
 
@@ -189,6 +189,7 @@ Load these ONLY when working on specific areas:
 | `.claude/TROUBLESHOOTING.md`                         | If debugging unexpected behavior                 |
 | `skills/ngx-virtual-dnd/SKILL.md`                    | When modifying the library's consumer-facing API |
 | `skills/ngx-virtual-dnd/references/api-reference.md` | When modifying the library's consumer-facing API |
+| `skills/ngx-virtual-dnd/references/guides.md`        | When modifying the library's consumer-facing API |
 
 ### When to Create Lazy Documentation
 
@@ -196,13 +197,13 @@ Lazy-load when: specialized (one subsystem), debugging/troubleshooting, or histo
 
 ## Common Tasks
 
-| Task                           | Load First                                            | Key Tests                                                                                                |
-| ------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| New E2E test                   | `.ai/E2E.md`                                          | All browsers: `npx playwright test --reporter=dot --max-failures=1`                                      |
-| Modify placeholder calc        | `.claude/history/placeholder-algorithm.md`            | `placeholder-behavior.spec.ts`, `placeholder-integrity.spec.ts`, `drag-index-calculator.service.spec.ts` |
-| Update skills after API change | `skills/ngx-virtual-dnd/SKILL.md`, `api-reference.md` | -                                                                                                        |
-| Docs page or live example      | `.claude/DOCS_SITE.md`                                | `npm run docs:build`, `docs-examples.spec.ts`                                                            |
-| Add new subsystem doc          | See lazy doc criteria above                           | -                                                                                                        |
+| Task                           | Load First                                                         | Key Tests                                                                                                |
+| ------------------------------ | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| New E2E test                   | `.ai/E2E.md`                                                       | All browsers: `npx playwright test --reporter=dot --max-failures=1`                                      |
+| Modify placeholder calc        | `.claude/history/placeholder-algorithm.md`                         | `placeholder-behavior.spec.ts`, `placeholder-integrity.spec.ts`, `drag-index-calculator.service.spec.ts` |
+| Update skills after API change | `skills/ngx-virtual-dnd/SKILL.md`, `api-reference.md`, `guides.md` | -                                                                                                        |
+| Docs page or live example      | `.claude/DOCS_SITE.md`                                             | `npm run docs:build`, `docs-examples.spec.ts`                                                            |
+| Add new subsystem doc          | See lazy doc criteria above                                        | -                                                                                                        |
 
 ## Testing
 
