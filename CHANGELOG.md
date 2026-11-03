@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.6.5](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.4...v3.6.5) (2026-11-03)
+
+### Bug Fixes
+
+- **lib:** measure where vdnd-virtual-content's rows start below a content header ([c219d6c](https://github.com/gultyayev/ngx-virtual-dnd/commit/c219d6c6d44b960d9577ab98f7119c52f3567e94))
+
 ## [3.6.4](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.3...v3.6.4) (2026-10-31)
 
 ### Performance
