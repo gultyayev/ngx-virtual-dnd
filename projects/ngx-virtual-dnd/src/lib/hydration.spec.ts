@@ -1,5 +1,5 @@
 /**
- * @jest-environment node
+ * @jest-environment <rootDir>/jest-hydration-environment.cjs
  */
 import '@angular/compiler';
 import { ApplicationRef, Component, provideZonelessChangeDetection, Type } from '@angular/core';
@@ -26,13 +26,12 @@ import { VirtualForDirective } from './directives/virtual-for.directive';
  *
  * Not in the jsdom test environment: the server render would reuse its browser test platform
  * (Angular keeps one platform at a time), and the server's DOM emulation would replace the jsdom
- * globals. The client gets a jsdom window of its own instead, once the server is done.
+ * globals. The client gets a jsdom window of its own instead, once the server is done: the Node
+ * environment in jest-hydration-environment.cjs, which also hands the spec `JSDOM` (jest's module
+ * loader cannot load the ES modules jsdom depends on).
  */
 
-// Loaded by Node itself, as jest-environment-jsdom does: jest's module loader cannot load the ES
-// modules jsdom depends on
-const nodeRequire = process.getBuiltinModule('node:module').createRequire(__filename);
-const { JSDOM } = nodeRequire('jsdom') as typeof import('jsdom');
+declare const JSDOM: typeof JSDOMInstance;
 
 interface Row {
   id: string;
