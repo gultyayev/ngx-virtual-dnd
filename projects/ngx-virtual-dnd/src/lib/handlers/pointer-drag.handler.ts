@@ -53,7 +53,8 @@ export interface PointerDragDeps {
  * - Forwarding moves to the directive (DragSchedulerService coalesces them per frame)
  * - Document-level listener management
  * - Escape key cancellation during pointer drag, and cancellation when the window loses focus
- *   or the page is hidden (the release would never arrive) or the system cancels the touch
+ *   or the page is hidden (the release would never arrive), a mouse move arrives with the button
+ *   already up (the release was missed) or the system cancels the touch
  */
 export class PointerDragHandler {
   readonly #deps: PointerDragDeps;
@@ -306,6 +307,14 @@ export class PointerDragHandler {
       }
       position = { x: touch.clientX, y: touch.clientY };
     } else {
+      // The left button is up, yet no mouseup arrived: it was released where the page gets no
+      // events (over a cross-origin iframe, a browser dialog). Where is unknown, so this is a
+      // cancel, as when the window loses focus. Only the browser's own events tell: one a script
+      // dispatches reports no buttons unless it sets them.
+      if (event.isTrusted && (event.buttons & 1) === 0) {
+        this.#onFocusLost();
+        return;
+      }
       position = { x: event.clientX, y: event.clientY };
     }
 
@@ -434,7 +443,8 @@ export class PointerDragHandler {
   }
 
   /**
-   * Cancel the drag (or drop the pending press) when the window loses focus.
+   * Cancel the drag (or drop the pending press) when the release can no longer arrive: the window
+   * lost focus, or the button is already up (see #onPointerMove).
    */
   #onFocusLost(): void {
     if (!this.#isTracking) {

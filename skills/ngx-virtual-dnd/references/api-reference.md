@@ -404,7 +404,7 @@ interface DragEndEvent {
 
 `droppableId` is the source droppable. `destinationIndex` is `null` when nothing was dropped:
 
-- a **cancelled** drag: Escape, Tab during a keyboard drag, the window losing focus, the page being hidden or a system `touchcancel` during a pointer drag, or the dragged draggable being destroyed;
+- a **cancelled** drag: Escape, Tab during a keyboard drag, the window losing focus, the page being hidden, a mouse release the page never saw (over a cross-origin iframe; cancelled on the next mouse move) or a system `touchcancel` during a pointer drag, or the dragged draggable being destroyed;
 - a release outside every droppable, or over a disabled one;
 - a keyboard drop into a droppable disabled or hidden (`display: none`, `visibility: hidden`) after the drag moved into it.
 

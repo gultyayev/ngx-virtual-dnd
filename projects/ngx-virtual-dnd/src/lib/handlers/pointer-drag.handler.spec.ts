@@ -719,6 +719,79 @@ describe('PointerDragHandler', () => {
     });
   });
 
+  describe('a release the page never saw', () => {
+    // Released over a cross-origin iframe or a browser dialog: no mouseup reaches the document,
+    // and the next move arrives with no button down. Events a script dispatches are not trusted
+    // (and leave `buttons` at 0 unless told), so the browser's own move is handed to the listener.
+    let moveListener: (event: MouseEvent) => void;
+
+    const trustedMove = (x: number, y: number, buttons: number): MouseEvent =>
+      ({
+        type: 'mousemove',
+        isTrusted: true,
+        clientX: x,
+        clientY: y,
+        buttons,
+        preventDefault: jest.fn(),
+      }) as unknown as MouseEvent;
+
+    beforeEach(() => {
+      const addSpy = jest.spyOn(document, 'addEventListener');
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      moveListener = addSpy.mock.calls.find(([type]) => type === 'mousemove')![1] as (
+        event: MouseEvent,
+      ) => void;
+    });
+
+    it('should cancel the drag on a move with the left button up', () => {
+      moveListener(trustedMove(160, 220, 1));
+      expect(isDragging).toBe(true);
+
+      moveListener(trustedMove(300, 400, 0));
+
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledTimes(1);
+      expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(true);
+      expect(mockCallbacks.onDragMove).not.toHaveBeenCalledWith({ x: 300, y: 400 });
+    });
+
+    it('should stop following the pointer after it cancelled', () => {
+      const removeSpy = jest.spyOn(document, 'removeEventListener');
+      moveListener(trustedMove(160, 220, 1));
+
+      moveListener(trustedMove(300, 400, 0));
+
+      expect(removeSpy).toHaveBeenCalledWith('mousemove', moveListener);
+    });
+
+    it('should drop a press that had not started a drag', () => {
+      moveListener(trustedMove(300, 400, 0));
+      moveListener(trustedMove(310, 410, 1));
+
+      expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
+      expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
+    });
+
+    it('should keep the drag while another button is the only one released', () => {
+      moveListener(trustedMove(160, 220, 1));
+
+      // Left and right down, then the left one still down
+      moveListener(trustedMove(170, 230, 3));
+      moveListener(trustedMove(180, 240, 1));
+
+      expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
+      expect(mockCallbacks.onDragMove).toHaveBeenLastCalledWith({ x: 180, y: 240 });
+    });
+
+    it('should keep the drag on a scripted move, which reports no buttons', () => {
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+
+      document.dispatchEvent(createMouseEvent('mousemove', 170, 230));
+
+      expect(mockCallbacks.onDragEnd).not.toHaveBeenCalled();
+      expect(mockCallbacks.onDragMove).toHaveBeenLastCalledWith({ x: 170, y: 230 });
+    });
+  });
+
   describe('a drag end that throws', () => {
     // e.g. a consumer's (dragEnd)/(drop) handler under an ErrorHandler that rethrows
     beforeEach(() => {

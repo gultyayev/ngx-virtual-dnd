@@ -501,7 +501,7 @@ On release, `(dragEnd)` fires first, then `(drop)` on the destination, both befo
 
 `DragEndEvent.destinationIndex` is `null` when nothing was dropped. Branch on `destinationIndex === null` to detect "no drop"; `cancelled` is `true` only in the first of these cases:
 
-- the drag was **cancelled**: Escape, Tab during a keyboard drag, the window losing focus or the page being hidden during a pointer drag, the system cancelling the touch (`touchcancel`), or the dragged draggable being destroyed (e.g. its item removed mid-drag);
+- the drag was **cancelled**: Escape, Tab during a keyboard drag, the window losing focus, the page being hidden or a mouse release the page never saw (over a cross-origin iframe; cancelled on the next mouse move) during a pointer drag, the system cancelling the touch (`touchcancel`), or the dragged draggable being destroyed (e.g. its item removed mid-drag);
 - the item was released outside every droppable, or over a disabled one;
 - a keyboard drag was dropped into a droppable disabled or hidden after the drag moved into it.
 
