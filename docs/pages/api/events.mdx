@@ -71,6 +71,7 @@ interface DragEndEvent {
   - <kbd>Tab</kbd> during a keyboard drag
   - the window losing focus during a pointer drag
   - the page being hidden during a pointer drag (the release would never reach the page)
+  - the mouse button released where the page gets no event (over a cross-origin iframe, for example): the drag cancels on the next mouse move
   - the system cancelling a touch
   - the dragged draggable being destroyed (for example its item removed from the list mid-drag)
 - the item was released outside every droppable
