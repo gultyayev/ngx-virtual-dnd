@@ -114,6 +114,21 @@ test.describe('Showing and resizing', () => {
     });
   }
 
+  // The rows scroll through a scroll container's padding too: 120px at the top and bottom of
+  // 300px leave a 60px content box, and the rows in view still fill all 300px
+  for (const list of [VIEWPORT, SCROLLABLE]) {
+    test(`${list.name} paints rows through its vertical padding`, async ({ page }) => {
+      const { blank, errors } = await blankPx(
+        page,
+        { ...list, start: 330 },
+        { kind: 'pad', px: 120 },
+      );
+
+      expect(blank, 'blank px in the two frames after it is padded').toEqual([0, 0]);
+      expect(errors).toEqual([]);
+    });
+  }
+
   test('vdnd-virtual-scroll paints the rows its items end with, in the frame they shrink', async ({
     page,
   }) => {

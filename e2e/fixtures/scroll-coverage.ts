@@ -8,6 +8,8 @@ export type ViewChange =
   | { kind: 'show-again' }
   /** Make the scroll container `px` tall (a resized pane, a maximized window) */
   | { kind: 'resize'; px: number }
+  /** Pad the scroll container by `px` at its top and bottom, within the height it has */
+  | { kind: 'pad'; px: number }
   /** Pad the top of the list's `vdndContentHeader` by `px` (its text wraps, content loads in it) */
   | { kind: 'grow-header'; px: number }
   /** Click the element with this `data-testid` (a control of the page that changes the items) */
@@ -114,6 +116,9 @@ export async function blankPxPerFrame(
           holder.style.display = '';
         } else if (change.kind === 'resize') {
           list.style.height = `${change.px}px`;
+        } else if (change.kind === 'pad') {
+          list.style.boxSizing = 'border-box';
+          list.style.paddingTop = list.style.paddingBottom = `${change.px}px`;
         } else if (change.kind === 'click') {
           const control = document.querySelector<HTMLElement>(`[data-testid="${change.testId}"]`);
           if (!control) throw new Error(`No element with data-testid ${change.testId}`);

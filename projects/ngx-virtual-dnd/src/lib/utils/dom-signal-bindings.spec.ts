@@ -19,6 +19,7 @@ describe('DOM signal bindings', () => {
   let originalResizeObserver: typeof ResizeObserver;
   let element: HTMLElement;
   let offset: number;
+  let shownHeight: number;
 
   beforeAll(() => {
     originalResizeObserver = globalThis.ResizeObserver;
@@ -32,19 +33,32 @@ describe('DOM signal bindings', () => {
   beforeEach(() => {
     lastResizeCallback = null;
     offset = 0;
+    shownHeight = 0;
     element = document.createElement('div');
-    // jsdom has no layout: scrollTop reads whatever the test last scrolled to
+    // jsdom has no layout: scrollTop reads whatever the test last scrolled to, and clientHeight
+    // the height the last resize gave the element
     Object.defineProperty(element, 'scrollTop', { get: () => offset, configurable: true });
+    Object.defineProperty(element, 'clientHeight', { get: () => shownHeight, configurable: true });
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  /** A resize the observer reports for the element. */
-  function resize(height: number): void {
+  /**
+   * A resize the observer reports for the element: it now shows `height` px (its padding box,
+   * `clientHeight`), `padding` px of which are its vertical padding (the observer reports the
+   * content box, without them).
+   */
+  function resize(height: number, padding = 0): void {
+    shownHeight = height;
     lastResizeCallback?.(
-      [{ target: element, contentRect: { height } } as unknown as ResizeObserverEntry],
+      [
+        {
+          target: element,
+          contentRect: { height: height - padding },
+        } as unknown as ResizeObserverEntry,
+      ],
       {} as ResizeObserver,
     );
   }
@@ -79,6 +93,17 @@ describe('DOM signal bindings', () => {
       resize(300);
 
       expect(scrollTop()).toBe(1200);
+      expect(height()).toBe(300);
+    });
+
+    it('should measure the height the element shows, its vertical padding included', () => {
+      // Rows scroll through the padding of a scroll container too: a height without it renders
+      // too few of them
+      const height = signal(0);
+      bindResizeObserverHeightSignal({ element, ngZone, height });
+
+      resize(300, 180);
+
       expect(height()).toBe(300);
     });
 
