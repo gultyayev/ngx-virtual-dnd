@@ -163,6 +163,26 @@ class ScrollableHostComponent {
 
 @Component({
   template: `
+    <vdnd-virtual-viewport [itemHeight]="50">
+      <ng-container *vdndVirtualFor="let row of rows(); trackBy: trackById">
+        <div class="row" [attr.data-id]="row.id">{{ row.id }}</div>
+      </ng-container>
+    </vdnd-virtual-viewport>
+  `,
+  imports: [VirtualViewportComponent, VirtualForDirective],
+})
+class CountingViewportHostComponent {
+  readonly rows = signal(ROWS);
+  /** Track keys computed: the list computes one per row each time it reconciles its rows */
+  trackCalls = 0;
+  readonly trackById = (_index: number, row: Row): string => {
+    this.trackCalls++;
+    return row.id;
+  };
+}
+
+@Component({
+  template: `
     <div class="scroller" vdndScrollable>
       @if (shown()) {
         <ng-container *vdndVirtualFor="let row of rows(); itemHeight: 50; trackBy: trackById">
@@ -328,6 +348,49 @@ describe('rendering a scroll in its scroll event', () => {
 
     expect(renderedIds(fixture)).toEqual(rowIds(0, 9));
     expect(query(fixture, '[data-id="row-0"]')).toBe(firstRow);
+    fixture.destroy();
+  });
+});
+
+describe('reconciling the rows of *vdndVirtualFor', () => {
+  it('does not reconcile them for a scroll that changes no rendered row', () => {
+    const fixture = setUp(CountingViewportHostComponent);
+    const host = fixture.componentInstance;
+    const scroller = query(fixture, 'vdnd-virtual-viewport');
+    host.trackCalls = 0;
+
+    // 20px, then 40px down: rows 0-6 are in view, and rows 0-9 still cover them
+    scroll(scroller, 20);
+    scroll(scroller, 40);
+    fixture.detectChanges();
+
+    expect(renderedIds(fixture)).toEqual(rowIds(0, 9));
+    expect(host.trackCalls).toBe(0);
+    fixture.destroy();
+  });
+
+  it('reconciles them once for a scroll that changes the rendered rows', () => {
+    const fixture = setUp(CountingViewportHostComponent);
+    const host = fixture.componentInstance;
+    host.trackCalls = 0;
+
+    // Rendered in the scroll event; the change detection it schedules finds nothing to do
+    scroll(query(fixture, 'vdnd-virtual-viewport'), 5000);
+    fixture.detectChanges();
+
+    expect(renderedIds(fixture)).toEqual(rowIds(97, 109));
+    expect(host.trackCalls).toBe(13);
+    fixture.destroy();
+  });
+
+  it('reconciles them again when the items change within the same range', () => {
+    const fixture = setUp(CountingViewportHostComponent);
+    const host = fixture.componentInstance;
+
+    host.rows.set([ROWS[1], ROWS[0], ...ROWS.slice(2)]);
+    fixture.detectChanges();
+
+    expect(renderedIds(fixture)).toEqual(['row-1', 'row-0', ...rowIds(2, 9)]);
     fixture.destroy();
   });
 });
