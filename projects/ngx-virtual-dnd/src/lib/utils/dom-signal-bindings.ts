@@ -48,7 +48,8 @@ export function bindScrollTopSignal(options: {
 }
 
 /**
- * Keep `height` in step with the element's height. Given `scrollTop`, also re-read the scroll
+ * Keep `height` in step with the height the element shows: its `clientHeight`, which counts its
+ * padding (rows scroll through it too). Given `scrollTop`, also re-read the scroll
  * offset on every resize: an element shown again (`display: none` on an ancestor, an inactive
  * tab) or put back in the page gets its offset restored or reset without a `scroll` event, and
  * reads 0 while it has no layout box, so the scroll listener can miss or mis-read it. The
@@ -78,14 +79,15 @@ export function bindResizeObserverHeightSignal(options: {
   let observer: ResizeObserver | null = null;
 
   ngZone.runOutsideAngular(() => {
-    observer = new ResizeObserver((entries) => {
+    observer = new ResizeObserver(() => {
       let changed = false;
-      for (const entry of entries) {
-        const nextHeight = entry.contentRect.height;
-        if (Math.abs(nextHeight - height()) > minDeltaPx) {
-          height.set(nextHeight);
-          changed = true;
-        }
+      // The height the element shows (its padding box), as the first read below: rows scroll
+      // through a scroll container's padding too, which the entry's content rect leaves out.
+      // Read right after the layout the observer reports, so it forces none.
+      const nextHeight = layoutValue(element.clientHeight);
+      if (Math.abs(nextHeight - height()) > minDeltaPx) {
+        height.set(nextHeight);
+        changed = true;
       }
       if (scrollTop && element.scrollTop !== scrollTop()) {
         scrollTop.set(element.scrollTop);
