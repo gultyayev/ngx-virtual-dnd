@@ -159,6 +159,9 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
   /** Stops rendering the scroll container's viewport changes before they are painted */
   #viewportChangeCleanup: (() => void) | null = null;
 
+  /** What the last #updateViews rendered from (see there) */
+  #rendered: readonly unknown[] | null = null;
+
   /** ResizeObserver for dynamic height measurement */
   #resizeObserver: ResizeObserver | null = null;
 
@@ -714,9 +717,36 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
     const draggedIndex =
       this.#dragState.isDragging() && isSourceList ? this.#draggedItemIndex() : -1;
     const shouldKeepDragged = draggedIndex >= 0 && draggedIndex < items.length;
+    const isDragging = this.#dragState.isDragging();
+    const gap = this.#gap();
+
+    // Everything the rows and the placeholder are rendered from. While none of it changed there
+    // is nothing to reconcile: a scroll within the rendered range (most scroll events), and the
+    // effect's run after #renderNow rendered a change in its scroll event. The rows are still
+    // positioned and measured, which costs nothing for rows that are (see layoutRows).
+    const rendered: readonly unknown[] = [
+      items,
+      start,
+      end,
+      strategy,
+      strategy.version(),
+      placeholderIndex,
+      showPlaceholder,
+      draggedIndex,
+      isDragging,
+      this.#dragState.draggedItem(),
+      this.vdndVirtualForTrackBy(),
+      gap,
+    ];
+    const previous = this.#rendered;
+    if (previous && rendered.every((value, i) => Object.is(value, previous[i]))) {
+      this.#rowRenderer.layoutRows(strategy, gap);
+      return;
+    }
+    this.#rendered = rendered;
 
     // Snapshot positions before the DOM changes so displaced items can slide
-    this.#shiftAnimator?.beforeUpdate(this.#dragState.isDragging(), placeholderIndex);
+    this.#shiftAnimator?.beforeUpdate(isDragging, placeholderIndex);
 
     // Notify viewport of render start index for wrapper positioning
     this.#notifyViewportRenderStart(start);
@@ -740,7 +770,7 @@ export class VirtualForDirective<T> implements OnInit, OnDestroy {
 
     // 2. Reconcile views with the DOM. Without a viewport, the rows at or after the placeholder
     // move down by its height (with a viewport, the placeholder pushes them in the flow).
-    const placeholderDomPosition = this.#rowRenderer.render(itemsToRender, strategy, this.#gap());
+    const placeholderDomPosition = this.#rowRenderer.render(itemsToRender, strategy, gap);
 
     // 3. Position placeholder in DOM
     this.#positionPlaceholder(showPlaceholder, placeholderDomPosition, strategy, placeholderIndex);

@@ -83,7 +83,7 @@ export function bindResizeObserverHeightSignal(options: {
       let changed = false;
       // The height the element shows (its padding box), as the first read below: rows scroll
       // through a scroll container's padding too, which the entry's content rect leaves out.
-      // Read right after the layout the observer reports, so it forces none.
+      // Read right after the layout the observer reports, as the scroll offset below.
       const nextHeight = layoutValue(element.clientHeight);
       if (Math.abs(nextHeight - height()) > minDeltaPx) {
         height.set(nextHeight);

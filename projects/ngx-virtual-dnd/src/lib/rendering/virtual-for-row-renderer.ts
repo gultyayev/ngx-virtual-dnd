@@ -63,6 +63,12 @@ export class VirtualForRowRenderer<T> {
   /** Currently active views keyed by their track-by value */
   readonly #activeViews = new Map<unknown, EmbeddedViewRef<VirtualForContext<T>>>();
 
+  /** The rows of the last render, in order, with the entry each renders */
+  #renderedRows: { view: EmbeddedViewRef<VirtualForContext<T>>; entry: RenderEntry<T> }[] = [];
+
+  /** The offset each row element was last positioned at (see #applyAbsolutePositioning) */
+  readonly #positionedAt = new WeakMap<HTMLElement, number>();
+
   constructor(host: VirtualForRowRendererHost<T>) {
     this.#host = host;
   }
@@ -143,10 +149,22 @@ export class VirtualForRowRenderer<T> {
     }
 
     this.#renderChangedViews(changedViews);
+    this.#renderedRows = renderedRows;
+    this.layoutRows(strategy, gap);
 
-    // After the check, which creates the root nodes of a row whose root is in a control flow
-    // block (`@if`), or replaces them
-    for (const { view, entry } of renderedRows) {
+    this.#trimViewPool();
+
+    return placeholderDomPosition;
+  }
+
+  /**
+   * Position and measure the rows of the last render: all `render` leaves to do when nothing it
+   * reconciles changed (a scroll within the rendered range). Run after the rows are checked,
+   * which creates the root nodes of a row whose root is in a control flow block (`@if`), or
+   * replaces them.
+   */
+  layoutRows(strategy: VirtualScrollStrategy, gap: { index: number; height: number } | null): void {
+    for (const { view, entry } of this.#renderedRows) {
       if (view.destroyed) continue;
       // Apply absolute positioning when not using viewport wrapper
       if (this.#host.positionRows) {
@@ -160,10 +178,6 @@ export class VirtualForRowRenderer<T> {
       // Observe for dynamic height measurement
       this.#host.observe(view, entry.key);
     }
-
-    this.#trimViewPool();
-
-    return placeholderDomPosition;
   }
 
   /**
@@ -177,9 +191,7 @@ export class VirtualForRowRenderer<T> {
       return null;
     }
     const view = viewContainer.get(viewIndex) as
-      | EmbeddedViewRef<VirtualForContext<T>>
-      | null
-      | undefined;
+      EmbeddedViewRef<VirtualForContext<T>> | null | undefined;
     if (!view) {
       return null;
     }
@@ -339,11 +351,13 @@ export class VirtualForRowRenderer<T> {
   }
 
   /**
-   * Apply absolute positioning styles to a view's root nodes.
+   * Apply absolute positioning styles to a view's root nodes, unless they have them already: a
+   * row keeps its offset through most renders.
    */
   #applyAbsolutePositioning(view: EmbeddedViewRef<VirtualForContext<T>>, topOffset: number): void {
     for (const node of view.rootNodes) {
-      if (node instanceof HTMLElement) {
+      if (node instanceof HTMLElement && this.#positionedAt.get(node) !== topOffset) {
+        this.#positionedAt.set(node, topOffset);
         node.style.position = 'absolute';
         node.style.top = `${topOffset}px`;
         node.style.left = '0';
