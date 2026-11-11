@@ -223,6 +223,41 @@ describe('DragPreviewComponent', () => {
         expect(cloneContainer!.textContent).toBe('Cloned Element');
       });
 
+      it('should render the clone on a page that enforces Trusted Types', () => {
+        const item = createMockDraggedItem();
+        // Under `require-trusted-types-for 'script'`, the browser rejects every string written
+        // to `innerHTML`, the empty one included
+        jest.spyOn(Element.prototype, 'innerHTML', 'set').mockImplementation(() => {
+          throw new TypeError("This document requires 'TrustedHTML' assignment.");
+        });
+
+        try {
+          dragStateService.startDrag(item, { x: 100, y: 100 });
+          fixture.detectChanges();
+          fixture.detectChanges();
+        } finally {
+          jest.restoreAllMocks();
+        }
+
+        expect(queryPreview('.vdnd-drag-preview-clone')!.firstElementChild).toBe(
+          item.clonedElement!,
+        );
+      });
+
+      it('should replace the clone of the previous drag', () => {
+        dragStateService.startDrag(createMockDraggedItem(), { x: 100, y: 100 });
+        fixture.detectChanges();
+        fixture.detectChanges();
+
+        const next = createMockDraggedItem({ draggableId: 'item-2' });
+        dragStateService.startDrag(next, { x: 100, y: 100 });
+        fixture.detectChanges();
+        fixture.detectChanges();
+
+        const cloneContainer = queryPreview('.vdnd-drag-preview-clone')!;
+        expect(Array.from(cloneContainer.children)).toEqual([next.clonedElement]);
+      });
+
       it('should not register as a template preview', () => {
         expect(overlayContainerService.hasTemplatePreview()).toBe(false);
       });

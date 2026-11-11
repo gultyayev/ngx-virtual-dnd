@@ -249,11 +249,13 @@ export class DragPreviewComponent<T = unknown> implements OnDestroy {
         return;
       }
 
-      // Clear previous content and append the prepared clone element.
-      // Avoid cloning again: ElementCloneService already creates a styled/sanitized clone.
-      container.innerHTML = '';
+      // Swap the previous content for the prepared clone element (ElementCloneService already
+      // made it a styled, sanitized clone, so it is not cloned again). Not by clearing
+      // `innerHTML`: a page that enforces Trusted Types rejects every string written to it.
       if (clone) {
-        container.appendChild(clone);
+        container.replaceChildren(clone);
+      } else {
+        container.replaceChildren();
       }
     });
 
