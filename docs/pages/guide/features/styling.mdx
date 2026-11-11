@@ -85,6 +85,8 @@ body.vdnd-dragging .vdnd-draggable {
 
 The library's only built-in style is a `grabbing` cursor over lists and items (`vdnd-droppable` and `vdnd-draggable` elements) during mouse and keyboard drags. Touch drags get no cursor. The rest of the page keeps its cursor, and so do elements inside items and lists that set their own `cursor` (a drag handle with `cursor: grab`, a button); the `pointer-events: none` recipe above covers those inside items.
 
+The rule lives in a `<style>` element the library adds to the page. It carries your app's CSP nonce (the one Angular reads from `ngCspNonce` or `CSP_NONCE`), so a `style-src` policy without `'unsafe-inline'` applies it.
+
 Show the grabbing cursor over the whole page during a drag, not only over lists and items. A rule on `body` alone is enough, because `cursor` inherits; it costs a style recalculation that grows with the size of the page each time a drag starts and ends. Avoid `body.vdnd-dragging *`, which restyles every element:
 
 ```css

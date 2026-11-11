@@ -525,7 +525,7 @@ On release, `(dragEnd)` fires first, then `(drop)` on the destination, both befo
 | `vdnd-sortable-list`, `vdnd-virtual-scroll`, `vdnd-virtual-viewport`, `vdnd-virtual-content`, `vdnd-scrollable`, `vdnd-placeholder` | Their host elements | Always |
 
 - Put these rules in a global stylesheet: the library renders the preview, the placeholder and the lists' inner elements, so component-scoped styles don't reach them. With `vdnd-sortable-list` the droppable is an inner element: target it as `.vdnd-sortable-list .vdnd-droppable-active`.
-- The only built-in style is a `grabbing` cursor on `vdnd-droppable` and `vdnd-draggable` elements during mouse and keyboard drags (not touch drags). Elements inside them that set their own `cursor` (handles, buttons) keep it; `body.vdnd-dragging .vdnd-draggable { pointer-events: none; }` covers those inside items.
+- The only built-in style is a `grabbing` cursor on `vdnd-droppable` and `vdnd-draggable` elements during mouse and keyboard drags (not touch drags). Elements inside them that set their own `cursor` (handles, buttons) keep it; `body.vdnd-dragging .vdnd-draggable { pointer-events: none; }` covers those inside items. Its `<style>` element carries the app's CSP nonce (`ngCspNonce` / `CSP_NONCE`), so it works with a `style-src` policy without `'unsafe-inline'`.
 - For a page-wide cursor, add `body.vdnd-dragging:not(.vdnd-dragging-touch) { cursor: grabbing; }`. Never `body.vdnd-dragging *`, which restyles every element at drag start and drop.
 
 ## Shadow DOM, testing and migrating from CDK
