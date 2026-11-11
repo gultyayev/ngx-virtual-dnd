@@ -132,24 +132,6 @@ export class DemoPage {
     return this.page.getByTestId(list === 'list1' ? 'list-1-count' : 'list-2-count');
   }
 
-  async getItemCount(list: ListName): Promise<number> {
-    const text = await this.countBadge(list).textContent();
-    const count = Number.parseInt(text?.trim() ?? '', 10);
-    if (Number.isNaN(count)) {
-      throw new Error(`Item count badge of ${list} shows "${text}"`);
-    }
-    return count;
-  }
-
-  /**
-   * Text of the rendered item at `index` (DOM order). Both lists are named "Item 1…Item N", so
-   * compare `getItemId()` instead when an item may have moved between lists.
-   */
-  async getItemText(list: ListName, index: number): Promise<string> {
-    const text = await this.items(list).nth(index).textContent();
-    return text?.trim() ?? '';
-  }
-
   /** `data-draggable-id` of the rendered item at `index` (DOM order), e.g. `list1-0`. */
   async getItemId(list: ListName, index: number): Promise<string | null> {
     return this.items(list).nth(index).getAttribute('data-draggable-id');
@@ -369,22 +351,6 @@ export class DemoPage {
 
   async keyboardCancel(): Promise<void> {
     await this.page.keyboard.press('Escape');
-  }
-
-  /**
-   * Count ghost elements - empty .item divs without text content.
-   * These indicate broken placeholder rendering.
-   * Uses atomic page.evaluate() to avoid TOCTOU races with virtual scroll re-renders.
-   */
-  async countGhostElements(list: ListName): Promise<number> {
-    return this.virtualScroll(list).evaluate((el) => {
-      const items = el.querySelectorAll('[data-draggable-id]:not([style*="display: none"])');
-      return Array.from(items).filter((item) => {
-        const text =
-          item.querySelector('[data-testid="demo-item-text"]')?.textContent?.trim() ?? '';
-        return text === '';
-      }).length;
-    });
   }
 
   /**

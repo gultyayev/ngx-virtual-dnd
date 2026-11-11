@@ -20,7 +20,7 @@ test.describe('Rows with a leave animation', () => {
     test('keeps the rows that scroll in, recycling only rows without a leave animation', async ({
       page,
     }) => {
-      const list = page.locator('vdnd-virtual-scroll');
+      const list = page.locator('[data-droppable-id="rows"] [data-item-height]');
       await tagRenderedRows(list);
 
       // Row 20 at the top: rows 0-11 leave the range (the even ones fade out), rows 17-31 render
@@ -38,7 +38,7 @@ test.describe('Rows with a leave animation', () => {
     test('keeps the rows that scroll in, recycling only rows without a leave animation', async ({
       page,
     }) => {
-      const list = page.locator('vdnd-virtual-viewport');
+      const list = page.locator('[data-droppable-id="viewport-rows"]');
       await tagRenderedRows(list);
 
       // Row 20 at the top: rows 0-11 leave the range (the even ones fade out)

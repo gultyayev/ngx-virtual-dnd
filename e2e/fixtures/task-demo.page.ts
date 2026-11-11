@@ -85,10 +85,6 @@ export class TaskDemoPage {
     return item.locator(taskDemoSelectors.title);
   }
 
-  taskCategory(item: Locator): Locator {
-    return item.locator(taskDemoSelectors.category);
-  }
-
   async getTaskTitle(index: number): Promise<string> {
     const text = await this.taskTitle(this.items.nth(index)).textContent();
     return text?.trim() ?? '';
@@ -283,26 +279,6 @@ export class TaskDemoPage {
         return candidates[0]?.box ?? null;
       },
       { selectors: taskDemoSelectors, ratio: containerRatio },
-    );
-  }
-
-  async getItemBoxContainingY(y: number): Promise<ElementBox | null> {
-    return this.page.evaluate(
-      ({ selectors, targetY }) => {
-        for (const item of document.querySelectorAll<HTMLElement>(selectors.item)) {
-          if (item.offsetParent === null) {
-            continue;
-          }
-
-          const rect = item.getBoundingClientRect();
-          if (rect.top < targetY && rect.bottom > targetY) {
-            return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-          }
-        }
-
-        return null;
-      },
-      { selectors: taskDemoSelectors, targetY: y },
     );
   }
 }

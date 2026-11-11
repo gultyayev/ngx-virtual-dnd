@@ -70,6 +70,9 @@ test.describe('Keyboard Drag - Focus Management', () => {
 
     // Blur focus by clicking elsewhere (but not on a drop target)
     await page.locator('body').click({ position: { x: 10, y: 10 } });
+    // The click did not end the drag (Escape below would pass on an already cancelled one)
+    await expect(demoPage.dragPreview).toBeVisible();
+    await expect(demoPage.host).not.toHaveAttribute('data-last-drag-end-cancelled');
 
     // Focus should be restorable and drag should continue to work
     await demoPage.list1Items.first().focus();

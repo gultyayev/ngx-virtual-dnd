@@ -224,14 +224,21 @@ test.describe('Page Scroll Demo', () => {
     await page.mouse.move(targetX, targetY, { steps: 10 });
     await taskDemo.settleDragPosition(targetX, targetY);
 
-    // Verify placeholder exists and is reasonably aligned with the target slot.
-    const placeholder = taskDemo.visiblePlaceholder;
-    await expect(placeholder).toBeVisible({ timeout: 3000 });
+    // The placeholder is the slot under the preview: their centers are within the alignment
+    // tolerance (E2E.md, "Content Offset and Cross-Browser Precision"), far less than one row
+    await expect(taskDemo.visiblePlaceholder).toBeVisible({ timeout: 3000 });
     await expect(async () => {
-      const placeholderBox = await placeholder.boundingBox();
-      expect(placeholderBox).not.toBeNull();
-      const distance = Math.abs(placeholderBox!.y - targetY);
-      expect(distance).toBeLessThan(200);
+      const alignment = await page.evaluate((selectors) => {
+        const preview = document.querySelector(selectors.dragPreview)?.getBoundingClientRect();
+        const slot = document.querySelector(selectors.visiblePlaceholder)?.getBoundingClientRect();
+        if (!preview || !slot) return null;
+        return {
+          drift: Math.abs(preview.top + preview.height / 2 - (slot.top + slot.height / 2)),
+          rowHeight: slot.height,
+        };
+      }, taskDemoSelectors);
+      expect(alignment).not.toBeNull();
+      expect(alignment!.drift).toBeLessThanOrEqual(alignment!.rowHeight * 0.65 + 4);
     }).toPass({ timeout: 2000 });
 
     await page.mouse.up();
@@ -426,7 +433,7 @@ test.describe('Page Scroll Demo', () => {
       if (translateMatch?.[1]) {
         transformY = parseFloat(translateMatch[1]);
       } else if (transform !== 'none') {
-        const matrixMatch = transform.match(/matrix\\(([^)]+)\\)/);
+        const matrixMatch = transform.match(/matrix\(([^)]+)\)/);
         const parts = matrixMatch?.[1]?.split(',').map((val) => parseFloat(val.trim()));
         if (parts && parts.length === 6) {
           transformY = parts[5];
@@ -464,7 +471,7 @@ test.describe('Page Scroll Demo', () => {
         placeholderCenterY,
       };
     }, taskDemoSelectors);
-    testInfo.attach('alignment-metrics', {
+    await testInfo.attach('alignment-metrics', {
       body: JSON.stringify({ maxDrift, alignmentTolerance, driftSamples, debugMetrics }, null, 2),
       contentType: 'application/json',
     });

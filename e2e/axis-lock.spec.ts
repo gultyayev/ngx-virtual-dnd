@@ -130,7 +130,11 @@ test.describe('Axis Lock', () => {
     await page.mouse.up();
     await expect(demoPage.dragPreview).not.toBeVisible({ timeout: 2000 });
 
-    // Since X is locked, the item stays in list1 (reordered within it)
+    // Since X is locked, the item stays in list1: a drop fired there (the counts alone also
+    // hold when nothing is dropped at all)
+    await expect(demoPage.host).toHaveAttribute('data-last-drag-end-cancelled', 'false');
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-source-index', '0');
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', /^\d+$/);
     await expect(demoPage.countBadge('list1')).toHaveText('50');
     await expect(demoPage.countBadge('list2')).toHaveText('50');
   });

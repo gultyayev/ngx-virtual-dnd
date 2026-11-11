@@ -42,16 +42,16 @@ test.describe('Scroll insets (nested and overlaid)', () => {
     });
     pageScroller = page.getByTestId('nested-page');
     column = page.getByTestId('nested-column');
-    innerScroller = page.getByTestId('nested-inner-list').locator('vdnd-virtual-scroll');
-    sideScroller = page.getByTestId('side-list').locator('vdnd-virtual-scroll');
+    innerScroller = page.getByTestId('nested-inner-list').locator('[data-item-height]');
+    sideScroller = page.getByTestId('side-list').locator('[data-item-height]');
     preview = page.getByTestId('vdnd-drag-preview');
     await expect(column.locator('[data-draggable-id]').first()).toBeVisible();
     await expect(sideScroller.locator('[data-draggable-id]').first()).toBeVisible();
   }
 
   /**
-   * Set an element's scrollTop, re-applying it until its content is tall enough, and wait for the
-   * rows it scrolls to render (a virtual list renders them on the next animation frame).
+   * Set an element's scrollTop, re-applying it until its content is tall enough, and give the
+   * containers around it two frames to settle.
    */
   async function scroll(scroller: Locator, scrollTop: number): Promise<void> {
     await expect(async () => {
