@@ -1,13 +1,15 @@
 import { isPlatformBrowser } from '@angular/common';
-import { DOCUMENT, effect, inject, PLATFORM_ID } from '@angular/core';
+import { CSP_NONCE, DOCUMENT, effect, inject, PLATFORM_ID } from '@angular/core';
 
 const CURSOR_STYLE_ID = 'vdnd-cursor-styles';
 
 /**
  * Show the grabbing cursor over lists and items while a drag runs: the body gets `vdnd-dragging`
  * (and `vdnd-dragging-touch` for a touch drag, which shows no cursor) and a style element, added
- * once, styles the lists and items under it. Call from `DragStateService`'s constructor, which
- * every drag creates. Nothing on the server.
+ * once, styles the lists and items under it. The style element carries the app's CSP nonce
+ * (Angular's `CSP_NONCE`, as its own component styles do), so a `style-src` policy without
+ * `'unsafe-inline'` applies it. Call from `DragStateService`'s constructor, which every drag
+ * creates. Nothing on the server.
  *
  * Takes getters, not the service's signals: a provider subclass can override `isDragging` with a
  * field, which it initializes only after the base constructor has run, so the effect must read
@@ -26,6 +28,10 @@ export function bindDragCursor(isDragging: () => boolean, isTouchDrag: () => boo
   if (!document.getElementById(CURSOR_STYLE_ID)) {
     const style = document.createElement('style');
     style.id = CURSOR_STYLE_ID;
+    const nonce = inject(CSP_NONCE, { optional: true });
+    if (nonce) {
+      style.setAttribute('nonce', nonce);
+    }
     style.textContent = `
           body.vdnd-dragging:not(.vdnd-dragging-touch) .vdnd-droppable,
           body.vdnd-dragging:not(.vdnd-dragging-touch) .vdnd-draggable {
