@@ -37,7 +37,7 @@ delay").
 
 Only visible items are rendered. For logical list sizes:
 
-- Use the list badge rather than `locator.count()`: `await expect(demoPage.countBadge('list1')).toHaveText('49')` waits for the render after a drop; `getItemCount()` reads it once.
+- Use the list badge rather than `locator.count()`: `await expect(demoPage.countBadge('list1')).toHaveText('49')` waits for the render after a drop.
 - When verifying insertion at a specific logical index, **scroll to it** and then assert the visible item id (`getRenderedIndexOf(list, id)`), or assert the drop event's `data-last-drop-destination-index` on the demo host.
 
 ### 2a) Identify items by id, not text
@@ -118,7 +118,7 @@ They measure real autoscroll throughput, so they need spare CPU: CI runs 2 worke
 
 `DemoPage.goto({ ... })` opens the main demo pre-configured (`itemCount`, `lockAxis`,
 `dragEnabled`, `dragDelay`, `dragHandle`, `api: 'simplified'`, `constrainToContainer`,
-`list2Disabled`, `shiftAnimation`, `recycleRows`). Click through the settings panel only when the test is about
+`list2Disabled`, `shiftAnimation`, `dropAnimation`, `recycleRows`). Click through the settings panel only when the test is about
 changing a setting at runtime, and then wait for a render that proves the change applied (for
 example the `vdnd-draggable-disabled` class) before interacting.
 
@@ -180,7 +180,7 @@ Capture the first few item texts/ids, perform reorder, then assert the new order
 During drag, assert:
 
 - Exactly one `.vdnd-drag-placeholder-visible`
-- No empty `.item` “ghosts” (`DemoPage.countGhostElements`)
+- No empty `.item` “ghosts” (`DemoPage.getRenderedItemsWithContent`)
 - Dragged element is `display: none` (gap prevention)
 
 ### Drag-delay touch correctness (mobile)
@@ -200,7 +200,7 @@ This directly targets `DraggableDirective` touch-delay logic. Dispatch touches w
 ## Timing & Synchronization Patterns
 
 This library uses `requestAnimationFrame` to throttle drag position updates
-(`draggable.directive.ts`). This creates specific synchronization requirements
+(`DragSchedulerService`, `services/drag-scheduler.service.ts`). This creates specific synchronization requirements
 that differ from typical Playwright tests.
 
 ### rAF Wait After Mouse Moves (Loose Assertions Only)

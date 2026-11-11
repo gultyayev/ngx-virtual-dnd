@@ -315,13 +315,13 @@ test.describe('Dynamic Height Demo', () => {
     await taskDemo.settleDragPosition(sourceX, targetY);
     await page.mouse.up();
 
-    // Wait for drop to complete — verify source item moved
+    // The row lands right after the one it was released over: the rows between moved up
+    await expect(taskDemo.dragPreview).toBeHidden();
+    const middleId = visibleItems[1].id;
     await expect(async () => {
-      const afterItems = await taskDemo.getVisibleTasks();
-
-      // The source item should have moved — it should no longer be the first visible
-      const afterIds = afterItems.map((i) => i.id);
-      expect(afterIds[0]).not.toBe(sourceId);
+      const afterIds = (await taskDemo.getVisibleTasks()).map((task) => task.id);
+      const start = afterIds.indexOf(middleId);
+      expect(afterIds.slice(start, start + 3)).toEqual([middleId, targetId, sourceId]);
     }).toPass({ timeout: 2000 });
 
     // Virtual scroll integrity: scroll to top and verify items render

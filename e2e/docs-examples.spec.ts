@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ExamplesPage } from './fixtures/examples.page';
+import { poll } from './fixtures/polling';
 
 /**
  * The docs site embeds these pages as live examples and shows their source verbatim,
@@ -25,9 +26,11 @@ test.describe('Docs live examples', () => {
     // Release over the third row slot: task-1 moves below task-2 and task-3.
     await examples.dragTo('task-1', list.x + list.width / 2, list.y + 48 * 2.5, 'backlog');
 
-    await expect
-      .poll(async () => (await examples.renderedIds('backlog')).slice(0, 3))
-      .toEqual(['task-2', 'task-3', 'task-1']);
+    await poll(async () => (await examples.renderedIds('backlog')).slice(0, 3)).toEqual([
+      'task-2',
+      'task-3',
+      'task-1',
+    ]);
   });
 
   test('quick start reorders with the keyboard, as the FAQ testing recipe does', async ({
@@ -41,9 +44,10 @@ test.describe('Docs live examples', () => {
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Space');
 
-    await expect
-      .poll(async () => (await examples.renderedIds('backlog')).slice(0, 2))
-      .toEqual(['task-2', 'task-1']);
+    await poll(async () => (await examples.renderedIds('backlog')).slice(0, 2)).toEqual([
+      'task-2',
+      'task-1',
+    ]);
   });
 
   test('multiple lists move an item across lists', async ({ page }) => {
@@ -122,9 +126,11 @@ test.describe('Docs live examples', () => {
     if (!third) throw new Error('No bounding box for task-3');
     await examples.dragTo('task-1', third.x + third.width / 2, third.y + third.height / 2, 'today');
 
-    await expect
-      .poll(async () => (await examples.renderedIds('today')).slice(0, 3))
-      .toEqual(['task-2', 'task-3', 'task-1']);
+    await poll(async () => (await examples.renderedIds('today')).slice(0, 3)).toEqual([
+      'task-2',
+      'task-3',
+      'task-1',
+    ]);
 
     // The footer after the list scrolls with it, inside the vdndScrollable element.
     const footer = page.getByText('Regular content after the list');
@@ -175,11 +181,9 @@ test.describe('Docs live examples', () => {
     await expect(moves).toHaveText('1');
     await expect(page.locator('[data-last-placeholder-move]')).toHaveText('0 → 1');
     // task-2 was displaced by the placeholder and slides into its new slot.
-    await expect
-      .poll(() =>
-        page.evaluate(() => (window as unknown as { animatedRows: string[] }).animatedRows),
-      )
-      .toContain('task-2');
+    await poll(() =>
+      page.evaluate(() => (window as unknown as { animatedRows: string[] }).animatedRows),
+    ).toContain('task-2');
 
     await page.keyboard.press('Escape');
     await expect(examples.dragPreview).toBeHidden();

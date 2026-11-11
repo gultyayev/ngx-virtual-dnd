@@ -79,6 +79,8 @@ test.describe('Keyboard Drag - Virtual Scroll Integration', () => {
     for (let i = 1; i < scrollPositions.length; i++) {
       expect(scrollPositions[i]).toBeGreaterThanOrEqual(scrollPositions[i - 1]);
     }
+    // Ten slots down in a list that shows eight: it scrolled
+    expect(scrollPositions.at(-1)).toBeGreaterThan(0);
 
     await page.keyboard.press('Space');
   });

@@ -12,7 +12,7 @@ import {
  */
 const list = (page: Page, id: string): Locator => page.locator(`[data-droppable-id="${id}"]`);
 const items = (page: Page, id: string): Locator => list(page, id).locator('[data-draggable-id]');
-const scroller = (page: Page, id: string): Locator => list(page, id).locator('vdnd-virtual-scroll');
+const scroller = (page: Page, id: string): Locator => list(page, id).locator('[data-item-height]');
 const preview = (page: Page): Locator => page.getByTestId('vdnd-drag-preview');
 
 async function startDrag(page: Page, item: Locator): Promise<void> {
