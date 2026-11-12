@@ -109,6 +109,29 @@ test.describe('Drop animation', () => {
     expect(await opacity(dropped)).toBe(1);
   });
 
+  test('a translate the app sets on the preview is kept while it settles', async ({ page }) => {
+    const demoPage = new DemoPage(page);
+    await demoPage.goto({ dropAnimation: DROP_MS });
+    // An app style that nudges the preview off the pointer
+    await page.addStyleTag({
+      content: '[data-testid^="vdnd-drag-preview"] { translate: 6px 6px; }',
+    });
+    const draggedId = (await demoPage.getItemId('list1', 0))!;
+
+    await demoPage.startKeyboardDrag('list1', 0);
+    await expect(demoPage.dragPreview).toBeVisible();
+    await demoPage.keyboardMoveDown(2);
+    const releaseBox = (await demoPage.dragPreview.boundingBox())!;
+    await demoPage.keyboardDrop();
+
+    await expect(demoPage.host).toHaveAttribute('data-last-drop-destination-index', '2');
+    const dropped = demoPage.list1Container.locator(`[data-draggable-id="${draggedId}"]`);
+    await expect(demoPage.dropGhost).toBeVisible();
+    // The glide neither drops the nudge at the release point nor lands short of the item by it
+    expectSameBox(await boxAt(demoPage.dropGhost, 0), releaseBox);
+    expectSameBox(await boxAt(demoPage.dropGhost, 1), (await dropped.boundingBox())!);
+  });
+
   // Night: on drop, the lift and the held edge return to rest while the preview travels.
   test('the held edge fades back to rest while the preview settles', async ({ page }) => {
     const demoPage = new DemoPage(page);
