@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.6.6](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.5...v3.6.6) (2026-11-12)
+
+### Bug Fixes
+
+- **lib:** cancel a pointer drag whose mouse release the page never saw ([fd08413](https://github.com/gultyayev/ngx-virtual-dnd/commit/fd0841305d2060c822ad1f3c795ee30961f68843))
+- **lib:** give the cursor styles the app's CSP nonce ([41b1648](https://github.com/gultyayev/ngx-virtual-dnd/commit/41b164899de92df9e57fb2a341375c5ee57336e7))
+- **lib:** measure a scroll container's height with its padding ([deda34b](https://github.com/gultyayev/ngx-virtual-dnd/commit/deda34b7b74c315e4e5a8c43fe88132dda7ff708))
+- **lib:** render virtual list rows in the frame that shows them ([#180](https://github.com/gultyayev/ngx-virtual-dnd/issues/180)) ([88214fa](https://github.com/gultyayev/ngx-virtual-dnd/commit/88214faae908af8dbe2b3c941dae3ea7e90d1a5a))
+- **lib:** show the cloned preview on pages that enforce Trusted Types ([0fc0a42](https://github.com/gultyayev/ngx-virtual-dnd/commit/0fc0a42f1aada95facfef27af82788df73649ae4))
+
+### Performance
+
+- **lib:** reconcile *vdndVirtualFor rows only when they change ([cbb9f54](https://github.com/gultyayev/ngx-virtual-dnd/commit/cbb9f543f55d9085000b44a78d50a5080abede89))
+
 ## [3.6.5](https://github.com/gultyayev/ngx-virtual-dnd/compare/v3.6.4...v3.6.5) (2026-11-03)
 
 ### Bug Fixes
