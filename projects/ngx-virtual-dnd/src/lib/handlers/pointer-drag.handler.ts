@@ -51,7 +51,7 @@ export interface PointerDragDeps {
  * - Drag threshold detection
  * - Drag delay timer
  * - Forwarding moves to the directive (DragSchedulerService coalesces them per frame)
- * - Document-level listener management
+ * - Document-level listener management (one AbortController removes the listeners of a press)
  * - Escape key cancellation during pointer drag, and cancellation when the window loses focus
  *   or the page is hidden (the release would never arrive), a mouse move arrives with the button
  *   already up (the release was missed) or the system cancels the touch
@@ -68,21 +68,17 @@ export class PointerDragHandler {
   /** The item the tracked press landed on */
   #pressedId: string | null = null;
 
-  /** Whether the document and window listeners of a press are added */
-  #listening = false;
+  /**
+   * Removes the document and window listeners of the tracked press when aborted: they are all
+   * added with its signal. Null while none are added.
+   */
+  #listeners: AbortController | null = null;
 
   /** Identifier of the finger that pressed, for touch gestures (other fingers are ignored) */
   #touchId: number | null = null;
 
   /** Whether the tracked press is a touch (which shows no cursor) */
   #isTouch = false;
-
-  /** Bound event handlers for cleanup */
-  #boundPointerMove: ((e: MouseEvent | TouchEvent) => void) | null = null;
-  #boundPointerUp: ((e: MouseEvent | TouchEvent) => void) | null = null;
-  #boundKeyDown: ((e: KeyboardEvent) => void) | null = null;
-  #boundWindowBlur: (() => void) | null = null;
-  #boundVisibilityChange: (() => void) | null = null;
 
   /** Timer ID for drag delay */
   #delayTimerId: ReturnType<typeof setTimeout> | null = null;
@@ -92,11 +88,6 @@ export class PointerDragHandler {
 
   constructor(deps: PointerDragDeps) {
     this.#deps = deps;
-    this.#boundPointerMove = this.#onPointerMove.bind(this);
-    this.#boundPointerUp = this.#onPointerUp.bind(this);
-    this.#boundKeyDown = this.#onEscapeKeyDown.bind(this);
-    this.#boundWindowBlur = this.#onFocusLost.bind(this);
-    this.#boundVisibilityChange = this.#onVisibilityChange.bind(this);
   }
 
   /**
@@ -217,24 +208,27 @@ export class PointerDragHandler {
       this.#delayReady = true;
     }
 
-    // Add document-level event listeners
+    // Add document-level event listeners. A repeated press starts over: the listeners of the
+    // press before it (a mouse press's, when this one is a touch) go first.
+    this.#listeners?.abort();
+    this.#listeners = new AbortController();
+    const { signal } = this.#listeners;
     this.#deps.ngZone.runOutsideAngular(() => {
       if (isTouch) {
-        document.addEventListener('touchmove', this.#boundPointerMove!, { passive: false });
-        document.addEventListener('touchend', this.#boundPointerUp!);
-        document.addEventListener('touchcancel', this.#boundPointerUp!);
+        document.addEventListener('touchmove', this.#onPointerMove, { passive: false, signal });
+        document.addEventListener('touchend', this.#onPointerUp, { signal });
+        document.addEventListener('touchcancel', this.#onPointerUp, { signal });
       } else {
-        document.addEventListener('mousemove', this.#boundPointerMove!);
-        document.addEventListener('mouseup', this.#boundPointerUp!);
+        document.addEventListener('mousemove', this.#onPointerMove, { signal });
+        document.addEventListener('mouseup', this.#onPointerUp, { signal });
       }
       // Listen for Escape key on document to cancel drag
-      document.addEventListener('keydown', this.#boundKeyDown!);
+      document.addEventListener('keydown', this.#onEscapeKeyDown, { signal });
       // Switching windows or tabs mid-drag means the release never reaches this page: cancel
       // instead of leaving the drag active until the next press.
-      window.addEventListener('blur', this.#boundWindowBlur!);
-      document.addEventListener('visibilitychange', this.#boundVisibilityChange!);
+      window.addEventListener('blur', this.#onFocusLost, { signal });
+      document.addEventListener('visibilitychange', this.#onVisibilityChange, { signal });
     });
-    this.#listening = true;
   }
 
   /**
@@ -252,30 +246,8 @@ export class PointerDragHandler {
 
     // Nothing to remove unless a press added listeners (most draggables are never pressed; a
     // virtual list destroys one each time a row scrolls out). Server rendering adds none.
-    if (!this.#listening) {
-      return;
-    }
-    this.#listening = false;
-
-    // Remove event listeners
-    if (this.#boundPointerMove) {
-      document.removeEventListener('mousemove', this.#boundPointerMove);
-      document.removeEventListener('touchmove', this.#boundPointerMove);
-    }
-    if (this.#boundPointerUp) {
-      document.removeEventListener('mouseup', this.#boundPointerUp);
-      document.removeEventListener('touchend', this.#boundPointerUp);
-      document.removeEventListener('touchcancel', this.#boundPointerUp);
-    }
-    if (this.#boundKeyDown) {
-      document.removeEventListener('keydown', this.#boundKeyDown);
-    }
-    if (this.#boundWindowBlur) {
-      window.removeEventListener('blur', this.#boundWindowBlur);
-    }
-    if (this.#boundVisibilityChange) {
-      document.removeEventListener('visibilitychange', this.#boundVisibilityChange);
-    }
+    this.#listeners?.abort();
+    this.#listeners = null;
   }
 
   /**
@@ -286,9 +258,9 @@ export class PointerDragHandler {
   }
 
   /**
-   * Handle pointer move (mouse or touch).
+   * Handle pointer move (mouse or touch). An arrow function, as the other listeners: added as is.
    */
-  #onPointerMove(event: MouseEvent | TouchEvent): void {
+  readonly #onPointerMove = (event: MouseEvent | TouchEvent): void => {
     if (!this.#isTracking) {
       return;
     }
@@ -327,9 +299,9 @@ export class PointerDragHandler {
         return;
       }
 
-      const distance = Math.sqrt(
-        Math.pow(position.x - this.#startPosition.x, 2) +
-          Math.pow(position.y - this.#startPosition.y, 2),
+      const distance = Math.hypot(
+        position.x - this.#startPosition.x,
+        position.y - this.#startPosition.y,
       );
 
       if (distance < ctx.dragThreshold) {
@@ -367,12 +339,12 @@ export class PointerDragHandler {
     // Notify the directive of the new position — it queues this into the scheduler
     // (DragSchedulerService) which coalesces multiple moves per frame into one RAF tick.
     this.#deps.callbacks.onDragMove(position);
-  }
+  };
 
   /**
    * Handle pointer up (mouse or touch).
    */
-  #onPointerUp(event: MouseEvent | TouchEvent): void {
+  readonly #onPointerUp = (event: MouseEvent | TouchEvent): void => {
     if (!this.#isTracking) {
       return;
     }
@@ -407,7 +379,7 @@ export class PointerDragHandler {
     } finally {
       this.cleanup();
     }
-  }
+  };
 
   /**
    * Whether the tracked press no longer applies to the draggable: it renders another item now, it
@@ -432,7 +404,7 @@ export class PointerDragHandler {
   /**
    * Handle keydown events on document to cancel drag with Escape.
    */
-  #onEscapeKeyDown(event: KeyboardEvent): void {
+  readonly #onEscapeKeyDown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.#deps.callbacks.isDragging()) {
       try {
         this.#deps.callbacks.onDragEnd(true);
@@ -440,13 +412,13 @@ export class PointerDragHandler {
         this.cleanup();
       }
     }
-  }
+  };
 
   /**
    * Cancel the drag (or drop the pending press) when the release can no longer arrive: the window
    * lost focus, or the button is already up (see #onPointerMove).
    */
-  #onFocusLost(): void {
+  readonly #onFocusLost = (): void => {
     if (!this.#isTracking) {
       return;
     }
@@ -458,16 +430,16 @@ export class PointerDragHandler {
     } finally {
       this.cleanup();
     }
-  }
+  };
 
   /**
    * Treat the page being hidden (tab switch, app switch on mobile) as focus loss.
    */
-  #onVisibilityChange(): void {
+  readonly #onVisibilityChange = (): void => {
     if (document.visibilityState === 'hidden') {
       this.#onFocusLost();
     }
-  }
+  };
 
   /**
    * The tracked finger in `touches`, or null. Synthetic touch events (e.g. from test tools) can

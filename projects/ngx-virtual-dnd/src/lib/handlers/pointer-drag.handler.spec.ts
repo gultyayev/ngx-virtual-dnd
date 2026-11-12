@@ -68,6 +68,22 @@ describe('PointerDragHandler', () => {
   const createTouchStart = (x: number, y: number): TouchEvent =>
     createTouchEvent('touchstart', x, y, mockContext.element);
 
+  /** The event types a spied `addEventListener` was asked to listen for */
+  const listenedTypes = (addSpy: jest.SpyInstance): string[] =>
+    addSpy.mock.calls.map(([type]) => type as string);
+
+  /**
+   * Whether the listeners a spied `addEventListener` added for `type` are removed: the handler
+   * adds each with the signal of an AbortController, which it aborts to remove them.
+   */
+  const isRemoved = (addSpy: jest.SpyInstance, type: string): boolean => {
+    const calls = addSpy.mock.calls.filter(([added]) => added === type);
+    return (
+      calls.length > 0 &&
+      calls.every(([, , options]) => (options as AddEventListenerOptions).signal?.aborted === true)
+    );
+  };
+
   beforeEach(() => {
     isDragging = false;
     otherDragActive = false;
@@ -144,9 +160,9 @@ describe('PointerDragHandler', () => {
 
       handler.onPointerDown(createMouseDown(150, 220), false);
 
-      expect(addSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
-      expect(addSpy).toHaveBeenCalledWith('mouseup', expect.any(Function));
-      expect(addSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      expect(listenedTypes(addSpy)).toContain('mousemove');
+      expect(listenedTypes(addSpy)).toContain('mouseup');
+      expect(listenedTypes(addSpy)).toContain('keydown');
     });
 
     it('should add document listeners for touch events', () => {
@@ -159,8 +175,8 @@ describe('PointerDragHandler', () => {
         expect.any(Function),
         expect.objectContaining({ passive: false }),
       );
-      expect(addSpy).toHaveBeenCalledWith('touchend', expect.any(Function));
-      expect(addSpy).toHaveBeenCalledWith('touchcancel', expect.any(Function));
+      expect(listenedTypes(addSpy)).toContain('touchend');
+      expect(listenedTypes(addSpy)).toContain('touchcancel');
     });
 
     it('should prevent default for mouse events', () => {
@@ -250,7 +266,7 @@ describe('PointerDragHandler', () => {
 
       handler.onPointerDown(event, false);
 
-      expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(listenedTypes(addSpy)).not.toContain('mousemove');
     });
 
     it('should ignore clicks on no-drag class elements', () => {
@@ -270,7 +286,7 @@ describe('PointerDragHandler', () => {
 
       handler.onPointerDown(event, false);
 
-      expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(listenedTypes(addSpy)).not.toContain('mousemove');
     });
 
     it('should ignore presses on elements inside a no-drag element', () => {
@@ -283,7 +299,7 @@ describe('PointerDragHandler', () => {
 
       handler.onPointerDown(createMouseEvent('mousedown', 150, 220, 0, label), false);
 
-      expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(listenedTypes(addSpy)).not.toContain('mousemove');
     });
 
     it('should ignore touches on an SVG icon inside a no-drag element', () => {
@@ -300,7 +316,7 @@ describe('PointerDragHandler', () => {
       Object.defineProperty(event, 'target', { value: path });
       handler.onPointerDown(event, true);
 
-      expect(addSpy).not.toHaveBeenCalledWith('touchmove', expect.any(Function), expect.anything());
+      expect(listenedTypes(addSpy)).not.toContain('touchmove');
     });
 
     it('should ignore presses anywhere inside a draggable that carries no-drag itself', () => {
@@ -311,7 +327,7 @@ describe('PointerDragHandler', () => {
 
       handler.onPointerDown(createMouseEvent('mousedown', 150, 220, 0, content), false);
 
-      expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(listenedTypes(addSpy)).not.toContain('mousemove');
     });
 
     it('should start tracking when the no-drag element is an ancestor of the draggable', () => {
@@ -324,7 +340,7 @@ describe('PointerDragHandler', () => {
 
       handler.onPointerDown(createMouseEvent('mousedown', 150, 220, 0, content), false);
 
-      expect(addSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(listenedTypes(addSpy)).toContain('mousemove');
     });
 
     it('should ignore pointer down outside the drag handle', () => {
@@ -336,7 +352,7 @@ describe('PointerDragHandler', () => {
 
       handler.onPointerDown(createMouseEvent('mousedown', 150, 220, 0, contentEl), false);
 
-      expect(addSpy).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(listenedTypes(addSpy)).not.toContain('mousemove');
     });
 
     it('should start tracking on pointer down inside the drag handle', () => {
@@ -433,7 +449,7 @@ describe('PointerDragHandler', () => {
     });
 
     it('should drop a pending press when another drag starts before the threshold is crossed', () => {
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
+      const addSpy = jest.spyOn(document, 'addEventListener');
       handler.onPointerDown(createTouchStart(150, 220), true);
       otherDragActive = true;
 
@@ -443,7 +459,7 @@ describe('PointerDragHandler', () => {
       expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
       expect(mockCallbacks.onDragMove).not.toHaveBeenCalled();
       expect(handler.getStartPosition()).toBeNull();
-      expect(removeSpy).toHaveBeenCalledWith('touchmove', expect.any(Function));
+      expect(isRemoved(addSpy, 'touchmove')).toBe(true);
       // The other drag owns the gesture: leave its touchmove alone
       expect(move.defaultPrevented).toBe(false);
     });
@@ -512,7 +528,7 @@ describe('PointerDragHandler', () => {
     });
 
     it('should drop the press instead of starting a drag when the threshold is crossed', () => {
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
+      const addSpy = jest.spyOn(document, 'addEventListener');
       handler.onPointerDown(createMouseDown(150, 220), false);
       mockContext.disabled = true;
 
@@ -521,7 +537,7 @@ describe('PointerDragHandler', () => {
       expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
       expect(mockCallbacks.onDragMove).not.toHaveBeenCalled();
       expect(handler.getStartPosition()).toBeNull();
-      expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(isRemoved(addSpy, 'mousemove')).toBe(true);
     });
 
     it('should drop a delayed press instead of marking it ready', () => {
@@ -724,6 +740,7 @@ describe('PointerDragHandler', () => {
     // and the next move arrives with no button down. Events a script dispatches are not trusted
     // (and leave `buttons` at 0 unless told), so the browser's own move is handed to the listener.
     let moveListener: (event: MouseEvent) => void;
+    let addSpy: jest.SpyInstance;
 
     const trustedMove = (x: number, y: number, buttons: number): MouseEvent =>
       ({
@@ -736,7 +753,7 @@ describe('PointerDragHandler', () => {
       }) as unknown as MouseEvent;
 
     beforeEach(() => {
-      const addSpy = jest.spyOn(document, 'addEventListener');
+      addSpy = jest.spyOn(document, 'addEventListener');
       handler.onPointerDown(createMouseDown(150, 220), false);
       moveListener = addSpy.mock.calls.find(([type]) => type === 'mousemove')![1] as (
         event: MouseEvent,
@@ -755,12 +772,11 @@ describe('PointerDragHandler', () => {
     });
 
     it('should stop following the pointer after it cancelled', () => {
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
       moveListener(trustedMove(160, 220, 1));
 
       moveListener(trustedMove(300, 400, 0));
 
-      expect(removeSpy).toHaveBeenCalledWith('mousemove', moveListener);
+      expect(isRemoved(addSpy, 'mousemove')).toBe(true);
     });
 
     it('should drop a press that had not started a drag', () => {
@@ -1109,8 +1125,6 @@ describe('PointerDragHandler', () => {
     it('should stop listening for focus loss once the drag has ended', () => {
       const windowAddSpy = jest.spyOn(window, 'addEventListener');
       const documentAddSpy = jest.spyOn(document, 'addEventListener');
-      const windowRemoveSpy = jest.spyOn(window, 'removeEventListener');
-      const documentRemoveSpy = jest.spyOn(document, 'removeEventListener');
       handler.onPointerDown(createMouseDown(150, 220), false);
       document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
       document.dispatchEvent(createMouseEvent('mouseup', 160, 220));
@@ -1120,27 +1134,21 @@ describe('PointerDragHandler', () => {
 
       expect(mockCallbacks.onDragEnd).toHaveBeenCalledTimes(1);
       expect(mockCallbacks.onDragEnd).toHaveBeenCalledWith(false);
-      const blurListener = windowAddSpy.mock.calls.find(([type]) => type === 'blur')?.[1];
-      const visibilityListener = documentAddSpy.mock.calls.find(
-        ([type]) => type === 'visibilitychange',
-      )?.[1];
-      expect(blurListener).toEqual(expect.any(Function));
-      expect(visibilityListener).toEqual(expect.any(Function));
-      expect(windowRemoveSpy).toHaveBeenCalledWith('blur', blurListener);
-      expect(documentRemoveSpy).toHaveBeenCalledWith('visibilitychange', visibilityListener);
+      expect(isRemoved(windowAddSpy, 'blur')).toBe(true);
+      expect(isRemoved(documentAddSpy, 'visibilitychange')).toBe(true);
     });
   });
 
   describe('cleanup', () => {
     it('should remove all document listeners', () => {
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
+      const addSpy = jest.spyOn(document, 'addEventListener');
 
       handler.onPointerDown(createMouseDown(150, 220), false);
       handler.cleanup();
 
-      expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
-      expect(removeSpy).toHaveBeenCalledWith('mouseup', expect.any(Function));
-      expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      expect(isRemoved(addSpy, 'mousemove')).toBe(true);
+      expect(isRemoved(addSpy, 'mouseup')).toBe(true);
+      expect(isRemoved(addSpy, 'keydown')).toBe(true);
     });
 
     it('should reset start position', () => {
@@ -1157,24 +1165,68 @@ describe('PointerDragHandler', () => {
     });
 
     it('should remove no listeners when no press added them', () => {
-      const documentRemoveSpy = jest.spyOn(document, 'removeEventListener');
-      const windowRemoveSpy = jest.spyOn(window, 'removeEventListener');
+      const abortSpy = jest.spyOn(AbortController.prototype, 'abort');
 
       handler.cleanup();
       handler.destroy();
 
-      expect(documentRemoveSpy).not.toHaveBeenCalled();
-      expect(windowRemoveSpy).not.toHaveBeenCalled();
+      expect(abortSpy).not.toHaveBeenCalled();
     });
 
     it('should remove the listeners of a press once', () => {
       handler.onPointerDown(createMouseDown(150, 220), false);
       handler.cleanup();
-      const documentRemoveSpy = jest.spyOn(document, 'removeEventListener');
+      const abortSpy = jest.spyOn(AbortController.prototype, 'abort');
 
       handler.destroy();
 
-      expect(documentRemoveSpy).not.toHaveBeenCalled();
+      expect(abortSpy).not.toHaveBeenCalled();
+    });
+
+    it('should stop reading keys once removed', () => {
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      handler.cleanup();
+      (mockCallbacks.isDragging as jest.Mock).mockClear();
+
+      // The Escape listener asks whether a drag runs before anything else
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(mockCallbacks.isDragging).not.toHaveBeenCalled();
+    });
+
+    it('should handle each event of a repeated press once', () => {
+      // A release the page never saw, then another press
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      handler.onPointerDown(createMouseDown(150, 220), false);
+
+      document.dispatchEvent(createMouseEvent('mousemove', 160, 220));
+      document.dispatchEvent(createMouseEvent('mousemove', 170, 220));
+
+      expect(mockCallbacks.onDragStart).toHaveBeenCalledTimes(1);
+      expect(mockCallbacks.onDragMove).toHaveBeenCalledTimes(2);
+    });
+
+    it('should remove the listeners of a repeated press', () => {
+      const addSpy = jest.spyOn(document, 'addEventListener');
+      handler.onPointerDown(createMouseDown(150, 220), false);
+      handler.onPointerDown(createMouseDown(150, 220), false);
+
+      handler.cleanup();
+
+      expect(isRemoved(addSpy, 'mousemove')).toBe(true);
+      expect(isRemoved(addSpy, 'mouseup')).toBe(true);
+    });
+
+    it('should stop listening for the mouse when a touch press follows a mouse press', () => {
+      const addSpy = jest.spyOn(document, 'addEventListener');
+      handler.onPointerDown(createMouseDown(150, 220), false);
+
+      // A stray mouse move must not cancel the touch drag (see 'a release the page never saw')
+      handler.onPointerDown(createTouchStart(150, 220), true);
+
+      expect(isRemoved(addSpy, 'mousemove')).toBe(true);
+      expect(isRemoved(addSpy, 'mouseup')).toBe(true);
+      expect(isRemoved(addSpy, 'touchmove')).toBe(false);
     });
   });
 
@@ -1184,7 +1236,7 @@ describe('PointerDragHandler', () => {
     });
 
     it('should drop the press instead of starting a drag', () => {
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
+      const addSpy = jest.spyOn(document, 'addEventListener');
       handler.onPointerDown(createMouseDown(150, 220), false);
       mockContext.draggableId = 'item-2';
 
@@ -1192,7 +1244,7 @@ describe('PointerDragHandler', () => {
 
       expect(mockCallbacks.onDragStart).not.toHaveBeenCalled();
       expect(handler.getStartPosition()).toBeNull();
-      expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(isRemoved(addSpy, 'mousemove')).toBe(true);
     });
 
     it('should drop the press instead of marking it ready', () => {
@@ -1251,12 +1303,12 @@ describe('PointerDragHandler', () => {
 
   describe('destroy', () => {
     it('should call cleanup', () => {
-      const removeSpy = jest.spyOn(document, 'removeEventListener');
+      const addSpy = jest.spyOn(document, 'addEventListener');
 
       handler.onPointerDown(createMouseDown(150, 220), false);
       handler.destroy();
 
-      expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(isRemoved(addSpy, 'mousemove')).toBe(true);
     });
   });
 

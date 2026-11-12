@@ -60,7 +60,6 @@ export interface KeyboardDragDeps {
  */
 export class KeyboardDragHandler {
   readonly #deps: KeyboardDragDeps;
-  #boundKeyDown: ((e: KeyboardEvent) => void) | null = null;
   /**
    * The drag this handler started. Keyboard drag state is shared by every draggable, so a key
    * that reaches another item (one focused by a click during the drag, for example) must not
@@ -70,7 +69,6 @@ export class KeyboardDragHandler {
 
   constructor(deps: KeyboardDragDeps) {
     this.#deps = deps;
-    this.#boundKeyDown = this.#onDocumentKeyDown.bind(this);
   }
 
   /**
@@ -112,7 +110,7 @@ export class KeyboardDragHandler {
 
     // Add document-level keyboard listener (since element is hidden with display:none)
     this.#deps.ngZone.runOutsideAngular(() => {
-      document.addEventListener('keydown', this.#boundKeyDown!);
+      document.addEventListener('keydown', this.#onDocumentKeyDown);
     });
 
     this.#deps.callbacks.onDragStart(
@@ -336,9 +334,10 @@ export class KeyboardDragHandler {
   }
 
   /**
-   * Document-level keydown listener active during keyboard drag.
+   * Document-level keydown listener active during keyboard drag. An arrow function: added and
+   * removed as is.
    */
-  #onDocumentKeyDown(event: KeyboardEvent): void {
+  readonly #onDocumentKeyDown = (event: KeyboardEvent): void => {
     // The drag ended without this handler (its state was reset elsewhere): stop listening, or
     // this listener would also take the keys of the next keyboard drag
     if (!this.isActive()) {
@@ -346,7 +345,7 @@ export class KeyboardDragHandler {
       return;
     }
     this.handleKey(event);
-  }
+  };
 
   /**
    * Remove the document-level keyboard listener.
@@ -354,8 +353,8 @@ export class KeyboardDragHandler {
   #cleanupDocumentListener(): void {
     this.#ownDrag = null;
     // Server rendering destroys the directive without a global document, and never added it
-    if (this.#boundKeyDown && typeof document !== 'undefined') {
-      document.removeEventListener('keydown', this.#boundKeyDown);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('keydown', this.#onDocumentKeyDown);
     }
   }
 }

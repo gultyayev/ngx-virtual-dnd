@@ -113,7 +113,7 @@ effect(() => { ... }, { allowSignalWrites: true }); // DO NOT USE
 
 ### Event Listener Cleanup
 
-Keep a bound handler in a field so the same reference can be removed, attach programmatic listeners inside `runOutsideAngular`, and remove each one on the teardown path (`ngOnDestroy`, or a handler's `cleanup()`), as `PointerDragHandler` does. Helpers that attach listeners return a cleanup function to call there (see `lib/utils/dom-signal-bindings.ts`).
+Attach programmatic listeners inside `runOutsideAngular` and remove each one on the teardown path (`ngOnDestroy`, or a handler's `cleanup()`). A lone listener is an arrow-function field, so the same reference is added and removed (as `KeyboardDragHandler`'s document `keydown` listener). Listeners that are always added and removed together can share the `signal` of one `AbortController` and go by aborting it (as the document and window listeners of a press in `PointerDragHandler`, which aborts the previous press's before adding again). Where some are removed on their own (the shadow-root listeners of `PositionCalculatorService`'s drag session) or there is one set per row (`DraggableDirective`: a virtual list creates rows on every scroll step), keep plain references. Helpers that attach listeners return a cleanup function to call there (see `lib/utils/dom-signal-bindings.ts`).
 
 ### Templates
 
