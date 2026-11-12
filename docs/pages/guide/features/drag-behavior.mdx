@@ -42,13 +42,7 @@ A block that is its own editing host moves only by a handle. Make the handle `co
 
 ```angular-html
 <div contenteditable [vdndDraggable]="block.id" dragHandle=".grip">
-  <span
-    class="grip"
-    contenteditable="false"
-    tabindex="0"
-    role="button"
-    aria-label="Drag block"
-  >
+  <span class="grip" contenteditable="false" tabindex="0" role="button" aria-label="Drag block">
     ⠿
   </span>
   {{ block.text }}
@@ -98,6 +92,17 @@ When the delay has passed, the element gets the `vdnd-drag-pending` class. Style
 ```
 
 A delay of 150–250 ms works well on touch devices.
+
+A long press also selects text on touch devices, and iOS opens its callout menu on links and images. Turn both off on rows that drag after a delay (with a drag handle, on the handle, so the rest of the row stays selectable):
+
+```css
+.task {
+  user-select: none;
+  -webkit-touch-callout: none; /* iOS */
+}
+```
+
+Give editable content inside such a row `user-select: text` back, so it can still be edited.
 
 ## Axis locking
 
