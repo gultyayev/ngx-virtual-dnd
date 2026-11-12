@@ -4,6 +4,7 @@ import {
   DEFAULT_SHIFT_EASING,
   type VdndAnimationConfig,
 } from '../tokens/animation-config.token';
+import { MotionPreference } from './motion-preference';
 
 /** A rendered element and the identity it currently represents (trackBy key). */
 export type ShiftAnimationEntry = readonly [key: unknown, element: HTMLElement];
@@ -80,7 +81,7 @@ export class ShiftAnimator {
 
   readonly #running = new Map<HTMLElement, RunningShift>();
   #snapshot: Map<HTMLElement, MeasuredPosition> | null = null;
-  #reducedMotionQuery: MediaQueryList | null | undefined;
+  readonly #motion = new MotionPreference();
   #wasDragging = false;
   #lastPlaceholderIndex = -1;
 
@@ -154,23 +155,11 @@ export class ShiftAnimator {
   }
 
   #isEnabled(): boolean {
-    if (this.#duration() <= 0) return false;
-    if (typeof Element === 'undefined' || typeof Element.prototype.animate !== 'function') {
-      return false;
-    }
-    return !this.#prefersReducedMotion();
+    return this.#motion.allows(this.#duration());
   }
 
   #duration(): number {
     return this.#config.shiftDuration ?? DEFAULT_SHIFT_DURATION;
-  }
-
-  #prefersReducedMotion(): boolean {
-    if (this.#reducedMotionQuery === undefined) {
-      this.#reducedMotionQuery =
-        typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
-    }
-    return this.#reducedMotionQuery?.matches ?? false;
   }
 
   /** Scroll-content origin, so positions are independent of the scroll offset. */

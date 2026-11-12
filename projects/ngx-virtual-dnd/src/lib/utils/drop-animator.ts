@@ -4,6 +4,7 @@ import {
   type VdndAnimationConfig,
 } from '../tokens/animation-config.token';
 import { queryByAttribute } from './attribute-selectors';
+import { MotionPreference } from './motion-preference';
 import { visibleRect } from './scroll-insets';
 
 /** Where the ghost should land, and the element that stands there. */
@@ -46,8 +47,7 @@ export class DropAnimator {
   #ghostAnimation: Animation | null = null;
   #hidden: { element: Element; animation: Animation } | null = null;
 
-  /** The reduced-motion media query, created on first use (null without `matchMedia`) */
-  #reducedMotionQuery: MediaQueryList | null | undefined;
+  readonly #motion = new MotionPreference();
 
   constructor(config: VdndAnimationConfig) {
     this.#config = config;
@@ -55,11 +55,7 @@ export class DropAnimator {
 
   /** Whether a drop animation would play right now (duration, WAAPI, reduced motion). */
   isEnabled(): boolean {
-    if (this.#duration() <= 0) return false;
-    if (typeof Element === 'undefined' || typeof Element.prototype.animate !== 'function') {
-      return false;
-    }
-    return !this.#prefersReducedMotion();
+    return this.#motion.allows(this.#duration());
   }
 
   /**
@@ -82,6 +78,8 @@ export class DropAnimator {
       const dy = target.rect.top - from.top;
       // Travel on top of the preview's own position transform (width/height must not be
       // composited, so the base transform is repeated instead of using composite: 'add').
+      // Not with the `translate` property: these keyframes replace what they animate, and
+      // the app may set its own `translate` on the preview (a nudge off the pointer).
       const base = ghost.style.transform;
       ghostAnimation = ghost.animate(
         [
@@ -133,15 +131,6 @@ export class DropAnimator {
 
   #duration(): number {
     return this.#config.dropDuration ?? DEFAULT_DROP_DURATION;
-  }
-
-  /** One media query for every drop: it is live, so it follows a change of the preference. */
-  #prefersReducedMotion(): boolean {
-    if (this.#reducedMotionQuery === undefined) {
-      this.#reducedMotionQuery =
-        typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
-    }
-    return this.#reducedMotionQuery?.matches ?? false;
   }
 }
 
