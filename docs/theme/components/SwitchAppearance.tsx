@@ -57,10 +57,11 @@ export function SwitchAppearance({ onClick }: { onClick?: () => void }) {
     // setTheme switches the root's theme class at once, so the new snapshot is the new theme.
     const transition = document.startViewTransition(apply);
     const clipPath = revealClipPath(x, y);
+    let reveal: Animation | undefined;
     // Into dark, the old (light) page shrinks away; into light, the new one grows. A switch
     // started before this one is ready skips it (its ready promise rejects): nothing to reveal.
     transition.ready.then(() => {
-      root.animate(
+      reveal = root.animate(
         { clipPath: next === 'dark' ? [...clipPath].reverse() : clipPath },
         {
           duration: REVEAL_MS,
@@ -71,7 +72,13 @@ export function SwitchAppearance({ onClick }: { onClick?: () => void }) {
         },
       );
     }, ignoreSkipped);
-    const done = (): void => root.classList.remove('rp-appearance-transition');
+    // The reveal outlives its pseudo-elements: with `fill: 'both'` it stays on the root and clips
+    // the same pseudo-element of the next switch (into light after into dark, the old dark page
+    // would already be clipped away, leaving a blank page around the growing circle). Cancel it.
+    const done = (): void => {
+      reveal?.cancel();
+      root.classList.remove('rp-appearance-transition');
+    };
     transition.finished.then(done, done);
   };
 
